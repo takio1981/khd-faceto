@@ -1,0 +1,124 @@
+:host {
+  display: block;
+  min-height: 100vh;
+  background: var(--bg);
+}
+
+.login-wrap {
+  min-height: 100vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+}
+
+.login-row {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+  width: 100%;
+  max-width: 980px;
+}
+
+.login-card,
+.login-map-card {
+  padding: 28px;
+  border-radius: 16px;
+}
+
+.login-card {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  text-align: center;
+}
+
+.login-logo {
+  width: 64px;
+  height: 64px;
+  margin: 0 auto 14px;
+  font-size: 30px;
+}
+
+.org {
+  margin: 0;
+  font-weight: 600;
+  color: var(--brand-primary-dark);
+}
+
+.title {
+  margin: 4px 0 0;
+  font-size: 22px;
+  color: #1f2937;
+}
+
+.sub {
+  margin: 4px 0 20px;
+  color: var(--muted);
+  font-size: 13.5px;
+}
+
+.full-width {
+  width: 100%;
+}
+
+.submit-btn {
+  margin-top: 8px;
+  height: 44px;
+}
+
+.inline-spinner {
+  display: inline-block;
+  margin: 0 auto;
+}
+
+.muted {
+  color: var(--muted);
+}
+
+.text-center {
+  text-align: center;
+}
+
+.hint {
+  margin-top: 16px;
+  font-size: 12.5px;
+}
+
+.login-map-card {
+  display: flex;
+  flex-direction: column;
+}
+
+.login-map-card h3 {
+  margin: 0 0 4px;
+  color: var(--brand-primary-dark);
+}
+
+.login-map {
+  height: 300px;
+  width: 100%;
+  border-radius: 12px;
+  overflow: hidden;
+  margin: 12px 0 16px;
+  border: 1px solid var(--border);
+}
+
+.checkin-link {
+  text-decoration: none;
+  height: 44px;
+  line-height: 44px;
+}
+
+@media (min-width: 860px) {
+  .login-row {
+    flex-direction: row;
+    align-items: stretch;
+  }
+
+  .login-card,
+  .login-map-card {
+    flex: 1 1 0;
+    min-width: 0;
+  }
+}

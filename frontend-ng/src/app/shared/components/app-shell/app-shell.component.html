@@ -1,0 +1,44 @@
+<mat-sidenav-container class="shell-container">
+  <mat-sidenav
+    #sidenav
+    [mode]="isHandset() ? 'over' : 'side'"
+    [opened]="!isHandset()"
+    class="shell-sidenav">
+    <div class="brand">
+      <span class="brand-logo brand-medallion">✚</span>
+      <div class="brand-text">
+        <div class="brand-app">{{ appName() }}</div>
+        <div class="brand-org">{{ companyName() }}</div>
+      </div>
+    </div>
+    <mat-nav-list>
+      @for (link of links; track link.path) {
+        <a mat-list-item [routerLink]="link.path" routerLinkActive="active-link"
+           (click)="isHandset() && sidenav.close()">
+          <mat-icon matListItemIcon>{{ link.icon }}</mat-icon>
+          <span matListItemTitle>{{ link.label }}</span>
+        </a>
+      }
+      <a mat-list-item (click)="logout()">
+        <mat-icon matListItemIcon>logout</mat-icon>
+        <span matListItemTitle>ออกจากระบบ</span>
+      </a>
+    </mat-nav-list>
+  </mat-sidenav>
+
+  <mat-sidenav-content>
+    <mat-toolbar class="shell-toolbar" color="primary">
+      @if (isHandset()) {
+        <button mat-icon-button (click)="sidenav.toggle()" aria-label="เปิด/ปิดเมนู">
+          <mat-icon>menu</mat-icon>
+        </button>
+      }
+      <span class="toolbar-title">{{ appName() }}</span>
+      <span class="spacer"></span>
+      <span class="user-info">{{ auth.username() }} ({{ auth.isAdmin() ? 'ผู้ดูแล' : 'ผู้ใช้' }})</span>
+    </mat-toolbar>
+    <main class="shell-main">
+      <router-outlet></router-outlet>
+    </main>
+  </mat-sidenav-content>
+</mat-sidenav-container>

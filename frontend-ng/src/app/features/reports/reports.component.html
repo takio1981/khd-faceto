@@ -1,0 +1,128 @@
+<div class="reports-page">
+  <h1 class="page-title">ส่งออกรายงาน</h1>
+
+  <mat-expansion-panel class="filters-panel" [expanded]="true">
+    <mat-expansion-panel-header>
+      <mat-panel-title>🔍 ตัวเลือกรายงาน</mat-panel-title>
+    </mat-expansion-panel-header>
+
+    <div class="filters-body">
+      <div class="type-toggle-row">
+        <mat-button-toggle-group
+          [value]="reportType()"
+          (change)="setReportType($event.value)"
+          aria-label="ประเภทรายงาน">
+          <mat-button-toggle value="daily">รายวัน</mat-button-toggle>
+          <mat-button-toggle value="monthly">รายเดือน</mat-button-toggle>
+          <mat-button-toggle value="yearly">รายปี</mat-button-toggle>
+        </mat-button-toggle-group>
+      </div>
+
+      <div class="filters-grid">
+        @if (reportType() === 'daily') {
+          <mat-form-field appearance="outline">
+            <mat-label>วันที่</mat-label>
+            <input matInput [matDatepicker]="picker" [ngModel]="date()" (ngModelChange)="date.set($event)">
+            <mat-datepicker-toggle matIconSuffix [for]="picker"></mat-datepicker-toggle>
+            <mat-datepicker #picker></mat-datepicker>
+          </mat-form-field>
+        }
+
+        @if (reportType() === 'monthly') {
+          <mat-form-field appearance="outline">
+            <mat-label>เดือน</mat-label>
+            <mat-select [ngModel]="month()" (ngModelChange)="month.set($event)">
+              @for (m of months; track m.value) {
+                <mat-option [value]="m.value">{{ m.label }}</mat-option>
+              }
+            </mat-select>
+          </mat-form-field>
+        }
+
+        @if (reportType() === 'monthly' || reportType() === 'yearly') {
+          <mat-form-field appearance="outline">
+            <mat-label>ปี (ค.ศ.)</mat-label>
+            <mat-select [ngModel]="year()" (ngModelChange)="year.set($event)">
+              @for (y of years; track y) {
+                <mat-option [value]="y">{{ y }}</mat-option>
+              }
+            </mat-select>
+          </mat-form-field>
+        }
+
+        <mat-form-field appearance="outline">
+          <mat-label>แผนก</mat-label>
+          <mat-select [ngModel]="department()" (ngModelChange)="department.set($event)">
+            <mat-option value="">ทั้งหมด</mat-option>
+            @for (d of departments(); track d) {
+              <mat-option [value]="d">{{ d }}</mat-option>
+            }
+          </mat-select>
+        </mat-form-field>
+
+        <mat-form-field appearance="outline">
+          <mat-label>ประเภท</mat-label>
+          <mat-select [ngModel]="scanType()" (ngModelChange)="scanType.set($event)">
+            <mat-option value="">ทั้งหมด</mat-option>
+            <mat-option value="check_in">เข้างาน</mat-option>
+            <mat-option value="check_out">ออกงาน</mat-option>
+            <mat-option value="ot_in">OT-เข้า</mat-option>
+            <mat-option value="ot_out">OT-ออก</mat-option>
+          </mat-select>
+        </mat-form-field>
+
+        <mat-form-field appearance="outline">
+          <mat-label>สถานะ</mat-label>
+          <mat-select [ngModel]="status()" (ngModelChange)="status.set($event)">
+            <mat-option value="">ทั้งหมด</mat-option>
+            <mat-option value="on_time">ตรงเวลา</mat-option>
+            <mat-option value="late">สาย</mat-option>
+            <mat-option value="absent">ขาด</mat-option>
+            <mat-option value="ot">OT</mat-option>
+          </mat-select>
+        </mat-form-field>
+
+        <mat-form-field appearance="outline">
+          <mat-label>ค้นหา</mat-label>
+          <input matInput [ngModel]="search()" (ngModelChange)="search.set($event)" placeholder="ชื่อ/รหัส/แผนก...">
+        </mat-form-field>
+      </div>
+
+      <div class="actions-row">
+        <button mat-raised-button color="primary" (click)="preview()" [disabled]="loading()">
+          <mat-icon>visibility</mat-icon> แสดงตัวอย่าง
+        </button>
+        <button mat-raised-button class="btn-excel" (click)="exportFile('xlsx')" [disabled]="exporting() !== null">
+          <mat-icon>description</mat-icon> ส่งออก Excel
+        </button>
+        <button mat-raised-button class="btn-pdf" (click)="exportFile('pdf')" [disabled]="exporting() !== null">
+          <mat-icon>picture_as_pdf</mat-icon> ส่งออก PDF
+        </button>
+      </div>
+    </div>
+  </mat-expansion-panel>
+
+  <div class="card preview-card">
+    <h3 class="preview-title">{{ title() }}</h3>
+
+    <app-responsive-table
+      [columns]="columns()"
+      [data]="rows()">
+      <ng-template #desktopRow let-row>
+        <tr>
+          @for (col of columns(); track col.key) {
+            <td [class]="statusClass(row, col.key)">{{ displayValue(row, col.key) }}</td>
+          }
+        </tr>
+      </ng-template>
+      <ng-template #cardRow let-row>
+        @for (col of columns(); track col.key) {
+          <div class="card-field">
+            <span class="card-field-label">{{ col.label }}</span>
+            <span class="card-field-value" [class]="statusClass(row, col.key)">{{ displayValue(row, col.key) }}</span>
+          </div>
+        }
+      </ng-template>
+    </app-responsive-table>
+  </div>
+</div>

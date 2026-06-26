@@ -1,0 +1,144 @@
+:host {
+  display: block;
+}
+
+.reports-page {
+  padding: 16px;
+  max-width: 1200px;
+  margin: 0 auto;
+}
+
+.page-title {
+  margin: 0 0 16px;
+  font-size: 20px;
+  color: #1f2937;
+}
+
+.filters-panel {
+  margin-bottom: 16px;
+  border-radius: 12px !important;
+}
+
+.filters-body {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  padding-top: 8px;
+}
+
+.type-toggle-row {
+  display: flex;
+  flex-wrap: wrap;
+}
+
+.filters-grid {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+
+  mat-form-field {
+    flex: 1 1 200px;
+    min-width: 160px;
+  }
+}
+
+.actions-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.btn-excel {
+  background-color: #1d8a4e !important;
+  color: #fff !important;
+}
+
+.btn-pdf {
+  background-color: #c0392b !important;
+  color: #fff !important;
+}
+
+.card.preview-card {
+  background: #fff;
+  border-radius: 12px;
+  padding: 16px;
+  box-shadow: 0 1px 2px rgba(7, 80, 48, 0.06);
+}
+
+.preview-title {
+  margin: 0 0 14px;
+  color: var(--brand-primary-dark);
+  font-size: 16px;
+}
+
+.card-field {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 4px 0;
+  font-size: 13.5px;
+
+  &:not(:last-child) {
+    border-bottom: 1px solid var(--border);
+  }
+}
+
+.card-field-label {
+  color: var(--muted);
+  font-weight: 600;
+}
+
+.card-field-value {
+  text-align: right;
+}
+
+.badge {
+  display: inline-block;
+  padding: 2px 10px;
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 600;
+
+  &.on_time {
+    background: #e7f5ec;
+    color: #0a6e3e;
+  }
+
+  &.late {
+    background: #fff4e0;
+    color: #b8740a;
+  }
+
+  &.absent {
+    background: #fdecea;
+    color: #c0392b;
+  }
+
+  &.ot {
+    background: #e8f0fe;
+    color: #1a56b0;
+  }
+}
+
+@media (max-width: 700px) {
+  .reports-page {
+    padding: 12px;
+  }
+
+  .filters-grid {
+    flex-direction: column;
+
+    mat-form-field {
+      flex: 1 1 auto;
+      width: 100%;
+    }
+  }
+
+  .actions-row {
+    flex-direction: column;
+
+    button {
+      width: 100%;
+    }
+  }
+}

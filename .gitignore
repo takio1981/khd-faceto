@@ -1,0 +1,28 @@
+# Dependencies
+node_modules/
+backend/node_modules/
+
+# Build output
+backend/dist/
+frontend-ng/dist/
+frontend-ng/.angular/
+
+# Environment
+.env
+
+# Logs
+*.log
+npm-debug.log*
+
+# Captured face images (local dev)
+data/
+faces/
+
+# OS / editor
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+
+# Local Claude Code settings (machine-specific, not part of the project)
+.claude/

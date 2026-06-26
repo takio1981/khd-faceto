@@ -1,0 +1,59 @@
+.muted {
+  color: var(--muted);
+  font-size: 14px;
+}
+
+.text-center {
+  text-align: center;
+  padding: 24px 0;
+}
+
+.face-gallery {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 14px;
+  justify-content: center;
+}
+
+.face-card {
+  width: 150px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  background: var(--brand-primary-light);
+  border-radius: 10px;
+  padding: 10px;
+}
+
+.face-number {
+  font-weight: 700;
+  color: var(--brand-primary-darker);
+}
+
+.face-img {
+  width: 120px;
+  height: 120px;
+  object-fit: cover;
+  border-radius: 8px;
+  background: #fff;
+
+  &.placeholder {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: var(--muted);
+
+    mat-icon {
+      font-size: 40px;
+      width: 40px;
+      height: 40px;
+    }
+  }
+}
+
+.face-date {
+  font-size: 12px;
+  color: var(--muted);
+  text-align: center;
+}

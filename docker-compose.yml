@@ -1,0 +1,81 @@
+# Explicit project name so this prod stack never gets conflated with
+# docker-compose.dev.yml (which would otherwise share the same default
+# project name derived from the folder and cause Compose to treat the dev
+# mariadb service as a replacement for this one — it has happened before
+# and deleted the prod container).
+name: khd-faceto
+
+services:
+  mariadb:
+    image: mariadb:11
+    container_name: khd_faceto_db
+    restart: unless-stopped
+    environment:
+      TZ: ${TZ}
+      MARIADB_ROOT_PASSWORD: ${DB_ROOT_PASSWORD}
+      MARIADB_DATABASE: ${DB_NAME}
+      MARIADB_USER: ${DB_USER}
+      MARIADB_PASSWORD: ${DB_PASSWORD}
+    ports:
+      # Published so dev.bat (backend running on the host, not in Docker)
+      # can connect straight to this same production database — dev and
+      # prod share one DB, no separate dev container needed.
+      # Host port 3307 (not 3306) — this machine has a native MariaDB
+      # Windows service already bound to 3306, which would otherwise win
+      # the port and silently swallow connections meant for the container.
+      - "3307:3306"
+    volumes:
+      - mariadb_data:/var/lib/mysql
+      - ./backend/db/migrations:/docker-entrypoint-initdb.d:ro
+    healthcheck:
+      test: ["CMD", "healthcheck.sh", "--connect", "--innodb_initialized"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+    networks:
+      - khd_net
+
+  app:
+    build:
+      context: .
+      dockerfile: backend/Dockerfile
+    container_name: khd_faceto_app
+    restart: unless-stopped
+    depends_on:
+      mariadb:
+        condition: service_healthy
+    environment:
+      TZ: ${TZ}
+      NODE_ENV: production
+      PORT: ${PORT}
+      DB_HOST: mariadb
+      DB_PORT: 3306
+      DB_NAME: ${DB_NAME}
+      DB_USER: ${DB_USER}
+      DB_PASSWORD: ${DB_PASSWORD}
+      JWT_SECRET: ${JWT_SECRET}
+      JWT_EXPIRES_IN: ${JWT_EXPIRES_IN}
+      FACE_MATCH_THRESHOLD: ${FACE_MATCH_THRESHOLD}
+      FACE_MIN_MARGIN: ${FACE_MIN_MARGIN}
+      FACE_COOLDOWN_MINUTES: ${FACE_COOLDOWN_MINUTES}
+      FACE_IMAGE_DIR: ${FACE_IMAGE_DIR}
+      COMPANY_NAME: ${COMPANY_NAME}
+      APP_NAME: ${APP_NAME}
+    ports:
+      - "${PORT}:${PORT}"
+    volumes:
+      - face_images:/data/faces
+      # Live-mount the Angular build output so refreshing the browser picks up
+      # changes without rebuilding the image — run `npm run build` (or
+      # `ng build --watch`) inside frontend-ng/ after editing the frontend.
+      - ./frontend-ng/dist/frontend-ng/browser:/app/public:ro
+    networks:
+      - khd_net
+
+volumes:
+  mariadb_data:
+  face_images:
+
+networks:
+  khd_net:
+    driver: bridge

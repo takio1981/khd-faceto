@@ -1,0 +1,153 @@
+<div class="page-container attendance-page">
+  <h1 class="page-title">ประวัติการลงเวลา</h1>
+
+  <mat-accordion class="filter-accordion">
+    <mat-expansion-panel [expanded]="true">
+      <mat-expansion-panel-header>
+        <mat-panel-title>🔍 ค้นหา/กรองข้อมูล</mat-panel-title>
+      </mat-expansion-panel-header>
+
+      <form [formGroup]="filterForm" class="filter-grid" (ngSubmit)="search()">
+        <mat-form-field appearance="outline">
+          <mat-label>ตั้งแต่วันที่</mat-label>
+          <input matInput [matDatepicker]="fromPicker" formControlName="dateFrom" />
+          <mat-datepicker-toggle matIconSuffix [for]="fromPicker"></mat-datepicker-toggle>
+          <mat-datepicker #fromPicker></mat-datepicker>
+        </mat-form-field>
+
+        <mat-form-field appearance="outline">
+          <mat-label>ถึงวันที่</mat-label>
+          <input matInput [matDatepicker]="toPicker" formControlName="dateTo" />
+          <mat-datepicker-toggle matIconSuffix [for]="toPicker"></mat-datepicker-toggle>
+          <mat-datepicker #toPicker></mat-datepicker>
+        </mat-form-field>
+
+        @if (isAdmin) {
+          <mat-form-field appearance="outline">
+            <mat-label>พนักงาน</mat-label>
+            <mat-select formControlName="employeeId">
+              <mat-option [value]="null">ทั้งหมด</mat-option>
+              @for (e of employees; track e.id) {
+                <mat-option [value]="e.id">{{ e.employee_code }} - {{ e.full_name }}</mat-option>
+              }
+            </mat-select>
+          </mat-form-field>
+
+          <mat-form-field appearance="outline">
+            <mat-label>แผนก</mat-label>
+            <mat-select formControlName="department">
+              <mat-option [value]="null">ทั้งหมด</mat-option>
+              @for (d of departments; track d) {
+                <mat-option [value]="d">{{ d }}</mat-option>
+              }
+            </mat-select>
+          </mat-form-field>
+        }
+
+        <mat-form-field appearance="outline">
+          <mat-label>ประเภท</mat-label>
+          <mat-select formControlName="scanType">
+            <mat-option [value]="null">ทั้งหมด</mat-option>
+            <mat-option value="check_in">เข้างาน</mat-option>
+            <mat-option value="check_out">ออกงาน</mat-option>
+            <mat-option value="ot_in">OT-เข้า</mat-option>
+            <mat-option value="ot_out">OT-ออก</mat-option>
+          </mat-select>
+        </mat-form-field>
+
+        <mat-form-field appearance="outline">
+          <mat-label>สถานะ</mat-label>
+          <mat-select formControlName="status">
+            <mat-option [value]="null">ทั้งหมด</mat-option>
+            <mat-option value="on_time">ตรงเวลา</mat-option>
+            <mat-option value="late">สาย</mat-option>
+            <mat-option value="absent">ขาด</mat-option>
+            <mat-option value="ot">OT</mat-option>
+          </mat-select>
+        </mat-form-field>
+
+        <mat-form-field appearance="outline">
+          <mat-label>ค้นหา</mat-label>
+          <input matInput formControlName="search" placeholder="ชื่อ/รหัส/แผนก..." />
+        </mat-form-field>
+
+        <div class="filter-actions">
+          <button mat-flat-button color="primary" type="submit">ค้นหา</button>
+          <button mat-stroked-button type="button" (click)="reset()">ล้าง</button>
+        </div>
+      </form>
+    </mat-expansion-panel>
+  </mat-accordion>
+
+  <div class="results-card">
+    <app-responsive-table [columns]="columns" [data]="records" [trackByFn]="trackById">
+      <ng-template #desktopRow let-row>
+        <tr>
+          <td>{{ row.employee_code }}</td>
+          <td>{{ row.full_name }}</td>
+          <td>{{ row.department || '-' }}</td>
+          <td>{{ fmtDateTime(row.scan_time) }}</td>
+          <td>{{ scanTypeText(row.scan_type) }}</td>
+          <td><span class="badge {{ row.status }}">{{ statusText(row.status) }}</span></td>
+          <td>{{ confidenceLabel(row) }}</td>
+          <td>
+            @if (row.face_image_path) {
+              <button mat-stroked-button type="button" (click)="viewImage(row)">ดูภาพ</button>
+            } @else {
+              -
+            }
+          </td>
+          <td>{{ row.scan_location_name || '-' }}</td>
+          @if (isAdmin) {
+            <td class="actions-cell">
+              <button mat-icon-button matTooltip="แก้ไข" (click)="editRecord(row)">
+                <mat-icon>edit</mat-icon>
+              </button>
+              <button mat-icon-button color="warn" matTooltip="ลบ" (click)="deleteRecord(row)">
+                <mat-icon>delete</mat-icon>
+              </button>
+            </td>
+          }
+        </tr>
+      </ng-template>
+
+      <ng-template #cardRow let-row>
+        <div class="card-line"><strong>{{ row.employee_code }} - {{ row.full_name }}</strong></div>
+        <div class="card-line"><span class="label">แผนก:</span> {{ row.department || '-' }}</div>
+        <div class="card-line"><span class="label">วันที่/เวลา:</span> {{ fmtDateTime(row.scan_time) }}</div>
+        <div class="card-line"><span class="label">ประเภท:</span> {{ scanTypeText(row.scan_type) }}</div>
+        <div class="card-line">
+          <span class="label">สถานะ:</span>
+          <span class="badge {{ row.status }}">{{ statusText(row.status) }}</span>
+        </div>
+        <div class="card-line"><span class="label">ความมั่นใจ:</span> {{ confidenceLabel(row) }}</div>
+        <div class="card-line"><span class="label">จุดสแกน:</span> {{ row.scan_location_name || '-' }}</div>
+        @if (row.face_image_path) {
+          <div class="card-line">
+            <button mat-stroked-button type="button" (click)="viewImage(row)">ดูภาพ</button>
+          </div>
+        }
+      </ng-template>
+
+      <ng-template #cardActions let-row>
+        @if (isAdmin) {
+          <button mat-icon-button matTooltip="แก้ไข" (click)="editRecord(row)">
+            <mat-icon>edit</mat-icon>
+          </button>
+          <button mat-icon-button color="warn" matTooltip="ลบ" (click)="deleteRecord(row)">
+            <mat-icon>delete</mat-icon>
+          </button>
+        }
+      </ng-template>
+    </app-responsive-table>
+
+    <mat-paginator
+      [length]="total"
+      [pageIndex]="page"
+      [pageSize]="pageSize"
+      [pageSizeOptions]="[10, 20, 50, 100]"
+      (page)="onPage($event)"
+      showFirstLastButtons
+    ></mat-paginator>
+  </div>
+</div>

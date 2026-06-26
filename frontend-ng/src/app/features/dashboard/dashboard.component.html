@@ -1,0 +1,103 @@
+<div class="dashboard-page">
+  <h1 class="page-title">แดชบอร์ด</h1>
+
+  <mat-expansion-panel class="filter-panel" [expanded]="true">
+    <mat-expansion-panel-header>
+      <mat-panel-title>
+        <mat-icon>filter_alt</mat-icon>
+        ตัวกรอง
+      </mat-panel-title>
+    </mat-expansion-panel-header>
+
+    <div class="filter-row">
+      <mat-form-field appearance="outline" class="filter-field">
+        <mat-label>วันที่</mat-label>
+        <input matInput [matDatepicker]="picker" [(ngModel)]="selectedDate" (dateChange)="onFilterApply()" />
+        <mat-datepicker-toggle matIconSuffix [for]="picker"></mat-datepicker-toggle>
+        <mat-datepicker #picker></mat-datepicker>
+      </mat-form-field>
+
+      @if (isAdmin()) {
+        <mat-form-field appearance="outline" class="filter-field">
+          <mat-label>พนักงาน (ดูรายละเอียดเฉพาะคน)</mat-label>
+          <mat-select [(ngModel)]="selectedEmployeeId" (selectionChange)="onEmployeeChange()">
+            <mat-option [value]="null">ทั้งหมด</mat-option>
+            @for (emp of employees(); track emp.id) {
+              <mat-option [value]="emp.id">{{ emp.employee_code }} - {{ emp.full_name }}</mat-option>
+            }
+          </mat-select>
+        </mat-form-field>
+      }
+
+      <button mat-flat-button color="primary" class="filter-apply-btn" (click)="onFilterApply()">
+        <mat-icon>search</mat-icon>
+        ค้นหา
+      </button>
+    </div>
+  </mat-expansion-panel>
+
+  @if (loading()) {
+    <div class="loading-row">
+      <mat-spinner diameter="32"></mat-spinner>
+    </div>
+  }
+
+  @if (error()) {
+    <div class="error-message">{{ error() }}</div>
+  }
+
+  @if (summary() && !loading()) {
+    <div class="stat-grid">
+      <mat-card class="stat-card stat-on-time">
+        <div class="stat-label">เข้างานตรงเวลา</div>
+        <div class="stat-value">{{ summary()!.counts.on_time }}</div>
+      </mat-card>
+      <mat-card class="stat-card stat-late">
+        <div class="stat-label">มาสาย</div>
+        <div class="stat-value">{{ summary()!.counts.late }}</div>
+      </mat-card>
+      <mat-card class="stat-card stat-absent">
+        <div class="stat-label">ขาดงาน</div>
+        <div class="stat-value">{{ summary()!.counts.absent }}</div>
+      </mat-card>
+      <mat-card class="stat-card stat-ot">
+        <div class="stat-label">OT</div>
+        <div class="stat-value">{{ summary()!.counts.ot }}</div>
+      </mat-card>
+    </div>
+
+    <div class="charts-grid">
+      <mat-card class="chart-card">
+        <h3 class="chart-title">สรุปสถานะวันนี้</h3>
+        <div class="chart-wrapper">
+          <canvas baseChart [type]="doughnutType" [data]="doughnutData()" [options]="doughnutOptions"></canvas>
+        </div>
+      </mat-card>
+
+      <mat-card class="chart-card">
+        @if (!isDrilldown()) {
+          <h3 class="chart-title">แนวโน้ม 7 วันล่าสุด</h3>
+          <div class="chart-wrapper">
+            <canvas baseChart [type]="barType" [data]="barData()" [options]="barOptions"></canvas>
+          </div>
+        } @else {
+          <h3 class="chart-title">ประวัติการเข้างาน (30 วัน)</h3>
+          <app-responsive-table [columns]="historyColumns" [data]="historyRows()">
+            <ng-template #desktopRow let-row>
+              <tr>
+                <td>{{ row.d }}</td>
+                <td>{{ row.first_checkin }}</td>
+                <td>{{ row.status }}</td>
+              </tr>
+            </ng-template>
+            <ng-template #cardRow let-row>
+              <div class="card-field"><span class="card-label">วันที่:</span> {{ row.d }}</div>
+              <div class="card-field"><span class="card-label">เวลาเข้างาน:</span> {{ row.first_checkin }}</div>
+              <div class="card-field"><span class="card-label">สถานะ:</span> {{ row.status }}</div>
+            </ng-template>
+          </app-responsive-table>
+        }
+      </mat-card>
+    </div>
+  }
+</div>

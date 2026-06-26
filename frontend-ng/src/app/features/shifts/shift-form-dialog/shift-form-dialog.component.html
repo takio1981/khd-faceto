@@ -1,0 +1,66 @@
+<h2 mat-dialog-title>{{ isEdit ? 'แก้ไขกะการทำงาน' : 'เพิ่มกะการทำงาน' }}</h2>
+
+<form [formGroup]="form" (ngSubmit)="save()">
+  <mat-dialog-content>
+    <mat-form-field appearance="outline" class="full-width">
+      <mat-label>ชื่อกะ *</mat-label>
+      <input matInput formControlName="name" />
+    </mat-form-field>
+
+    <div class="form-grid">
+      <mat-form-field appearance="outline">
+        <mat-label>เริ่มเข้างาน</mat-label>
+        <input matInput type="time" formControlName="checkin_start" />
+      </mat-form-field>
+
+      <mat-form-field appearance="outline">
+        <mat-label>ตรงเวลาถึง</mat-label>
+        <input matInput type="time" formControlName="checkin_end" />
+      </mat-form-field>
+
+      <mat-form-field appearance="outline">
+        <mat-label>สายได้ถึง</mat-label>
+        <input matInput type="time" formControlName="late_cutoff" />
+      </mat-form-field>
+
+      <mat-form-field appearance="outline">
+        <mat-label>เริ่มออกงาน</mat-label>
+        <input matInput type="time" formControlName="checkout_start" />
+      </mat-form-field>
+
+      <mat-form-field appearance="outline">
+        <mat-label>สิ้นสุดออกงาน</mat-label>
+        <input matInput type="time" formControlName="checkout_end" />
+      </mat-form-field>
+
+      <mat-form-field appearance="outline">
+        <mat-label>เริ่ม OT</mat-label>
+        <input matInput type="time" formControlName="ot_start" />
+      </mat-form-field>
+
+      <mat-form-field appearance="outline">
+        <mat-label>สิ้นสุด OT</mat-label>
+        <input matInput type="time" formControlName="ot_end" />
+      </mat-form-field>
+    </div>
+
+    <p class="hint">
+      ลำดับเวลาต้องเรียงจากน้อยไปมาก (เริ่มเข้างาน ≤ ตรงเวลา ≤ สายได้ถึง ≤ เริ่มออกงาน ≤ สิ้นสุดออกงาน ≤ เริ่ม OT ≤ สิ้นสุด OT)
+    </p>
+
+    @if (errorMessage()) {
+      <p class="error-message">{{ errorMessage() }}</p>
+    }
+  </mat-dialog-content>
+
+  <mat-dialog-actions align="end">
+    <button mat-button type="button" (click)="cancel()" [disabled]="saving()">ยกเลิก</button>
+    <button mat-flat-button color="primary" type="submit" [disabled]="saving()">
+      @if (saving()) {
+        <mat-spinner diameter="18"></mat-spinner>
+      } @else {
+        บันทึก
+      }
+    </button>
+  </mat-dialog-actions>
+</form>

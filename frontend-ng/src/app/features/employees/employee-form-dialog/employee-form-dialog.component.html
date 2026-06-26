@@ -1,0 +1,109 @@
+<h2 mat-dialog-title>{{ isEdit ? 'แก้ไขพนักงาน' : 'เพิ่มพนักงาน' }}</h2>
+
+<form [formGroup]="form" (ngSubmit)="save()">
+  <mat-dialog-content>
+    <div class="form-grid">
+      <mat-form-field appearance="outline">
+        <mat-label>รหัสพนักงาน *</mat-label>
+        <input matInput formControlName="employee_code" />
+      </mat-form-field>
+
+      <mat-form-field appearance="outline">
+        <mat-label>ชื่อ-นามสกุล *</mat-label>
+        <input matInput formControlName="full_name" />
+      </mat-form-field>
+
+      <mat-form-field appearance="outline">
+        <mat-label>แผนก</mat-label>
+        <input matInput formControlName="department" />
+      </mat-form-field>
+
+      <mat-form-field appearance="outline">
+        <mat-label>ตำแหน่ง</mat-label>
+        <input matInput formControlName="position" />
+      </mat-form-field>
+
+      <mat-form-field appearance="outline">
+        <mat-label>กะการทำงาน</mat-label>
+        <mat-select formControlName="shift_id">
+          <mat-option [value]="null">— ไม่ระบุ —</mat-option>
+          @for (s of data.shifts; track s.id) {
+            <mat-option [value]="s.id">{{ s.name }}</mat-option>
+          }
+        </mat-select>
+      </mat-form-field>
+
+      @if (isEdit) {
+        <mat-form-field appearance="outline">
+          <mat-label>สถานะ</mat-label>
+          <mat-select formControlName="is_active">
+            <mat-option [value]="true">ใช้งาน</mat-option>
+            <mat-option [value]="false">ปิดใช้งาน</mat-option>
+          </mat-select>
+        </mat-form-field>
+      }
+    </div>
+
+    <div class="section">
+      <mat-checkbox formControlName="notify_enabled">
+        🔔 รับการแจ้งเตือน (มาสาย/ขาดงาน/ลงเวลาสำเร็จ)
+      </mat-checkbox>
+
+      <div class="form-grid">
+        <mat-form-field appearance="outline">
+          <mat-label>Email สำหรับแจ้งเตือน</mat-label>
+          <input matInput type="email" formControlName="notify_email" placeholder="employee@company.com" />
+        </mat-form-field>
+
+        <mat-form-field appearance="outline">
+          <mat-label>LINE User ID</mat-label>
+          <input matInput formControlName="notify_line_user_id" />
+        </mat-form-field>
+
+        <mat-form-field appearance="outline">
+          <mat-label>Telegram Chat ID</mat-label>
+          <input matInput formControlName="notify_telegram_chat_id" />
+        </mat-form-field>
+      </div>
+    </div>
+
+    @if (!isEdit) {
+      <div class="section">
+        <mat-checkbox formControlName="create_login">สร้างบัญชีเข้าระบบให้พนักงานนี้</mat-checkbox>
+
+        @if (form.value.create_login) {
+          <div class="form-grid">
+            <mat-form-field appearance="outline">
+              <mat-label>Username</mat-label>
+              <input matInput formControlName="login_username" />
+            </mat-form-field>
+
+            <mat-form-field appearance="outline">
+              <mat-label>Password</mat-label>
+              <input matInput type="password" formControlName="login_password" />
+            </mat-form-field>
+
+            <mat-form-field appearance="outline">
+              <mat-label>สิทธิ์</mat-label>
+              <mat-select formControlName="login_role">
+                <mat-option value="user">User</mat-option>
+                <mat-option value="admin">Admin</mat-option>
+              </mat-select>
+            </mat-form-field>
+          </div>
+        }
+      </div>
+    }
+  </mat-dialog-content>
+
+  <mat-dialog-actions align="end">
+    <button mat-button type="button" (click)="cancel()" [disabled]="saving()">ยกเลิก</button>
+    <button mat-flat-button color="primary" type="submit" [disabled]="saving()">
+      @if (saving()) {
+        <mat-spinner diameter="18"></mat-spinner>
+      } @else {
+        บันทึก
+      }
+    </button>
+  </mat-dialog-actions>
+</form>

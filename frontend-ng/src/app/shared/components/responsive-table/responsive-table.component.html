@@ -1,0 +1,37 @@
+@if (!isMobile()) {
+  <div class="table-scroll-guard">
+    <table class="data-table">
+      <thead>
+        <tr>
+          @for (col of columns; track col.key) {
+            <th>{{ col.label }}</th>
+          }
+        </tr>
+      </thead>
+      <tbody>
+        @for (row of data; track trackByFn($index, row)) {
+          <ng-container *ngTemplateOutlet="desktopRowTpl ?? null; context: { $implicit: row }"></ng-container>
+        }
+      </tbody>
+    </table>
+    @if (!data.length) {
+      <div class="empty-state">ไม่พบข้อมูล</div>
+    }
+  </div>
+} @else {
+  <div class="card-list">
+    @for (row of data; track trackByFn($index, row)) {
+      <mat-card class="row-card">
+        <ng-container *ngTemplateOutlet="cardRowTpl ?? null; context: { $implicit: row }"></ng-container>
+        @if (cardActionsTpl) {
+          <div class="card-actions">
+            <ng-container *ngTemplateOutlet="cardActionsTpl; context: { $implicit: row }"></ng-container>
+          </div>
+        }
+      </mat-card>
+    }
+    @if (!data.length) {
+      <div class="empty-state">ไม่พบข้อมูล</div>
+    }
+  </div>
+}

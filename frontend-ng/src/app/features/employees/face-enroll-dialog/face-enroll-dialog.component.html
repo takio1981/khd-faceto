@@ -1,0 +1,67 @@
+<h2 mat-dialog-title>ลงทะเบียนใบหน้า (3 ภาพ): {{ data.employeeName }}</h2>
+
+<mat-dialog-content>
+  <p class="muted">ถ่ายภาพใบหน้า 3 มุม (ตรง / เอียงซ้ายเล็กน้อย / เอียงขวาเล็กน้อย) เพื่อความแม่นยำ</p>
+  <p class="muted">
+    👓 ถ้าพนักงานใส่แว่นสายตาเป็นประจำ ให้ <b>ใส่แว่นไว้ตอนถ่ายภาพลงทะเบียนทั้ง 3 ภาพ</b> เช่นกัน เพื่อให้ระบบจดจำใบหน้าตรงกับตอนสแกนจริง
+    (ไม่ต้องถอดแว่น ยกเว้นแว่นกันแดด/แว่นเลนส์เข้ม)
+  </p>
+
+  <div class="cam-controls">
+    <mat-form-field appearance="outline">
+      <mat-label>🎥 เลือกกล้อง</mat-label>
+      <mat-select [value]="selectedCamera()" (selectionChange)="onCameraChange($event.value)">
+        <mat-option value="">กล้องเริ่มต้น</mat-option>
+        @for (c of cameras(); track c.deviceId) {
+          <mat-option [value]="c.deviceId">{{ c.label || 'กล้อง ' + c.deviceId.slice(0, 6) }}</mat-option>
+        }
+      </mat-select>
+    </mat-form-field>
+    <button mat-stroked-button type="button" (click)="refreshCameras()">⟳ รีเฟรช</button>
+  </div>
+
+  <mat-form-field appearance="outline" class="quality-field">
+    <mat-label>🔎 ความละเอียดการสแกน (กล้อง + จุดบนใบหน้า)</mat-label>
+    <mat-select [value]="selectedQuality()" (selectionChange)="onQualityChange($event.value)">
+      @for (k of qualityKeys; track k) {
+        <mat-option [value]="k">{{ qualityLabel(k) }}</mat-option>
+      }
+    </mat-select>
+  </mat-form-field>
+
+  <div class="cam-wrap">
+    <video #video autoplay muted playsinline></video>
+    <div class="cam-status" [class]="statusType()">
+      <span class="dot"></span><span>{{ statusText() }}</span>
+    </div>
+  </div>
+
+  <div class="enroll-slots">
+    @for (shot of shots(); track $index) {
+      <div class="enroll-slot" [class.done]="!!shot">
+        <div class="slot-circle">{{ shot ? '✓' : $index + 1 }}</div>
+        @if (shot) {
+          <img class="slot-thumb" [src]="shot.thumbnail" [alt]="'ภาพ ' + ($index + 1)" />
+        }
+        <div class="slot-label">ภาพที่ {{ $index + 1 }}</div>
+      </div>
+    }
+  </div>
+</mat-dialog-content>
+
+<mat-dialog-actions align="end">
+  <button mat-button type="button" (click)="skip()">ข้าม (ภายหลัง)</button>
+  <button mat-button type="button" (click)="resetShots()">เริ่มถ่ายใหม่</button>
+
+  @if (!cameraStarted()) {
+    <button mat-flat-button color="primary" type="button" (click)="startCamera()">เริ่มกล้อง</button>
+  } @else if (capturedCount < 3) {
+    <button mat-flat-button color="primary" type="button" [disabled]="capturing()" (click)="capture()">
+      📷 ถ่ายภาพที่ {{ capturedCount + 1 }}
+    </button>
+  } @else {
+    <button mat-flat-button color="primary" type="button" [disabled]="saving()" (click)="saveAll()">
+      💾 บันทึก ({{ capturedCount }}/3)
+    </button>
+  }
+</mat-dialog-actions>

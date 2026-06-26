@@ -1,0 +1,144 @@
+.dashboard-page {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  padding: 16px;
+}
+
+.page-title {
+  margin: 0;
+  font-size: 1.5rem;
+  font-weight: 600;
+}
+
+.filter-panel {
+  border-radius: 8px;
+}
+
+.filter-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 16px;
+  padding-top: 12px;
+}
+
+.filter-field {
+  min-width: 220px;
+  flex: 1 1 220px;
+}
+
+.filter-apply-btn {
+  height: 48px;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.loading-row {
+  display: flex;
+  justify-content: center;
+  padding: 32px 0;
+}
+
+.error-message {
+  color: #dc2626;
+  padding: 12px;
+  text-align: center;
+}
+
+.stat-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 16px;
+}
+
+@media (max-width: 960px) {
+  .stat-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+
+@media (max-width: 560px) {
+  .stat-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+.stat-card {
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  border-left: 4px solid transparent;
+}
+
+.stat-label {
+  font-size: 0.875rem;
+  color: rgba(0, 0, 0, 0.6);
+}
+
+.stat-value {
+  font-size: 2rem;
+  font-weight: 700;
+}
+
+.stat-on-time {
+  border-left-color: #16a34a;
+  .stat-value { color: #16a34a; }
+}
+
+.stat-late {
+  border-left-color: #f59e0b;
+  .stat-value { color: #f59e0b; }
+}
+
+.stat-absent {
+  border-left-color: #dc2626;
+  .stat-value { color: #dc2626; }
+}
+
+.stat-ot {
+  border-left-color: #2563eb;
+  .stat-value { color: #2563eb; }
+}
+
+.charts-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 16px;
+}
+
+@media (max-width: 900px) {
+  .charts-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+.chart-card {
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.chart-title {
+  margin: 0;
+  font-size: 1.1rem;
+  font-weight: 600;
+}
+
+.chart-wrapper {
+  position: relative;
+  height: 280px;
+  width: 100%;
+}
+
+.card-field {
+  padding: 4px 0;
+}
+
+.card-label {
+  font-weight: 600;
+  margin-right: 4px;
+}

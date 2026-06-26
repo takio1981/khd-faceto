@@ -1,0 +1,91 @@
+<div class="page-container">
+  <div class="toolbar">
+    <h1 class="page-title">จัดการข้อมูลพนักงาน</h1>
+    <div class="toolbar-actions">
+      <mat-slide-toggle [checked]="showInactive()" (change)="onToggleInactive($event.checked)">
+        แสดงพนักงานที่ปิดใช้งาน
+      </mat-slide-toggle>
+      <button mat-raised-button color="primary" (click)="openAddDialog()">
+        <mat-icon>add</mat-icon>
+        เพิ่มพนักงาน
+      </button>
+    </div>
+  </div>
+
+  <app-responsive-table [columns]="columns" [data]="employees()" [trackByFn]="trackById">
+    <ng-template #desktopRow let-emp>
+      <tr>
+        <td>{{ emp.employee_code }}</td>
+        <td>{{ emp.full_name }}</td>
+        <td>{{ emp.department || '-' }}</td>
+        <td>{{ emp.shift_name || '-' }}</td>
+        <td>
+          @if (emp.face_count) {
+            <span class="badge on_time">{{ emp.face_count }} ชุด</span>
+          } @else {
+            <span class="badge absent">ยังไม่มี</span>
+          }
+        </td>
+        <td>
+          @if (emp.is_active) {
+            <span class="badge on_time">ใช้งาน</span>
+          } @else {
+            <span class="badge absent">ปิด</span>
+          }
+        </td>
+        <td class="actions-cell">
+          <button mat-icon-button matTooltip="แก้ไข" (click)="openEditDialog(emp)">
+            <mat-icon>edit</mat-icon>
+          </button>
+          <button mat-icon-button matTooltip="ลงทะเบียนใบหน้า" (click)="openFaceEnrollDialog(emp.id, emp.full_name)">
+            <mat-icon>face</mat-icon>
+          </button>
+          <button mat-icon-button matTooltip="ดูใบหน้า" (click)="openFaceGallery(emp)">
+            <mat-icon>photo_library</mat-icon>
+          </button>
+          <button mat-icon-button matTooltip="ปิดใช้งาน" color="warn" (click)="deleteEmployee(emp)">
+            <mat-icon>delete</mat-icon>
+          </button>
+        </td>
+      </tr>
+    </ng-template>
+
+    <ng-template #cardRow let-emp>
+      <div class="card-title">{{ emp.employee_code }} — {{ emp.full_name }}</div>
+      <div class="card-field"><span>แผนก:</span> {{ emp.department || '-' }}</div>
+      <div class="card-field"><span>ตำแหน่ง:</span> {{ emp.position || '-' }}</div>
+      <div class="card-field"><span>กะ:</span> {{ emp.shift_name || '-' }}</div>
+      <div class="card-field">
+        <span>ใบหน้า:</span>
+        @if (emp.face_count) {
+          <span class="badge on_time">{{ emp.face_count }} ชุด</span>
+        } @else {
+          <span class="badge absent">ยังไม่มี</span>
+        }
+      </div>
+      <div class="card-field">
+        <span>สถานะ:</span>
+        @if (emp.is_active) {
+          <span class="badge on_time">ใช้งาน</span>
+        } @else {
+          <span class="badge absent">ปิด</span>
+        }
+      </div>
+    </ng-template>
+
+    <ng-template #cardActions let-emp>
+      <button mat-icon-button matTooltip="แก้ไข" (click)="openEditDialog(emp)">
+        <mat-icon>edit</mat-icon>
+      </button>
+      <button mat-icon-button matTooltip="ลงทะเบียนใบหน้า" (click)="openFaceEnrollDialog(emp.id, emp.full_name)">
+        <mat-icon>face</mat-icon>
+      </button>
+      <button mat-icon-button matTooltip="ดูใบหน้า" (click)="openFaceGallery(emp)">
+        <mat-icon>photo_library</mat-icon>
+      </button>
+      <button mat-icon-button matTooltip="ปิดใช้งาน" color="warn" (click)="deleteEmployee(emp)">
+        <mat-icon>delete</mat-icon>
+      </button>
+    </ng-template>
+  </app-responsive-table>
+</div>

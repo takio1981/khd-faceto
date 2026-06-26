@@ -1,0 +1,69 @@
+.shell-container {
+  height: 100vh;
+}
+
+.shell-sidenav {
+  width: 260px;
+  display: flex;
+  flex-direction: column;
+}
+
+.brand {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 16px;
+  border-bottom: 1px solid var(--border);
+}
+
+.brand-logo {
+  width: 36px;
+  height: 36px;
+  font-size: 18px;
+}
+
+.brand-app {
+  font-weight: 600;
+  font-size: 14px;
+  line-height: 1.3;
+}
+
+.brand-org {
+  font-size: 11px;
+  color: var(--muted);
+}
+
+.active-link {
+  background: var(--brand-primary-light);
+  color: var(--brand-primary-dark);
+}
+
+.shell-toolbar {
+  position: sticky;
+  top: 0;
+  z-index: 10;
+  background: linear-gradient(135deg, var(--brand-primary), var(--brand-teal)) !important;
+}
+
+.toolbar-title {
+  font-size: 16px;
+  margin-left: 8px;
+}
+
+.spacer {
+  flex: 1 1 auto;
+}
+
+.user-info {
+  font-size: 13px;
+  opacity: 0.95;
+}
+
+@media (max-width: 600px) {
+  .user-info { display: none; }
+}
+
+.shell-main {
+  min-height: calc(100vh - 64px);
+  background: var(--bg);
+}

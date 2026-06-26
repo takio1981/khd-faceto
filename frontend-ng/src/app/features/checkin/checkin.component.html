@@ -1,0 +1,126 @@
+<div class="checkin-page">
+  <div class="page-header">
+    <h1 class="page-title">ลงเวลาเข้า-ออกงาน (สแกนใบหน้า)</h1>
+    <button mat-stroked-button class="guide-toggle-btn" type="button" (click)="toggleGuide()">
+      <mat-icon>checklist</mat-icon>
+      คำแนะนำการสแกน
+      <span class="caret">{{ showGuide ? '▾' : '▸' }}</span>
+    </button>
+
+    <div class="guide-popover" *ngIf="showGuide">
+      <div class="guide-grid">
+        <div class="guide-item"><span class="ic">🧍</span><div class="gt">หันหน้าตรงเข้ากล้อง ให้ใบหน้าอยู่กลางกรอบ</div></div>
+        <div class="guide-item"><span class="ic">💡</span><div class="gt">แสงสว่างเพียงพอ หลีกเลี่ยงแสงย้อนหลัง</div></div>
+        <div class="guide-item"><span class="ic">📏</span><div class="gt">ระยะห่างประมาณ 40–60 ซม.</div></div>
+        <div class="guide-item"><span class="ic">😷</span><div class="gt">ถอดหน้ากาก/แว่นกันแดด (แว่นสายตาใส่ได้ ไม่ต้องถอด)</div></div>
+        <div class="guide-item"><span class="ic">👥</span><div class="gt">สแกนได้หลายคนพร้อมกัน</div></div>
+        <div class="guide-item"><span class="ic">⏱️</span><div class="gt">กันบันทึกซ้ำ รอ 3 นาทีก่อนบันทึกใหม่</div></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="checkin-grid">
+    <!-- Camera card -->
+    <mat-card class="cam-card">
+      <div class="cam-card-header">
+        <div>
+          <div class="clock-big">{{ clockTime }}</div>
+          <div class="muted">{{ clockDate }}</div>
+        </div>
+        <div class="cam-actions">
+          <button mat-stroked-button type="button" (click)="toggleDeviceSettings()" title="ตั้งค่าอุปกรณ์">
+            <mat-icon>settings</mat-icon> ตั้งค่าอุปกรณ์
+          </button>
+          <button mat-stroked-button type="button" (click)="toggleFlipH()" [class.active]="flipH" title="สะท้อนกระจก ซ้าย-ขวา">⇄</button>
+          <button mat-stroked-button type="button" (click)="toggleFlipV()" [class.active]="flipV" title="สะท้อนกระจก บน-ล่าง">⇵</button>
+          <button mat-stroked-button type="button" (click)="toggleFullscreen()" title="เต็มจอ">
+            <mat-icon>{{ isFullscreen ? 'fullscreen_exit' : 'fullscreen' }}</mat-icon>
+            {{ isFullscreen ? 'ออก' : 'เต็มจอ' }}
+          </button>
+          <button mat-raised-button color="primary" type="button" *ngIf="!running" (click)="start()" [disabled]="starting">
+            ▶ เริ่มสแกน
+          </button>
+          <button mat-stroked-button type="button" *ngIf="running" (click)="stop()">■ หยุด</button>
+        </div>
+
+        <div class="cam-settings-popover" *ngIf="showDeviceSettings">
+          <div class="cam-select">
+            <label>📍 จุดติดตั้งอุปกรณ์นี้ (สถานที่สแกน)</label>
+            <mat-select [(ngModel)]="selectedLocationId" (selectionChange)="onLocationChange($event.value)">
+              <mat-option value="">— ไม่ระบุ —</mat-option>
+              <mat-option *ngFor="let loc of locations" [value]="loc.id + ''">{{ loc.name }}</mat-option>
+            </mat-select>
+          </div>
+
+          <div class="cam-select">
+            <label>🎥 อุปกรณ์กล้อง (เลือกกล้องที่เชื่อมต่อ)</label>
+            <div class="cam-select-row">
+              <mat-select [(ngModel)]="selectedCameraId" (selectionChange)="onCameraChange($event.value)">
+                <mat-option value="">กล้องเริ่มต้น</mat-option>
+                <mat-option *ngFor="let cam of cameras" [value]="cam.deviceId">{{ cam.label || 'กล้อง ' + cam.deviceId.slice(0, 6) }}</mat-option>
+              </mat-select>
+              <button mat-stroked-button type="button" (click)="refreshCameras()">⟳ รีเฟรช</button>
+            </div>
+          </div>
+
+          <div class="cam-select">
+            <label>🔎 ความละเอียดการสแกน (กล้อง + จุดบนใบหน้า)</label>
+            <mat-select [(ngModel)]="selectedQuality" (selectionChange)="onQualityChange($event.value)">
+              <mat-option *ngFor="let q of qualityOptions" [value]="q.key">{{ q.label }}</mat-option>
+            </mat-select>
+          </div>
+        </div>
+      </div>
+
+      <div class="scan-result" *ngIf="showResultBanner" [class]="resultType">{{ resultText }}</div>
+
+      <div class="cam-wrap" #camWrap>
+        <div class="cam-stage" [class.flip-h]="flipH" [class.flip-v]="flipV">
+          <div class="cam-frame">
+            <video #video autoplay muted playsinline></video>
+            <canvas #overlay class="overlay"></canvas>
+            <div class="cam-guide"><span class="tl"></span><span class="tr"></span><span class="bl"></span><span class="br"></span></div>
+
+            <div class="modal-loading" *ngIf="modelsLoading">
+              <mat-spinner diameter="48"></mat-spinner>
+              <div>กำลังโหลดโมเดล AI...</div>
+            </div>
+
+            <div class="countdown-overlay" *ngIf="countdownActive">
+              <span>{{ countdownValue }}</span>
+            </div>
+          </div>
+
+          <div class="cam-status" [class]="statusType">
+            <span class="dot"></span>
+            <span>{{ statusText }}</span>
+          </div>
+
+          <div class="cam-clock-overlay">
+            <div class="cco-time">{{ clockTime }}</div>
+            <div class="cco-date">{{ clockDate }}</div>
+          </div>
+        </div>
+      </div>
+    </mat-card>
+
+    <!-- Main live feed list (right column, desktop) -->
+    <mat-card class="feed-card">
+      <h3>🕒 ภาพและข้อมูลการสแกนล่าสุด</h3>
+      <div class="cam-feed-list cam-feed-list-main">
+        <div class="feed-item" *ngFor="let item of feedItems">
+          <img class="feed-thumb" *ngIf="item.imageBase64" [src]="item.imageBase64" alt="">
+          <div class="feed-info">
+            <div class="feed-name">{{ item.name }}</div>
+            <div class="feed-meta">
+              <span class="badge" [class]="item.status">{{ statusTh[item.status || ''] || item.status }}</span>
+              <span class="feed-type">{{ scanTypeTh[item.scanType || ''] || item.scanType }}</span>
+            </div>
+            <div class="feed-time">{{ feedTime(item.time) }}</div>
+          </div>
+        </div>
+        <div class="feed-empty" *ngIf="!feedItems.length">ยังไม่มีรายการลงเวลาวันนี้</div>
+      </div>
+    </mat-card>
+  </div>
+</div>

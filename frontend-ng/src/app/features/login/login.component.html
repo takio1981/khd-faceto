@@ -1,0 +1,47 @@
+<div class="login-wrap">
+  <div class="login-row">
+    <mat-card class="login-card">
+      <div class="login-logo brand-medallion">✚</div>
+      <p class="org">{{ companyName() }}</p>
+      <h1 class="title">{{ appName() }}</h1>
+      <p class="sub">Face Attendance System — เข้าสู่ระบบ</p>
+
+      <form [formGroup]="form" (ngSubmit)="submit()">
+        <mat-form-field appearance="outline" class="full-width">
+          <mat-label>ชื่อผู้ใช้ (Username)</mat-label>
+          <input matInput formControlName="username" autocomplete="username" required>
+          @if (form.controls.username.invalid && form.controls.username.touched) {
+            <mat-error>กรุณากรอกชื่อผู้ใช้</mat-error>
+          }
+        </mat-form-field>
+
+        <mat-form-field appearance="outline" class="full-width">
+          <mat-label>รหัสผ่าน (Password)</mat-label>
+          <input matInput type="password" formControlName="password" autocomplete="current-password" required>
+          @if (form.controls.password.invalid && form.controls.password.touched) {
+            <mat-error>กรุณากรอกรหัสผ่าน</mat-error>
+          }
+        </mat-form-field>
+
+        <button mat-flat-button color="primary" type="submit" class="full-width submit-btn" [disabled]="loading()">
+          @if (loading()) {
+            <mat-spinner diameter="20" class="inline-spinner"></mat-spinner>
+          } @else {
+            เข้าสู่ระบบ
+          }
+        </button>
+      </form>
+
+      <p class="muted text-center hint">ค่าเริ่มต้น: admin / admin1234</p>
+    </mat-card>
+
+    <mat-card class="login-map-card">
+      <h3>📍 จุดติดตั้งกล้องสแกนใบหน้า</h3>
+      <p class="muted">แผนที่แสดงตำแหน่งที่ติดตั้งจุดสแกนใบหน้าทั้งหมด</p>
+      <div #mapEl class="login-map"></div>
+      <a mat-flat-button color="accent" routerLink="/checkin" class="full-width checkin-link">
+        🖥️ เปิดหน้าสแกนใบหน้า (ไม่ต้องเข้าสู่ระบบ)
+      </a>
+    </mat-card>
+  </div>
+</div>

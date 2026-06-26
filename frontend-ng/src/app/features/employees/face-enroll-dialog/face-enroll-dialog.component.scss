@@ -1,0 +1,132 @@
+:host {
+  display: block;
+}
+
+.muted {
+  color: var(--muted);
+  font-size: 13px;
+  margin: 0 0 8px;
+}
+
+.cam-controls {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+
+  mat-form-field {
+    flex: 1;
+    min-width: 200px;
+  }
+}
+
+.quality-field {
+  width: 100%;
+}
+
+.cam-wrap {
+  position: relative;
+  width: 100%;
+  max-width: 480px;
+  margin: 0 auto 16px;
+  background: #000;
+  border-radius: 10px;
+  overflow: hidden;
+
+  video {
+    width: 100%;
+    display: block;
+    aspect-ratio: 4 / 3;
+    object-fit: cover;
+  }
+}
+
+.cam-status {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  background: rgba(0, 0, 0, 0.55);
+  color: #fff;
+  font-size: 13px;
+
+  .dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: #94a3b8;
+  }
+
+  &.scanning .dot { background: #f59e0b; }
+  &.success .dot { background: #16a34a; }
+  &.warn .dot { background: #f59e0b; }
+  &.error .dot { background: #dc2626; }
+}
+
+.enroll-slots {
+  display: flex;
+  justify-content: center;
+  gap: 16px;
+  flex-wrap: wrap;
+}
+
+.enroll-slot {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  width: 90px;
+
+  .slot-circle {
+    width: 40px;
+    height: 40px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: var(--border);
+    color: var(--muted);
+    font-weight: 600;
+  }
+
+  .slot-thumb {
+    width: 72px;
+    height: 72px;
+    object-fit: cover;
+    border-radius: 8px;
+    border: 2px solid var(--brand-primary);
+  }
+
+  .slot-label {
+    font-size: 12px;
+    color: var(--muted);
+  }
+
+  &.done .slot-circle {
+    background: var(--status-green);
+    color: #fff;
+  }
+}
+
+@media (max-width: 600px) {
+  .cam-controls {
+    flex-direction: column;
+    align-items: stretch;
+
+    mat-form-field {
+      min-width: 0;
+    }
+  }
+
+  .enroll-slots {
+    gap: 10px;
+  }
+
+  .enroll-slot {
+    width: 80px;
+  }
+}

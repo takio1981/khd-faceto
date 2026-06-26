@@ -1,0 +1,276 @@
+<div class="settings-page">
+  <h1 class="page-title">ตั้งค่าระบบ</h1>
+
+  <!-- 1. Login security -->
+  <mat-card class="section-card">
+    <h2 class="section-title">การล็อกบัญชีเมื่อกรอกรหัสผ่านผิด</h2>
+    <form [formGroup]="loginForm" class="form-grid two-col" (ngSubmit)="saveLoginSettings()">
+      <mat-form-field appearance="outline">
+        <mat-label>จำนวนครั้งที่กรอกผิดได้สูงสุด</mat-label>
+        <input matInput type="number" min="1" max="20" formControlName="loginMaxAttempts" />
+      </mat-form-field>
+
+      <mat-form-field appearance="outline">
+        <mat-label>เวลาล็อกบัญชี (นาที)</mat-label>
+        <input matInput type="number" min="1" max="1440" formControlName="loginLockoutMinutes" />
+      </mat-form-field>
+    </form>
+    <p class="muted">
+      เมื่อผู้ใช้กรอกรหัสผ่านผิดครบตามจำนวนครั้งที่กำหนด บัญชีจะถูกล็อกชั่วคราวตามเวลาที่กำหนดไว้
+    </p>
+    <div class="actions-row">
+      <button mat-flat-button color="primary" [disabled]="loginSaving" (click)="saveLoginSettings()">
+        บันทึก
+      </button>
+    </div>
+  </mat-card>
+
+  <!-- 2. Scan locations -->
+  <mat-card class="section-card">
+    <h2 class="section-title">📍 ตำแหน่งติดตั้งจุดสแกนใบหน้า</h2>
+    <p class="muted">
+      คลิกบนแผนที่เพื่อปักหมุดตำแหน่งที่ติดตั้งกล้องสแกน หรือกด "ตำแหน่งปัจจุบัน" เพื่อจับพิกัด GPS ของอุปกรณ์โดยตรง —
+      จุดเหล่านี้จะแสดงบนแผนที่ในหน้า Login ให้ผู้ใช้ดูว่ามีจุดสแกนที่ไหนบ้าง
+    </p>
+
+    <div class="actions-row">
+      <button mat-stroked-button type="button" [disabled]="locatingGps" (click)="locateGps()">
+        📍 {{ locatingGps ? 'กำลังค้นหาตำแหน่ง...' : 'ตำแหน่งปัจจุบัน' }}
+      </button>
+    </div>
+
+    <div #mapEl class="loc-map"></div>
+
+    <form [formGroup]="locationForm" class="form-grid three-col">
+      <mat-form-field appearance="outline">
+        <mat-label>ชื่อจุดติดตั้ง</mat-label>
+        <input matInput placeholder="เช่น อาคาร 1 ชั้น 1" formControlName="name" />
+      </mat-form-field>
+
+      <mat-form-field appearance="outline">
+        <mat-label>ละติจูด</mat-label>
+        <input matInput readonly placeholder="คลิกบนแผนที่" formControlName="latitude" />
+      </mat-form-field>
+
+      <mat-form-field appearance="outline">
+        <mat-label>ลองจิจูด</mat-label>
+        <input matInput readonly placeholder="คลิกบนแผนที่" formControlName="longitude" />
+      </mat-form-field>
+    </form>
+
+    <div class="actions-row">
+      <button mat-flat-button color="primary" [disabled]="locationSaving" (click)="saveLocation()">
+        {{ editingLocationId ? 'บันทึกการแก้ไข' : 'เพิ่มจุดสแกน' }}
+      </button>
+      @if (editingLocationId) {
+        <button mat-stroked-button type="button" (click)="resetLocationForm()">ยกเลิกแก้ไข</button>
+      }
+    </div>
+
+    <div class="loc-list">
+      @for (loc of locations; track trackByLocationId($index, loc)) {
+        <div class="loc-item">
+          <div class="loc-info">
+            <div class="loc-name">{{ loc.name }}</div>
+            <div class="loc-coords muted">{{ formatCoord(loc.latitude) }}, {{ formatCoord(loc.longitude) }}</div>
+          </div>
+          <div class="loc-actions">
+            <button mat-stroked-button type="button" (click)="editLocation(loc)">แก้ไข</button>
+            <button mat-stroked-button color="warn" type="button" (click)="deleteLocation(loc)">ลบ</button>
+          </div>
+        </div>
+      } @empty {
+        <div class="empty-state muted">ยังไม่มีจุดสแกน</div>
+      }
+    </div>
+  </mat-card>
+
+  <!-- 3. Notifications -->
+  <mat-card class="section-card" [formGroup]="notifForm">
+    <h2 class="section-title">🔔 ตั้งค่าการแจ้งเตือน</h2>
+    <p class="muted">
+      แจ้งเตือนพนักงาน/ผู้ดูแลระบบ เมื่อมาสาย ขาดงาน หรือลงเวลาสำเร็จ ผ่าน Email, LINE, Telegram หรือแจ้งเตือนในระบบ
+      (Local notify)
+    </p>
+
+    <!-- Email -->
+    <div formGroupName="email" class="channel-block">
+      <h3 class="channel-title">📧 Email</h3>
+      <mat-slide-toggle formControlName="enabled">เปิดใช้งาน Email</mat-slide-toggle>
+
+      <div class="checkbox-row">
+        <mat-checkbox formControlName="useGmail" (change)="onEmailUseGmailChange()">
+          ส่งผ่าน Gmail (smtp.gmail.com)
+        </mat-checkbox>
+      </div>
+
+      @if (notifForm.controls.email.controls.useGmail.value) {
+        <p class="muted small">
+          ใช้บัญชี Gmail ของผู้ดูแลระบบส่งแทน — ช่อง "รหัสผ่าน" ด้านล่างต้องเป็น
+          <a href="https://myaccount.google.com/apppasswords" target="_blank" rel="noopener">App Password ของ Gmail</a>
+          (ไม่ใช่รหัสผ่านบัญชี Google ปกติ) ต้องเปิดยืนยัน 2 ขั้นตอนของบัญชีก่อนจึงจะสร้าง App Password ได้
+        </p>
+      } @else {
+        <div class="form-grid three-col">
+          <mat-form-field appearance="outline">
+            <mat-label>SMTP Host</mat-label>
+            <input matInput placeholder="smtp.gmail.com" formControlName="host" />
+          </mat-form-field>
+          <mat-form-field appearance="outline">
+            <mat-label>Port</mat-label>
+            <input matInput type="number" placeholder="587" formControlName="port" />
+          </mat-form-field>
+          <div class="checkbox-row align-field">
+            <mat-checkbox formControlName="secure">SSL/TLS (port 465)</mat-checkbox>
+          </div>
+        </div>
+      }
+
+      <div class="form-grid three-col">
+        <mat-form-field appearance="outline">
+          <mat-label>{{ notifForm.controls.email.controls.useGmail.value ? 'Gmail Address' : 'SMTP User' }}</mat-label>
+          <input matInput placeholder="youraccount@gmail.com" formControlName="user" />
+        </mat-form-field>
+        <mat-form-field appearance="outline">
+          <mat-label>{{ notifForm.controls.email.controls.useGmail.value ? 'Gmail App Password' : 'SMTP Password' }}</mat-label>
+          <input matInput type="password" formControlName="pass" />
+        </mat-form-field>
+        <mat-form-field appearance="outline">
+          <mat-label>From Address</mat-label>
+          <input matInput placeholder="noreply@company.com" formControlName="from" />
+        </mat-form-field>
+      </div>
+
+      <div class="test-row">
+        <mat-form-field appearance="outline" class="test-input">
+          <mat-label>อีเมลปลายทางสำหรับทดสอบ</mat-label>
+          <input matInput [(ngModel)]="testTargets.email" [ngModelOptions]="{ standalone: true }" />
+        </mat-form-field>
+        <button mat-stroked-button type="button" [disabled]="testing.email" (click)="testChannel('email')">
+          ทดสอบส่ง
+        </button>
+      </div>
+    </div>
+
+    <mat-divider></mat-divider>
+
+    <!-- LINE -->
+    <div formGroupName="line" class="channel-block">
+      <h3 class="channel-title">💬 LINE Messaging API</h3>
+      <mat-slide-toggle formControlName="enabled">เปิดใช้งาน LINE</mat-slide-toggle>
+
+      <mat-form-field appearance="outline" class="full-width">
+        <mat-label>Channel Access Token</mat-label>
+        <input matInput formControlName="channelAccessToken" />
+      </mat-form-field>
+
+      <div class="test-row">
+        <mat-form-field appearance="outline" class="test-input">
+          <mat-label>LINE User ID ปลายทางสำหรับทดสอบ</mat-label>
+          <input matInput [(ngModel)]="testTargets.line" [ngModelOptions]="{ standalone: true }" />
+        </mat-form-field>
+        <button mat-stroked-button type="button" [disabled]="testing.line" (click)="testChannel('line')">
+          ทดสอบส่ง
+        </button>
+      </div>
+    </div>
+
+    <mat-divider></mat-divider>
+
+    <!-- Telegram -->
+    <div formGroupName="telegram" class="channel-block">
+      <h3 class="channel-title">📨 Telegram Bot</h3>
+      <mat-slide-toggle formControlName="enabled">เปิดใช้งาน Telegram</mat-slide-toggle>
+
+      <mat-form-field appearance="outline" class="full-width">
+        <mat-label>Bot Token</mat-label>
+        <input matInput formControlName="botToken" />
+      </mat-form-field>
+
+      <div class="test-row">
+        <mat-form-field appearance="outline" class="test-input">
+          <mat-label>Chat ID ปลายทางสำหรับทดสอบ</mat-label>
+          <input matInput [(ngModel)]="testTargets.telegram" [ngModelOptions]="{ standalone: true }" />
+        </mat-form-field>
+        <button mat-stroked-button type="button" [disabled]="testing.telegram" (click)="testChannel('telegram')">
+          ทดสอบส่ง
+        </button>
+      </div>
+    </div>
+
+    <mat-divider></mat-divider>
+
+    <!-- Local notify -->
+    <div formGroupName="local" class="channel-block">
+      <h3 class="channel-title">🖥️ Local notify (แจ้งเตือนในระบบ)</h3>
+      <mat-slide-toggle formControlName="enabled">
+        เปิดใช้งาน Local notify (แจ้งเตือนป๊อปอัปในหน้า Dashboard ของผู้ดูแลระบบ)
+      </mat-slide-toggle>
+
+      <div class="test-row">
+        <button mat-stroked-button type="button" [disabled]="testing.local" (click)="testChannel('local')">
+          ทดสอบส่ง
+        </button>
+      </div>
+    </div>
+
+    <mat-divider></mat-divider>
+
+    <!-- Admin recipients -->
+    <div formGroupName="admin" class="channel-block">
+      <h3 class="channel-title">👤 ปลายทางของผู้ดูแลระบบ (admin)</h3>
+      <div class="form-grid three-col">
+        <mat-form-field appearance="outline">
+          <mat-label>Email ผู้ดูแล (คั่นด้วย , ได้หลายคน)</mat-label>
+          <input matInput placeholder="admin1@company.com, admin2@company.com" formControlName="emails" />
+        </mat-form-field>
+        <mat-form-field appearance="outline">
+          <mat-label>LINE User ID ผู้ดูแล</mat-label>
+          <input matInput formControlName="lineUserId" />
+        </mat-form-field>
+        <mat-form-field appearance="outline">
+          <mat-label>Telegram Chat ID ผู้ดูแล</mat-label>
+          <input matInput formControlName="telegramChatId" />
+        </mat-form-field>
+      </div>
+    </div>
+
+    <mat-divider></mat-divider>
+
+    <!-- Events -->
+    <div formGroupName="events" class="channel-block">
+      <h3 class="channel-title">📋 เหตุการณ์ที่ต้องการแจ้งเตือน</h3>
+      <div class="events-table">
+        <div class="events-row events-head">
+          <div class="events-label">เหตุการณ์</div>
+          <div class="events-cell">แจ้งพนักงาน</div>
+          <div class="events-cell">แจ้งผู้ดูแลระบบ</div>
+        </div>
+        <div class="events-row" formGroupName="late">
+          <div class="events-label">มาสาย (late)</div>
+          <div class="events-cell"><mat-checkbox formControlName="employee"></mat-checkbox></div>
+          <div class="events-cell"><mat-checkbox formControlName="admin"></mat-checkbox></div>
+        </div>
+        <div class="events-row" formGroupName="absent">
+          <div class="events-label">ขาดงาน (absent)</div>
+          <div class="events-cell"><mat-checkbox formControlName="employee"></mat-checkbox></div>
+          <div class="events-cell"><mat-checkbox formControlName="admin"></mat-checkbox></div>
+        </div>
+        <div class="events-row" formGroupName="success">
+          <div class="events-label">ลงเวลาสำเร็จ (success)</div>
+          <div class="events-cell"><mat-checkbox formControlName="employee"></mat-checkbox></div>
+          <div class="events-cell"><mat-checkbox formControlName="admin"></mat-checkbox></div>
+        </div>
+      </div>
+      <p class="muted small">
+        หมายเหตุ: การแจ้งพนักงานต้องตั้งค่า Email/LINE User ID/Telegram Chat ID และเปิด "รับการแจ้งเตือน" ของพนักงานแต่ละคนในหน้าจัดการพนักงานด้วย
+      </p>
+    </div>
+
+    <div class="actions-row">
+      <button mat-flat-button color="primary" [disabled]="notifSaving" (click)="saveNotificationSettings()">
+        บันทึกการตั้งค่าแจ้งเตือน
+      </button>
+    </div>
+  </mat-card>
+</div>

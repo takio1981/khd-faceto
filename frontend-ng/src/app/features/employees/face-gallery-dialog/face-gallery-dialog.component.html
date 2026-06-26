@@ -1,0 +1,33 @@
+<h2 mat-dialog-title>ใบหน้าของ: {{ data.employeeName }}</h2>
+
+<mat-dialog-content>
+  @if (loading()) {
+    <p class="muted text-center">กำลังโหลด...</p>
+  } @else if (!faces().length) {
+    <p class="muted text-center">ยังไม่มีรูปใบหน้า</p>
+  } @else {
+    <div class="face-gallery">
+      @for (f of faces(); track f.id; let i = $index) {
+        <div class="face-card">
+          <div class="face-number">{{ i + 1 }}</div>
+          @if (f.thumbnail) {
+            <img class="face-img" [src]="f.thumbnail" [alt]="'ภาพใบหน้าที่ ' + (i + 1)" />
+          } @else {
+            <div class="face-img placeholder">
+              <mat-icon>face</mat-icon>
+            </div>
+          }
+          <div class="face-date">{{ f.created_at }}</div>
+        </div>
+      }
+    </div>
+  }
+</mat-dialog-content>
+
+<mat-dialog-actions align="end">
+  <button mat-button type="button" [disabled]="clearing() || !faces().length" (click)="clearAll()">
+    ลบทั้งหมด
+  </button>
+  <button mat-button type="button" (click)="close()">ปิด</button>
+  <button mat-flat-button color="primary" type="button" (click)="reenroll()">📷 ถ่ายใหม่</button>
+</mat-dialog-actions>
