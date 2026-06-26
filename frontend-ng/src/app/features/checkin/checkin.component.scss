@@ -309,6 +309,65 @@
   .cco-date { font-size: 13px; opacity: 0.85; }
 }
 
+.latest-scan-overlay {
+  display: none;
+}
+
+:host-context(.cam-wrap:fullscreen) .latest-scan-overlay {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  position: absolute;
+  top: 14px;
+  right: 14px;
+  max-width: min(360px, 60vw);
+  padding: 10px 14px;
+  border-radius: 12px;
+  background: rgba(8, 25, 18, 0.72);
+  color: #fff;
+  z-index: 4;
+  backdrop-filter: blur(4px);
+}
+
+.lso-thumb {
+  width: 52px;
+  height: 52px;
+  border-radius: 8px;
+  object-fit: cover;
+  flex-shrink: 0;
+  background: #1c3a2c;
+}
+
+.lso-info {
+  min-width: 0;
+}
+
+.lso-name {
+  font-size: 14px;
+  font-weight: 700;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.lso-meta {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 3px;
+}
+
+.lso-type {
+  font-size: 12px;
+  opacity: 0.85;
+}
+
+.lso-time {
+  font-size: 11px;
+  opacity: 0.7;
+  margin-top: 2px;
+}
+
 .cam-feed-list {
   display: flex;
   flex-direction: column;
