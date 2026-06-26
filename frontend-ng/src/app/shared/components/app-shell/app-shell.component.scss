@@ -6,6 +6,7 @@
   width: 260px;
   display: flex;
   flex-direction: column;
+  box-shadow: 2px 0 10px rgba(7, 80, 48, .06);
 }
 
 .brand {
@@ -34,15 +35,21 @@
 }
 
 .active-link {
-  background: var(--brand-primary-light);
-  color: var(--brand-primary-dark);
+  background: var(--brand-primary-light) !important;
+  color: var(--brand-primary-dark) !important;
+  font-weight: 600;
+
+  ::ng-deep .mdc-list-item__start {
+    color: var(--brand-primary-dark) !important;
+  }
 }
 
 .shell-toolbar {
   position: sticky;
   top: 0;
   z-index: 10;
-  background: linear-gradient(135deg, var(--brand-primary), var(--brand-teal)) !important;
+  background: linear-gradient(120deg, var(--brand-primary-dark), var(--brand-primary) 55%, var(--brand-teal)) !important;
+  box-shadow: 0 2px 10px rgba(7, 80, 48, .18);
 }
 
 .toolbar-title {

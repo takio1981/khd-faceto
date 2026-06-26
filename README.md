@@ -2,7 +2,7 @@
 
 Web app สแกนใบหน้าเพื่อลงเวลาเข้า-ออกงาน พร้อมบันทึกภาพใบหน้า, กำหนดกะ/OT, รายงาน, แดชบอร์ด และระบบสิทธิ์ Admin/User
 
-เทคโนโลยี: **Node.js + TypeScript + Express**, **MariaDB**, **face-api.js** (สแกนใบหน้าในเบราว์เซอร์), **Chart.js**, **Docker Compose**
+เทคโนโลยี: **Node.js + TypeScript + Express**, **MariaDB**, **Angular 19 + Angular Material** (frontend), **face-api.js** (สแกนใบหน้าในเบราว์เซอร์), **Chart.js**, **Leaflet**, **Docker Compose**
 
 ---
 
@@ -102,12 +102,15 @@ khd-faceto/
 │   │   └── index.ts
 │   ├── db/migrations/        # SQL รันอัตโนมัติตอน MariaDB บูตครั้งแรก
 │   └── assets/fonts/         # ฟอนต์ไทย Sarabun สำหรับ PDF
-└── frontend/public/          # HTML/CSS/JS (เสิร์ฟโดย Express)
-    ├── *.html                # login, dashboard, checkin, employees, attendance, reports, shifts
-    ├── js/                   # api, auth, face-pipeline, + หนึ่งไฟล์ต่อหน้า
-    ├── lib/                  # face-api.min.js, chart.umd.min.js (โหลดไว้ในเครื่อง = ใช้ offline ได้)
-    └── models/               # น้ำหนักโมเดล face-api.js
+└── frontend-ng/               # Angular 19 + Angular Material SPA
+    ├── src/app/
+    │   ├── core/              # services (API), guards, interceptors, models
+    │   ├── shared/             # app-shell (navbar/sidenav), responsive-table, dialogs
+    │   └── features/          # login, dashboard, checkin, employees, attendance, reports, shifts, settings
+    └── public/lib, public/models/  # face-api.min.js + โมเดล (โหลดแบบ on-demand เฉพาะหน้าที่ใช้กล้อง)
 ```
+
+> Express เสิร์ฟ Angular build ที่ `frontend-ng/dist/frontend-ng/browser` (คอมไพล์ผ่าน multi-stage `backend/Dockerfile` ระหว่าง `docker compose up --build`) — ไม่ต้องสั่ง build แยก
 
 ---
 
@@ -159,3 +162,9 @@ docker compose exec mariadb mariadb -ukhdapp -p"$DB_PASSWORD" khd_attendance \
 - ออกแบบสำหรับใช้งานภายในองค์กร (kiosk/LAN) — หากเปิดสู่อินเทอร์เน็ตควรเพิ่ม HTTPS (reverse proxy)
 - ภาพใบหน้าเข้าถึงได้เฉพาะผ่าน API ที่ตรวจสิทธิ์ (`/api/attendance/image/:id`) ไม่ใช่ static สาธารณะ
 - รหัสผ่านเก็บแบบ bcrypt, ทุก API ป้องกันด้วย JWT + rate limit
+
+---
+
+## ประวัติการอัปเดต
+
+- **2026-06-26** — ย้าย frontend ทั้งหมดจาก HTML/CSS/JS ธรรมดาไปเป็น **Angular 19 + Angular Material** (responsive: ตารางพับเป็นการ์ดบนมือถือ/แท็บเล็ตแทนการเลื่อนแนวนอน), ปรับธีมสี/โลโก้ให้ดูทันสมัยขึ้น (เหรียญตรา ✚ ไล่เฉดเขียว-teal, เงา, การ์ดโค้งมน), เพิ่มปุ่มแสดง/ซ่อนรหัสผ่านที่หน้า login, ลบหน้า "รายการลงเวลาล่าสุด" ที่ซ้ำกันในหน้าสแกนเพื่อขยายพื้นที่กล้อง, push ขึ้น GitHub ครั้งแรก

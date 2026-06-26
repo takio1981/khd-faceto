@@ -3,6 +3,7 @@ import { FormBuilder, ReactiveFormsModule, Validators } from '@angular/forms';
 import { MatButtonModule } from '@angular/material/button';
 import { MatCardModule } from '@angular/material/card';
 import { MatFormFieldModule } from '@angular/material/form-field';
+import { MatIconModule } from '@angular/material/icon';
 import { MatInputModule } from '@angular/material/input';
 import { MatProgressSpinnerModule } from '@angular/material/progress-spinner';
 import { Router, RouterLink } from '@angular/router';
@@ -24,6 +25,7 @@ const NAKHON_RATCHASIMA: [number, number] = [14.9799, 102.0978];
     RouterLink,
     MatCardModule,
     MatFormFieldModule,
+    MatIconModule,
     MatInputModule,
     MatButtonModule,
     MatProgressSpinnerModule,
@@ -37,6 +39,7 @@ export class LoginComponent implements OnInit, AfterViewInit {
   readonly appName = signal('ระบบลงเวลา KHD-FaceTo');
   readonly companyName = signal('สำนักงานสาธารณสุขจังหวัดนครราชสีมา');
   readonly loading = signal(false);
+  readonly showPassword = signal(false);
 
   private fb = inject(FormBuilder);
   private auth = inject(AuthService);

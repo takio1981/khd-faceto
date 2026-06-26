@@ -34,6 +34,12 @@ html {
   --border: #dde7e2;
   --muted: #64748b;
 
+  --radius: 16px;
+  --radius-sm: 10px;
+  --shadow-sm: 0 1px 2px rgba(7, 80, 48, .06), 0 1px 3px rgba(7, 80, 48, .08);
+  --shadow: 0 4px 14px rgba(7, 80, 48, .10), 0 2px 6px rgba(7, 80, 48, .06);
+  --shadow-lg: 0 16px 36px rgba(7, 80, 48, .16), 0 4px 10px rgba(7, 80, 48, .08);
+
   // Nudge Material's generated primary system-level tokens toward the exact
   // brand hue so mat-* components (buttons, toolbar, etc.) match the rest
   // of the UI instead of the generic Material green swatch.
@@ -45,7 +51,34 @@ html, body { height: 100%; }
 body {
   margin: 0;
   font-family: 'Noto Sans Thai', Roboto, 'Helvetica Neue', sans-serif;
-  background: var(--bg);
+  background:
+    radial-gradient(900px 480px at 100% -10%, rgba(14, 165, 160, .10), transparent 60%),
+    radial-gradient(900px 480px at -10% 110%, rgba(15, 138, 79, .10), transparent 60%),
+    var(--bg);
+  background-attachment: fixed;
+}
+
+// Thin, brand-tinted scrollbar (Chromium/Edge + Firefox)
+* { scrollbar-color: var(--brand-primary) transparent; scrollbar-width: thin; }
+::-webkit-scrollbar { width: 10px; height: 10px; }
+::-webkit-scrollbar-thumb { background: var(--brand-primary); border-radius: 999px; }
+::-webkit-scrollbar-track { background: transparent; }
+
+// Soften & lift the default Material surfaces app-wide for a more modern feel.
+.mat-mdc-card {
+  border-radius: var(--radius) !important;
+  box-shadow: var(--shadow-sm) !important;
+  transition: box-shadow .2s ease, transform .2s ease;
+}
+
+.mat-mdc-raised-button,
+.mat-mdc-unelevated-button,
+.mat-mdc-outlined-button {
+  border-radius: 999px !important;
+}
+
+.mat-mdc-unelevated-button.mat-primary {
+  background-image: linear-gradient(135deg, var(--brand-primary), var(--brand-teal-dark)) !important;
 }
 
 .badge {
