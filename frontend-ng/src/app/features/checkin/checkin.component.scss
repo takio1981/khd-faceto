@@ -297,7 +297,7 @@
   display: none;
 }
 
-:host-context(.cam-wrap:fullscreen) .cam-clock-overlay {
+.cam-wrap:fullscreen .cam-clock-overlay {
   display: block;
   position: absolute;
   top: 14px;
@@ -313,7 +313,7 @@
   display: none;
 }
 
-:host-context(.cam-wrap:fullscreen) .latest-scan-overlay {
+.cam-wrap:fullscreen .latest-scan-overlay {
   display: flex;
   align-items: center;
   gap: 12px;
