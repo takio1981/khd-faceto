@@ -93,7 +93,22 @@ export class FacePipelineService {
 
   // ===== Device / camera management =====
 
+  // navigator.mediaDevices is only defined in a "secure context" — localhost
+  // or HTTPS. Opening the app via a LAN IP over plain http:// (e.g.
+  // http://192.168.x.x:3000) leaves it `undefined`, which otherwise surfaces
+  // as a cryptic "Cannot read properties of undefined" deep in a vendor
+  // chunk. Fail fast here with a clear Thai message instead.
+  private ensureMediaDevicesSupported(): void {
+    if (!navigator.mediaDevices) {
+      throw new Error(
+        'ไม่สามารถเข้าถึงกล้องได้ — เบราว์เซอร์อนุญาตการใช้กล้องเฉพาะผ่าน localhost หรือ HTTPS เท่านั้น ' +
+          'กรุณาเปิดผ่าน http://localhost:3000 บนเครื่องที่ต่อกล้องอยู่ (ไม่ใช่ผ่าน IP เครื่องอื่นด้วย http ธรรมดา)'
+      );
+    }
+  }
+
   async listCameras(): Promise<MediaDeviceInfo[]> {
+    this.ensureMediaDevicesSupported();
     const devices = await navigator.mediaDevices.enumerateDevices();
     return devices.filter((d) => d.kind === 'videoinput');
   }
@@ -107,6 +122,7 @@ export class FacePipelineService {
   }
 
   async startCamera(videoEl: HTMLVideoElement, deviceId?: string): Promise<MediaStream> {
+    this.ensureMediaDevicesSupported();
     const { width, height } = this.getQualityPreset();
     const video: MediaTrackConstraints = deviceId
       ? { deviceId: { exact: deviceId }, width: { ideal: width }, height: { ideal: height } }

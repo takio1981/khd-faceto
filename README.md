@@ -168,3 +168,4 @@ docker compose exec mariadb mariadb -ukhdapp -p"$DB_PASSWORD" khd_attendance \
 ## ประวัติการอัปเดต
 
 - **2026-06-26** — ย้าย frontend ทั้งหมดจาก HTML/CSS/JS ธรรมดาไปเป็น **Angular 19 + Angular Material** (responsive: ตารางพับเป็นการ์ดบนมือถือ/แท็บเล็ตแทนการเลื่อนแนวนอน), ปรับธีมสี/โลโก้ให้ดูทันสมัยขึ้น (เหรียญตรา ✚ ไล่เฉดเขียว-teal, เงา, การ์ดโค้งมน), เพิ่มปุ่มแสดง/ซ่อนรหัสผ่านที่หน้า login, ลบหน้า "รายการลงเวลาล่าสุด" ที่ซ้ำกันในหน้าสแกนเพื่อขยายพื้นที่กล้อง, push ขึ้น GitHub ครั้งแรก
+- **2026-06-26** — แก้ error `Cannot read properties of undefined (reading 'enumerateDevices'/'getUserMedia')` ที่หน้าสแกน/ลงทะเบียนใบหน้า เมื่อเปิดผ่าน URL ที่ไม่ใช่ localhost/HTTPS (เบราว์เซอร์ไม่เปิด `navigator.mediaDevices` ให้) — ตอนนี้ระบบจะแจ้งข้อความภาษาไทยที่ชัดเจนแทน ("กรุณาเปิดผ่าน http://localhost:3000 บนเครื่องที่ต่อกล้องอยู่")
