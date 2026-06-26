@@ -4,10 +4,12 @@ import cors from 'cors';
 import rateLimit from 'express-rate-limit';
 import path from 'path';
 import fs from 'fs';
+import https from 'https';
 import { config } from './config';
 import { waitForDb } from './db';
 import { loadFaceCache } from './services/faceCache';
 import { startAbsentCheckScheduler } from './services/notification.service';
+import { ensureSelfSignedCert } from './services/certs';
 import { errorHandler } from './middleware/errorHandler';
 
 import authRoutes from './routes/auth.routes';
@@ -85,9 +87,24 @@ async function main() {
   app.use(errorHandler);
 
   app.listen(config.port, () => {
-    console.log(`[server] listening on http://localhost:${config.port}`);
-    console.log(`[server] company: ${config.companyName}`);
+    console.log(`[server] http listening on http://localhost:${config.port}`);
   });
+
+  // HTTPS listener for LAN devices (phones/tablets): getUserMedia (camera)
+  // only runs in a secure context, and plain http:// to the server's LAN IP
+  // from another device does not count as one. Self-signed, so the first
+  // visit on each device needs a one-time "proceed anyway" past the browser
+  // warning — see ensureSelfSignedCert() for the cert/SAN details.
+  try {
+    const { cert, key } = await ensureSelfSignedCert();
+    https.createServer({ cert, key }, app).listen(config.https.port, () => {
+      console.log(`[server] https listening on https://localhost:${config.https.port} (and any LAN IP in the cert)`);
+    });
+  } catch (err) {
+    console.error('[server] failed to start HTTPS listener — LAN camera access will not work', err);
+  }
+
+  console.log(`[server] company: ${config.companyName}`);
 }
 
 main().catch((err) => {

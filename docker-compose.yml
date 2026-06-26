@@ -61,10 +61,17 @@ services:
       FACE_IMAGE_DIR: ${FACE_IMAGE_DIR}
       COMPANY_NAME: ${COMPANY_NAME}
       APP_NAME: ${APP_NAME}
+      HTTPS_PORT: ${HTTPS_PORT}
+      SERVER_LAN_IP: ${SERVER_LAN_IP}
+      CERT_DIR: /data/certs
     ports:
       - "${PORT}:${PORT}"
+      # HTTPS — required for phones/tablets on the office Wi-Fi to use the
+      # camera (browsers only allow getUserMedia on localhost or HTTPS).
+      - "${HTTPS_PORT}:${HTTPS_PORT}"
     volumes:
       - face_images:/data/faces
+      - tls_certs:/data/certs
       # Live-mount the Angular build output so refreshing the browser picks up
       # changes without rebuilding the image — run `npm run build` (or
       # `ng build --watch`) inside frontend-ng/ after editing the frontend.
@@ -75,6 +82,7 @@ services:
 volumes:
   mariadb_data:
   face_images:
+  tls_certs:
 
 networks:
   khd_net:

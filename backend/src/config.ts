@@ -16,6 +16,20 @@ export const config = {
   port: parseInt(required('PORT', '3000'), 10),
   nodeEnv: required('NODE_ENV', 'development'),
 
+  https: {
+    // HTTPS port for LAN devices (phones/tablets) — getUserMedia (camera)
+    // only runs in a "secure context": localhost or HTTPS. Plain http:// to
+    // the server's LAN IP from another device is NOT secure, so we also run
+    // an HTTPS listener with a self-signed cert for that case.
+    port: parseInt(required('HTTPS_PORT', '3443'), 10),
+    // Comma-separated extra hostnames/IPs to put in the cert's SAN list
+    // (besides auto-detected LAN IPs + localhost) — set this to the
+    // server's LAN IP (e.g. 192.168.1.50) so phones/tablets on the same
+    // Wi-Fi can open https://<that-ip>:3443 without a SAN mismatch error.
+    extraHosts: (process.env.SERVER_LAN_IP || '').split(',').map((s) => s.trim()).filter(Boolean),
+    certDir: required('CERT_DIR', path.resolve(__dirname, '../../data/certs')),
+  },
+
   db: {
     host: required('DB_HOST', 'localhost'),
     port: parseInt(required('DB_PORT', '3306'), 10),
