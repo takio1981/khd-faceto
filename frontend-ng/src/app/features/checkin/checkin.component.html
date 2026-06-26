@@ -1,5 +1,8 @@
 <div class="checkin-page">
   <div class="page-header">
+    <button mat-stroked-button class="home-btn" type="button" [routerLink]="homeLink" title="กลับไปหน้าหลัก">
+      <mat-icon>arrow_back</mat-icon> กลับหน้าหลัก
+    </button>
     <h1 class="page-title">ลงเวลาเข้า-ออกงาน (สแกนใบหน้า)</h1>
     <button mat-stroked-button class="guide-toggle-btn" type="button" (click)="toggleGuide()">
       <mat-icon>checklist</mat-icon>

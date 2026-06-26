@@ -24,6 +24,13 @@
   font-weight: 700;
 }
 
+.home-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  order: -1;
+}
+
 .guide-toggle-btn {
   display: inline-flex;
   align-items: center;

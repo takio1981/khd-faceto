@@ -8,6 +8,7 @@ import {
   ViewChild,
 } from '@angular/core';
 import { FormsModule } from '@angular/forms';
+import { RouterLink } from '@angular/router';
 import { MatButtonModule } from '@angular/material/button';
 import { MatCardModule } from '@angular/material/card';
 import { MatIconModule } from '@angular/material/icon';
@@ -20,6 +21,7 @@ import {
   QualityKey,
 } from '../../core/services/face-pipeline.service';
 import { AttendanceService } from '../../core/services/attendance.service';
+import { AuthService } from '../../core/services/auth.service';
 import { ScanLocationService } from '../../core/services/scan-location.service';
 import { NotifyService } from '../../core/services/notify.service';
 import { ScanLocation, ScanResult, ScanType } from '../../core/models/models';
@@ -75,6 +77,7 @@ const COUNTDOWN_SECONDS = 5;
   imports: [
     CommonModule,
     FormsModule,
+    RouterLink,
     MatButtonModule,
     MatCardModule,
     MatIconModule,
@@ -147,12 +150,19 @@ export class CheckinComponent implements AfterViewInit, OnDestroy {
   private readonly toasted: Record<number, number> = {};
   private readonly pendingMatch: Record<number, PendingMatch> = {};
 
+  readonly homeLink: string;
+
   constructor(
     private facePipeline: FacePipelineService,
     private attendanceService: AttendanceService,
     private scanLocationService: ScanLocationService,
     private notify: NotifyService,
+    private auth: AuthService,
   ) {
+    // Checkin is reachable both as a logged-out kiosk page and via the
+    // navbar (admin checking it from the dashboard) - send each back to
+    // wherever makes sense for them.
+    this.homeLink = this.auth.isLoggedIn() ? '/dashboard' : '/login';
     this.qualityOptions = Object.entries(this.facePipeline.QUALITY_PRESETS).map(([key, preset]) => ({
       key: key as QualityKey,
       label: preset.label,
