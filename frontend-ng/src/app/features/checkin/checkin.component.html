@@ -31,6 +31,11 @@
           <button mat-stroked-button type="button" (click)="toggleDeviceSettings()" title="ตั้งค่าอุปกรณ์">
             <mat-icon>settings</mat-icon> ตั้งค่าอุปกรณ์
           </button>
+          <button mat-stroked-button type="button" *ngIf="isTouchDevice" (click)="toggleFacingMode()"
+                  title="สลับกล้องหน้า-หลัง">
+            <mat-icon>cameraswitch</mat-icon>
+            {{ facingMode === 'user' ? 'กล้องหน้า' : 'กล้องหลัง' }}
+          </button>
           <button mat-stroked-button type="button" (click)="toggleFlipH()" [class.active]="flipH" title="สะท้อนกระจก ซ้าย-ขวา">⇄</button>
           <button mat-stroked-button type="button" (click)="toggleFlipV()" [class.active]="flipV" title="สะท้อนกระจก บน-ล่าง">⇵</button>
           <button mat-stroked-button type="button" (click)="toggleFullscreen()" title="เต็มจอ">

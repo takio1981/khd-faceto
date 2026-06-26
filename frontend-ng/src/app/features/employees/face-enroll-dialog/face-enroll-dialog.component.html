@@ -18,6 +18,11 @@
       </mat-select>
     </mat-form-field>
     <button mat-stroked-button type="button" (click)="refreshCameras()">⟳ รีเฟรช</button>
+    @if (isTouchDevice) {
+      <button mat-stroked-button type="button" (click)="toggleFacingMode()">
+        🔄 {{ facingMode() === 'user' ? 'กล้องหน้า' : 'กล้องหลัง' }}
+      </button>
+    }
   </div>
 
   <mat-form-field appearance="outline" class="quality-field">

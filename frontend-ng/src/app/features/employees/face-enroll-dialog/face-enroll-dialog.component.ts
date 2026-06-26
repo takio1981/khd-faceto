@@ -40,6 +40,8 @@ export class FaceEnrollDialogComponent implements AfterViewInit, OnDestroy {
   readonly selectedCamera = signal<string>('');
   readonly qualityKeys: QualityKey[] = ['low', 'medium', 'high', 'ultra'];
   readonly selectedQuality = signal<QualityKey>(this.facePipeline.getQualityKey());
+  readonly facingMode = signal<'user' | 'environment'>(this.facePipeline.getPreferredFacingMode());
+  readonly isTouchDevice = typeof navigator !== 'undefined' && navigator.maxTouchPoints > 0;
   readonly cameraStarted = signal(false);
   readonly capturing = signal(false);
   readonly saving = signal(false);
@@ -99,19 +101,31 @@ export class FaceEnrollDialogComponent implements AfterViewInit, OnDestroy {
 
   private async restartCamera(): Promise<void> {
     this.facePipeline.stopCamera(this.stream);
-    this.stream = await this.facePipeline.startCamera(this.videoRef!.nativeElement, this.selectedCamera() || undefined);
+    this.stream = await this.facePipeline.startCamera(this.videoRef!.nativeElement, this.selectedCamera() || undefined, this.facingMode());
   }
 
   async startCamera(): Promise<void> {
     this.setStatus('กำลังโหลดโมเดล AI...', 'scanning');
     try {
       await this.facePipeline.loadModels();
-      this.stream = await this.facePipeline.startCamera(this.videoRef!.nativeElement, this.selectedCamera() || undefined);
+      this.stream = await this.facePipeline.startCamera(this.videoRef!.nativeElement, this.selectedCamera() || undefined, this.facingMode());
       await this.refreshCameras();
       this.setStatus('พร้อมแล้ว — จัดใบหน้าให้อยู่กลางจอ แล้วกดถ่ายภาพที่ 1', 'scanning');
       this.cameraStarted.set(true);
     } catch (e: any) {
       this.setStatus('ผิดพลาด: ' + (e?.message || e), 'error');
+    }
+  }
+
+  async toggleFacingMode(): Promise<void> {
+    const next = this.facingMode() === 'user' ? 'environment' : 'user';
+    this.facingMode.set(next);
+    this.facePipeline.setPreferredFacingMode(next);
+    this.selectedCamera.set('');
+    this.facePipeline.setPreferredCamera('');
+    if (this.cameraStarted()) {
+      await this.restartCamera();
+      await this.refreshCameras();
     }
   }
 

@@ -121,12 +121,27 @@ export class FacePipelineService {
     localStorage.setItem('preferredCamera', id || '');
   }
 
-  async startCamera(videoEl: HTMLVideoElement, deviceId?: string): Promise<MediaStream> {
+  // Front/back camera preference — only meaningful on phones/tablets, which
+  // usually have one of each. Selecting by deviceId works on desktop but on
+  // mobile the standard, reliable way to flip is the `facingMode` constraint
+  // (device labels are often generic/unhelpful, e.g. "Camera 0, facing back").
+  getPreferredFacingMode(): 'user' | 'environment' {
+    return localStorage.getItem('preferredFacingMode') === 'environment' ? 'environment' : 'user';
+  }
+
+  setPreferredFacingMode(mode: 'user' | 'environment'): void {
+    localStorage.setItem('preferredFacingMode', mode);
+  }
+
+  // deviceId takes priority (explicit pick from the device dropdown — mainly
+  // a desktop/webcam flow); otherwise fall back to the facingMode constraint
+  // (mainly a phone/tablet flow, via the front/back toggle).
+  async startCamera(videoEl: HTMLVideoElement, deviceId?: string, facingMode?: 'user' | 'environment'): Promise<MediaStream> {
     this.ensureMediaDevicesSupported();
     const { width, height } = this.getQualityPreset();
     const video: MediaTrackConstraints = deviceId
       ? { deviceId: { exact: deviceId }, width: { ideal: width }, height: { ideal: height } }
-      : { width: { ideal: width }, height: { ideal: height }, facingMode: 'user' };
+      : { width: { ideal: width }, height: { ideal: height }, facingMode: { ideal: facingMode || 'user' } };
     const stream = await navigator.mediaDevices.getUserMedia({ video, audio: false });
     videoEl.srcObject = stream;
     await videoEl.play();

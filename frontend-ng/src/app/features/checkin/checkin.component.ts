@@ -105,6 +105,12 @@ export class CheckinComponent implements AfterViewInit, OnDestroy {
   selectedQuality: QualityKey = 'high';
   qualityOptions: { key: QualityKey; label: string }[] = [];
 
+  // Front/back toggle — mainly for phones/tablets, which have both. Hidden
+  // on devices that clearly don't (no touch support = almost certainly a
+  // desktop/laptop webcam with only one camera).
+  facingMode: 'user' | 'environment' = 'user';
+  readonly isTouchDevice = typeof navigator !== 'undefined' && navigator.maxTouchPoints > 0;
+
   flipH = false;
   flipV = false;
 
@@ -152,6 +158,7 @@ export class CheckinComponent implements AfterViewInit, OnDestroy {
       label: preset.label,
     }));
     this.selectedQuality = this.facePipeline.getQualityKey();
+    this.facingMode = this.facePipeline.getPreferredFacingMode();
     this.flipH = localStorage.getItem('camFlipH') === '1';
     this.flipV = localStorage.getItem('camFlipV') === '1';
     this.selectedLocationId = localStorage.getItem(LOCATION_STORAGE_KEY) || '';
@@ -190,7 +197,7 @@ export class CheckinComponent implements AfterViewInit, OnDestroy {
     this.isFullscreen = !!document.fullscreenElement;
     if (this.isFullscreen && this.running) {
       this.facePipeline.stopCamera(this.stream);
-      this.stream = await this.facePipeline.startCamera(this.videoRef.nativeElement, this.selectedCameraId);
+      this.stream = await this.facePipeline.startCamera(this.videoRef.nativeElement, this.selectedCameraId, this.facingMode);
     }
   }
 
@@ -231,7 +238,10 @@ export class CheckinComponent implements AfterViewInit, OnDestroy {
       const preferred = this.facePipeline.getPreferredCamera();
       if (preferred && this.cameras.some((c) => c.deviceId === preferred)) {
         this.selectedCameraId = preferred;
-      } else if (!this.selectedCameraId && this.cameras.length) {
+      } else if (!this.selectedCameraId && this.cameras.length && !this.isTouchDevice) {
+        // On touch devices (phone/tablet), leave no deviceId selected so the
+        // facingMode constraint (front/back toggle) governs which camera
+        // opens — auto-picking "camera 0" here would silently override it.
         this.selectedCameraId = this.cameras[0].deviceId;
       }
     } catch (e) {
@@ -244,7 +254,7 @@ export class CheckinComponent implements AfterViewInit, OnDestroy {
     this.facePipeline.setPreferredCamera(newId);
     if (this.running) {
       this.facePipeline.stopCamera(this.stream);
-      this.stream = await this.facePipeline.startCamera(this.videoRef.nativeElement, newId);
+      this.stream = await this.facePipeline.startCamera(this.videoRef.nativeElement, newId, this.facingMode);
     }
   }
 
@@ -252,7 +262,22 @@ export class CheckinComponent implements AfterViewInit, OnDestroy {
     await this.loadCameras();
     if (this.running) {
       this.facePipeline.stopCamera(this.stream);
-      this.stream = await this.facePipeline.startCamera(this.videoRef.nativeElement, this.selectedCameraId);
+      this.stream = await this.facePipeline.startCamera(this.videoRef.nativeElement, this.selectedCameraId, this.facingMode);
+    }
+  }
+
+  // ===== Front/back camera toggle (phones/tablets) =====
+  async toggleFacingMode(): Promise<void> {
+    this.facingMode = this.facingMode === 'user' ? 'environment' : 'user';
+    this.facePipeline.setPreferredFacingMode(this.facingMode);
+    // Clear any explicit device pick so the new facingMode actually takes
+    // effect — an exact deviceId constraint would otherwise override it.
+    this.selectedCameraId = '';
+    this.facePipeline.setPreferredCamera('');
+    if (this.running) {
+      this.facePipeline.stopCamera(this.stream);
+      this.stream = await this.facePipeline.startCamera(this.videoRef.nativeElement, this.selectedCameraId, this.facingMode);
+      await this.loadCameras();
     }
   }
 
@@ -262,7 +287,7 @@ export class CheckinComponent implements AfterViewInit, OnDestroy {
     this.facePipeline.setQualityKey(newKey);
     if (this.running) {
       this.facePipeline.stopCamera(this.stream);
-      this.stream = await this.facePipeline.startCamera(this.videoRef.nativeElement, this.selectedCameraId);
+      this.stream = await this.facePipeline.startCamera(this.videoRef.nativeElement, this.selectedCameraId, this.facingMode);
     }
   }
 
@@ -597,7 +622,7 @@ export class CheckinComponent implements AfterViewInit, OnDestroy {
       this.modelsLoading = false;
 
       this.setStatus('กำลังเปิดกล้อง...', 'scanning');
-      this.stream = await this.facePipeline.startCamera(this.videoRef.nativeElement, this.selectedCameraId);
+      this.stream = await this.facePipeline.startCamera(this.videoRef.nativeElement, this.selectedCameraId, this.facingMode);
       await this.loadCameras(); // labels become available after permission is granted
 
       this.setStatus('เตรียมตัว... กำลังจะเริ่มสแกน', 'scanning');
