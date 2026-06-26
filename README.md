@@ -69,34 +69,6 @@ Password: admin1234
 
 ---
 
-## สำหรับนักพัฒนา: ทดสอบ/แก้ไข ก่อน build จริง
-
-มีสคริปต์ `.bat` 3 ตัวสำหรับ Windows แยกขั้นตอน **ทดสอบ/แก้บัค** ออกจาก **build จริงขึ้น production**:
-
-| ไฟล์ | ใช้ตอนไหน | ทำอะไร |
-|------|-----------|--------|
-| **`dev.bat`** | กำลังพัฒนา/แก้บัค | รัน backend แบบ hot-reload (`ts-node-dev`, พอร์ต 3001 — เปิดหน้าต่างแยก) + frontend แบบ hot-reload (`ng serve`, พอร์ต 4200 — proxy `/api` ไปที่ backend dev อัตโนมัติ) ใช้ฐานข้อมูลเดียวกับ production (`khd_faceto_db`) ไม่กระทบของจริง |
-| **`build.bat`** | ทดสอบผ่านแล้ว พร้อมขึ้นจริง | `docker compose build` + `docker compose up -d --wait` — build image ใหม่ทั้ง backend และ Angular frontend แล้ว deploy เป็น production stack |
-| **`stop-dev.bat`** | เลิกใช้ dev mode | ปิด backend dev (3001) และ frontend dev (4200) — ไม่กระทบ Docker production |
-
-**วิธีใช้งาน:**
-```bash
-# 1) เปิด dev mode (แก้โค้ดแล้วเห็นผลทันทีทั้ง frontend/backend)
-dev.bat
-#    เปิดเบราว์เซอร์: http://localhost:4200
-
-# 2) แก้บัค/ทดสอบฟีเจอร์จนพอใจ แล้วปิด dev mode
-stop-dev.bat
-
-# 3) build จริงขึ้น production (เขียนทับ container ที่ใช้งานจริงอยู่)
-build.bat
-#    เปิดเบราว์เซอร์: http://localhost:3000
-```
-
-> `dev.bat` ใช้พอร์ต **3001** (backend) และ **4200** (frontend) — ไม่ชนกับ production ที่พอร์ต **3000**/**3443** จึงรันพร้อมกันได้ทั้งสองชุด เพื่อเทียบของเก่า/ใหม่ได้ทันที
-
----
-
 ## ขั้นตอนการใช้งานครั้งแรก
 
 1. **เข้าสู่ระบบ** ด้วย admin
@@ -145,8 +117,6 @@ build.bat
 khd-faceto/
 ├── docker-compose.yml        # app + mariadb + volumes
 ├── .env / .env.example
-├── dev.bat / stop-dev.bat    # dev mode (hot-reload backend + frontend, ไม่กระทบ production)
-├── build.bat                 # build + deploy production
 ├── backend/                  # Node + TypeScript API
 │   ├── src/
 │   │   ├── routes/           # auth, employees, attendance, shifts, reports, dashboard
@@ -156,7 +126,6 @@ khd-faceto/
 │   ├── db/migrations/        # SQL รันอัตโนมัติตอน MariaDB บูตครั้งแรก
 │   └── assets/fonts/         # ฟอนต์ไทย Sarabun สำหรับ PDF
 └── frontend-ng/               # Angular 19 + Angular Material SPA
-    ├── proxy.conf.json        # ใช้โดย dev.bat (ng serve) — proxy /api ไปที่ backend dev (3001)
     ├── src/app/
     │   ├── core/              # services (API), guards, interceptors, models
     │   ├── shared/             # app-shell (navbar/sidenav), responsive-table, dialogs
@@ -171,14 +140,10 @@ khd-faceto/
 ## คำสั่งที่ใช้บ่อย
 
 ```bash
-dev.bat                         # เปิด dev mode (backend 3001 + frontend 4200, hot-reload)
-stop-dev.bat                    # ปิด dev mode
-build.bat                       # build + deploy production (เทียบเท่า docker compose build && up -d --wait)
-
 docker compose logs -f app      # ดู log แอป
 docker compose down             # หยุด (เก็บข้อมูล)
 docker compose down -v          # หยุด + ลบข้อมูลทั้งหมด (เริ่มใหม่หมด)
-docker compose up --build -d    # build ใหม่หลังแก้โค้ด (เทียบเท่า build.bat)
+docker compose up --build -d    # build ใหม่หลังแก้โค้ด
 ```
 
 ### เชื่อมต่อฐานข้อมูลโดยตรง
@@ -229,4 +194,3 @@ docker compose exec mariadb mariadb -ukhdapp -p"$DB_PASSWORD" khd_attendance \
 - **2026-06-26** — แก้ error `Cannot read properties of undefined (reading 'enumerateDevices'/'getUserMedia')` ที่หน้าสแกน/ลงทะเบียนใบหน้า เมื่อเปิดผ่าน URL ที่ไม่ใช่ localhost/HTTPS (เบราว์เซอร์ไม่เปิด `navigator.mediaDevices` ให้) — ตอนนี้ระบบจะแจ้งข้อความภาษาไทยที่ชัดเจนแทน ("กรุณาเปิดผ่าน http://localhost:3000 บนเครื่องที่ต่อกล้องอยู่")
 - **2026-06-26** — เพิ่ม **HTTPS listener (port 3443, self-signed cert)** คู่กับ HTTP เดิม เพื่อให้มือถือ/แท็บเล็ต/เครื่องอื่นในเครือข่าย Wi-Fi เดียวกันใช้กล้องสแกนใบหน้าได้ (ก่อนหน้านี้ใช้กล้องได้เฉพาะที่ `http://localhost:3000` บนเครื่อง server เท่านั้น เพราะ browser บล็อก getUserMedia บน plain-HTTP ข้ามเครื่อง) — ตั้งค่า IP ของเครื่อง server ผ่าน `SERVER_LAN_IP` ใน `.env`, ใบรับรองออกอัตโนมัติให้ตรงกับ IP ที่ตั้งไว้ (ดูหัวข้อ "เข้าใช้งานจากมือถือ/แท็บเล็ต...")
 - **2026-06-26** — เพิ่มปุ่ม **สลับกล้องหน้า-หลัง** ที่หน้าสแกน (checkin) และหน้าลงทะเบียนใบหน้าพนักงาน สำหรับใช้งานบนมือถือ/แท็บเล็ต (ใช้ `facingMode` constraint แทนการเลือก deviceId ตรงๆ ซึ่งเชื่อถือได้กว่าบนมือถือที่ label กล้องมักไม่ชัดเจน) — ปุ่มจะแสดงอัตโนมัติเฉพาะอุปกรณ์ที่รองรับการสัมผัสหน้าจอ (touch device)
-- **2026-06-26** — ปรับชุดสคริปต์ dev/build ให้สอดคล้องกับ Angular frontend: `dev.bat` เปิด backend hot-reload (ts-node-dev, 3001) คู่กับ `ng serve` hot-reload (4200, proxy `/api` ผ่าน `frontend-ng/proxy.conf.json`) ในคำสั่งเดียว, เปลี่ยนชื่อ `build-prod.bat` เป็น **`build.bat`** (เนื้อหาเดิม), `stop-dev.bat` ปิดทั้งสองพอร์ตให้
