@@ -168,6 +168,142 @@
       </mat-card>
     </mat-tab>
 
+    <!-- 2d. Org structure -->
+    <mat-tab label="🏢 โครงสร้างองค์กร">
+      <mat-card class="section-card org-card">
+        <h2 class="section-title">กลุ่มงาน (หัวหน้ากลุ่มงาน)</h2>
+        <p class="muted">กลุ่มงานคือระดับบนสุด — หัวหน้ากลุ่มงานเป็นผู้อนุมัติขั้นสุดท้ายก่อน admon ถ้าแผนกในกลุ่มงานไม่มีหัวหน้าแผนกตั้งไว้</p>
+
+        <form [formGroup]="divisionForm" class="form-grid two-col">
+          <mat-form-field appearance="outline">
+            <mat-label>ชื่อกลุ่มงาน</mat-label>
+            <input matInput formControlName="name" placeholder="เช่น กลุ่มงานบริหารทั่วไป" />
+          </mat-form-field>
+          <mat-form-field appearance="outline">
+            <mat-label>หัวหน้ากลุ่มงาน</mat-label>
+            <mat-select formControlName="head_employee_id">
+              <mat-option [value]="null">— ไม่ระบุ —</mat-option>
+              @for (e of allEmployees; track e.id) {
+                <mat-option [value]="e.id">{{ e.employee_code }} - {{ e.full_name }}</mat-option>
+              }
+            </mat-select>
+          </mat-form-field>
+        </form>
+
+        <div class="actions-row">
+          <button mat-flat-button color="primary" [disabled]="divisionSaving" (click)="saveDivision()">
+            {{ editingDivisionId ? 'บันทึกการแก้ไข' : 'เพิ่มกลุ่มงาน' }}
+          </button>
+          @if (editingDivisionId) {
+            <button mat-stroked-button type="button" (click)="cancelEditDivision()">ยกเลิกแก้ไข</button>
+          }
+        </div>
+
+        <div class="org-table-wrap">
+          <app-responsive-table [columns]="divisionColumns" [data]="divisions" [trackByFn]="trackByDivisionId">
+            <ng-template #desktopRow let-d>
+              <tr>
+                <td>{{ d.name }}</td>
+                <td>{{ d.head_name || '-' }}</td>
+                <td class="actions-cell">
+                  <button mat-icon-button matTooltip="แก้ไข" (click)="editDivision(d)">
+                    <mat-icon>edit</mat-icon>
+                  </button>
+                  <button mat-icon-button matTooltip="ลบ" color="warn" (click)="deleteDivision(d)">
+                    <mat-icon>delete</mat-icon>
+                  </button>
+                </td>
+              </tr>
+            </ng-template>
+            <ng-template #cardRow let-d>
+              <div class="card-field"><span class="card-label">ชื่อกลุ่มงาน:</span> {{ d.name }}</div>
+              <div class="card-field"><span class="card-label">หัวหน้ากลุ่มงาน:</span> {{ d.head_name || '-' }}</div>
+            </ng-template>
+            <ng-template #cardActions let-d>
+              <button mat-icon-button matTooltip="แก้ไข" (click)="editDivision(d)">
+                <mat-icon>edit</mat-icon>
+              </button>
+              <button mat-icon-button matTooltip="ลบ" color="warn" (click)="deleteDivision(d)">
+                <mat-icon>delete</mat-icon>
+              </button>
+            </ng-template>
+          </app-responsive-table>
+        </div>
+
+        <mat-divider class="org-divider"></mat-divider>
+
+        <h2 class="section-title">แผนก (หัวหน้าแผนก)</h2>
+        <p class="muted">หัวหน้าแผนกเป็นผู้อนุมัติขั้นแรกของคำขอแก้ไข/อุทธรณ์เวลาของพนักงานในแผนก</p>
+
+        <form [formGroup]="departmentForm" class="form-grid three-col">
+          <mat-form-field appearance="outline">
+            <mat-label>ชื่อแผนก</mat-label>
+            <input matInput formControlName="name" placeholder="เช่น แผนกธุรการ" />
+          </mat-form-field>
+          <mat-form-field appearance="outline">
+            <mat-label>กลุ่มงาน</mat-label>
+            <mat-select formControlName="division_id">
+              <mat-option [value]="null">— ไม่ระบุ —</mat-option>
+              @for (dv of divisions; track dv.id) {
+                <mat-option [value]="dv.id">{{ dv.name }}</mat-option>
+              }
+            </mat-select>
+          </mat-form-field>
+          <mat-form-field appearance="outline">
+            <mat-label>หัวหน้าแผนก</mat-label>
+            <mat-select formControlName="head_employee_id">
+              <mat-option [value]="null">— ไม่ระบุ —</mat-option>
+              @for (e of allEmployees; track e.id) {
+                <mat-option [value]="e.id">{{ e.employee_code }} - {{ e.full_name }}</mat-option>
+              }
+            </mat-select>
+          </mat-form-field>
+        </form>
+
+        <div class="actions-row">
+          <button mat-flat-button color="primary" [disabled]="departmentSaving" (click)="saveDepartment()">
+            {{ editingDepartmentId ? 'บันทึกการแก้ไข' : 'เพิ่มแผนก' }}
+          </button>
+          @if (editingDepartmentId) {
+            <button mat-stroked-button type="button" (click)="cancelEditDepartment()">ยกเลิกแก้ไข</button>
+          }
+        </div>
+
+        <div class="org-table-wrap">
+          <app-responsive-table [columns]="departmentColumns" [data]="departments" [trackByFn]="trackByDepartmentId">
+            <ng-template #desktopRow let-d>
+              <tr>
+                <td>{{ d.name }}</td>
+                <td>{{ d.division_name || '-' }}</td>
+                <td>{{ d.head_name || '-' }}</td>
+                <td class="actions-cell">
+                  <button mat-icon-button matTooltip="แก้ไข" (click)="editDepartment(d)">
+                    <mat-icon>edit</mat-icon>
+                  </button>
+                  <button mat-icon-button matTooltip="ลบ" color="warn" (click)="deleteDepartment(d)">
+                    <mat-icon>delete</mat-icon>
+                  </button>
+                </td>
+              </tr>
+            </ng-template>
+            <ng-template #cardRow let-d>
+              <div class="card-field"><span class="card-label">ชื่อแผนก:</span> {{ d.name }}</div>
+              <div class="card-field"><span class="card-label">กลุ่มงาน:</span> {{ d.division_name || '-' }}</div>
+              <div class="card-field"><span class="card-label">หัวหน้าแผนก:</span> {{ d.head_name || '-' }}</div>
+            </ng-template>
+            <ng-template #cardActions let-d>
+              <button mat-icon-button matTooltip="แก้ไข" (click)="editDepartment(d)">
+                <mat-icon>edit</mat-icon>
+              </button>
+              <button mat-icon-button matTooltip="ลบ" color="warn" (click)="deleteDepartment(d)">
+                <mat-icon>delete</mat-icon>
+              </button>
+            </ng-template>
+          </app-responsive-table>
+        </div>
+      </mat-card>
+    </mat-tab>
+
     <!-- 2c. Audit log -->
     <mat-tab label="📋 ประวัติการใช้งาน">
       <mat-card class="section-card audit-card">

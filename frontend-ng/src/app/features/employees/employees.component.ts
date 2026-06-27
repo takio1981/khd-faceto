@@ -8,8 +8,9 @@ import { MatTooltipModule } from '@angular/material/tooltip';
 import { TableColumn, ResponsiveTableComponent } from '../../shared/components/responsive-table/responsive-table.component';
 import { EmployeeService } from '../../core/services/employee.service';
 import { ShiftService } from '../../core/services/shift.service';
+import { OrgStructureService } from '../../core/services/org-structure.service';
 import { NotifyService } from '../../core/services/notify.service';
-import { Employee, Shift } from '../../core/models/models';
+import { Department, Employee, Shift } from '../../core/models/models';
 import { EmployeeFormDialogComponent, EmployeeFormDialogResult } from './employee-form-dialog/employee-form-dialog.component';
 import { FaceEnrollDialogComponent } from './face-enroll-dialog/face-enroll-dialog.component';
 import { FaceGalleryDialogComponent, FaceGalleryDialogResult } from './face-gallery-dialog/face-gallery-dialog.component';
@@ -43,19 +44,29 @@ export class EmployeesComponent implements OnInit {
 
   readonly employees = signal<Employee[]>([]);
   readonly shifts = signal<Shift[]>([]);
+  readonly departments = signal<Department[]>([]);
   readonly showInactive = signal(false);
   readonly loading = signal(false);
 
   constructor(
     private employeeService: EmployeeService,
     private shiftService: ShiftService,
+    private orgStructureService: OrgStructureService,
     private notify: NotifyService,
     private dialog: MatDialog,
   ) {}
 
   ngOnInit(): void {
     this.loadShifts();
+    this.loadDepartments();
     this.loadEmployees();
+  }
+
+  loadDepartments(): void {
+    this.orgStructureService.listDepartments().subscribe({
+      next: (rows) => this.departments.set(rows),
+      error: () => {},
+    });
   }
 
   trackById = (_: number, e: Employee) => e.id;
@@ -100,7 +111,7 @@ export class EmployeesComponent implements OnInit {
     const ref = this.dialog.open(EmployeeFormDialogComponent, {
       width: '640px',
       maxWidth: '95vw',
-      data: { employee: null, shifts: this.shifts(), employees: this.employees() },
+      data: { employee: null, shifts: this.shifts(), employees: this.employees(), departments: this.departments() },
     });
     ref.afterClosed().subscribe((result: EmployeeFormDialogResult | undefined) => {
       if (!result?.saved) return;
@@ -115,7 +126,7 @@ export class EmployeesComponent implements OnInit {
     const ref = this.dialog.open(EmployeeFormDialogComponent, {
       width: '640px',
       maxWidth: '95vw',
-      data: { employee: emp, shifts: this.shifts(), employees: this.employees() },
+      data: { employee: emp, shifts: this.shifts(), employees: this.employees(), departments: this.departments() },
     });
     ref.afterClosed().subscribe((result: EmployeeFormDialogResult | undefined) => {
       if (result?.saved) this.loadEmployees();

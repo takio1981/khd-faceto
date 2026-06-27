@@ -1,0 +1,155 @@
+<div class="page-container">
+  <h1 class="page-title">คำขอแก้ไขเวลา / อุทธรณ์ขาด-สาย</h1>
+
+  <mat-tab-group animationDuration="150ms">
+    @if (canSubmit) {
+      <mat-tab label="📝 ยื่นคำขอใหม่">
+        <mat-card class="section-card">
+          <p class="muted">
+            ใช้สำหรับกรณีลืมสแกนใบหน้าแต่มาทำงานจริง หรือมาสายเพราะเหตุสุดวิสัย — คำขอจะถูกส่งให้หัวหน้าแผนกอนุมัติก่อน
+            แล้ว admin จะยืนยันขั้นสุดท้ายซึ่งจะปรับปรุงประวัติการลงเวลาให้อัตโนมัติ
+          </p>
+          <form [formGroup]="form" class="form-grid">
+            <mat-form-field appearance="outline">
+              <mat-label>ประเภทคำขอ</mat-label>
+              <mat-select formControlName="requestType">
+                @for (t of requestTypeOptions; track t.value) {
+                  <mat-option [value]="t.value">{{ t.label }}</mat-option>
+                }
+              </mat-select>
+            </mat-form-field>
+
+            <mat-form-field appearance="outline">
+              <mat-label>วันที่เกิดเหตุ</mat-label>
+              <input matInput [matDatepicker]="picker" formControlName="targetDate" />
+              <mat-datepicker-toggle matIconSuffix [for]="picker"></mat-datepicker-toggle>
+              <mat-datepicker #picker></mat-datepicker>
+            </mat-form-field>
+
+            <mat-form-field appearance="outline">
+              <mat-label>เวลาที่มาทำงานจริง (ประมาณ)</mat-label>
+              <input matInput type="time" formControlName="requestedTime" />
+            </mat-form-field>
+
+            <mat-form-field appearance="outline">
+              <mat-label>สถานะที่ขอให้บันทึก</mat-label>
+              <mat-select formControlName="requestedStatus">
+                @for (s of statusOptions; track s.value) {
+                  <mat-option [value]="s.value">{{ s.label }}</mat-option>
+                }
+              </mat-select>
+            </mat-form-field>
+
+            <mat-form-field appearance="outline" class="full-width">
+              <mat-label>เหตุผล / คำอธิบาย</mat-label>
+              <textarea matInput formControlName="reason" rows="3" placeholder="อธิบายเหตุผลโดยละเอียด"></textarea>
+            </mat-form-field>
+          </form>
+          <div class="actions-row">
+            <button mat-flat-button color="primary" [disabled]="submitting()" (click)="submit()">
+              ยื่นคำขอ
+            </button>
+          </div>
+        </mat-card>
+      </mat-tab>
+    }
+
+    <mat-tab label="📋 คำขอของฉัน">
+      <mat-card class="section-card">
+        <app-responsive-table [columns]="myColumns" [data]="myRequests" [trackByFn]="trackById">
+          <ng-template #desktopRow let-r>
+            <tr>
+              <td>{{ r.target_date | slice:0:10 }}</td>
+              <td>{{ requestTypeText(r.request_type) }}</td>
+              <td>{{ r.reason }}</td>
+              <td><span class="badge" [class]="r.status">{{ workflowStatusText(r.status) }}</span></td>
+            </tr>
+          </ng-template>
+          <ng-template #cardRow let-r>
+            <div class="card-field"><span class="card-label">วันที่:</span> {{ r.target_date | slice:0:10 }}</div>
+            <div class="card-field"><span class="card-label">ประเภท:</span> {{ requestTypeText(r.request_type) }}</div>
+            <div class="card-field"><span class="card-label">เหตุผล:</span> {{ r.reason }}</div>
+            <div class="card-field">
+              <span class="card-label">สถานะ:</span>
+              <span class="badge" [class]="r.status">{{ workflowStatusText(r.status) }}</span>
+            </div>
+          </ng-template>
+        </app-responsive-table>
+      </mat-card>
+    </mat-tab>
+
+    <mat-tab label="✅ รออนุมัติ (หัวหน้า)">
+      <mat-card class="section-card">
+        <p class="muted">รายการที่คุณเป็นหัวหน้าแผนก/กลุ่มงานของผู้ยื่นคำขอ และยังรอการอนุมัติจากคุณ</p>
+        <app-responsive-table [columns]="approvalColumns" [data]="approvingRequests" [trackByFn]="trackById">
+          <ng-template #desktopRow let-r>
+            <tr>
+              <td>{{ r.target_date | slice:0:10 }}</td>
+              <td>{{ r.employee_code }} - {{ r.full_name }}</td>
+              <td>{{ requestTypeText(r.request_type) }}</td>
+              <td>{{ r.reason }}</td>
+              <td class="actions-cell">
+                <button mat-stroked-button color="primary" type="button" (click)="approve(r)">อนุมัติ</button>
+                <button mat-stroked-button color="warn" type="button" (click)="reject(r)">ไม่อนุมัติ</button>
+              </td>
+            </tr>
+          </ng-template>
+          <ng-template #cardRow let-r>
+            <div class="card-field"><span class="card-label">วันที่:</span> {{ r.target_date | slice:0:10 }}</div>
+            <div class="card-field"><span class="card-label">พนักงาน:</span> {{ r.employee_code }} - {{ r.full_name }}</div>
+            <div class="card-field"><span class="card-label">ประเภท:</span> {{ requestTypeText(r.request_type) }}</div>
+            <div class="card-field"><span class="card-label">เหตุผล:</span> {{ r.reason }}</div>
+          </ng-template>
+          <ng-template #cardActions let-r>
+            <button mat-stroked-button color="primary" type="button" (click)="approve(r)">อนุมัติ</button>
+            <button mat-stroked-button color="warn" type="button" (click)="reject(r)">ไม่อนุมัติ</button>
+          </ng-template>
+        </app-responsive-table>
+      </mat-card>
+    </mat-tab>
+
+    @if (auth.isAdmin()) {
+      <mat-tab label="🗂️ ทั้งหมด (admin)">
+        <mat-card class="section-card">
+          <app-responsive-table [columns]="allColumns" [data]="allRequests" [trackByFn]="trackById">
+            <ng-template #desktopRow let-r>
+              <tr>
+                <td>{{ r.target_date | slice:0:10 }}</td>
+                <td>{{ r.employee_code }} - {{ r.full_name }}</td>
+                <td>{{ requestTypeText(r.request_type) }}</td>
+                <td><span class="badge" [class]="r.status">{{ workflowStatusText(r.status) }}</span></td>
+                <td class="actions-cell">
+                  @if (r.status === 'pending_admin') {
+                    <button mat-stroked-button color="primary" type="button" (click)="confirmAdmin(r)">ยืนยัน</button>
+                    <button mat-stroked-button color="warn" type="button" (click)="rejectAdmin(r)">ไม่อนุมัติ</button>
+                  } @else if (r.status === 'pending_supervisor') {
+                    <button mat-stroked-button color="primary" type="button" (click)="approve(r)">อนุมัติแทนหัวหน้า</button>
+                    <button mat-stroked-button color="warn" type="button" (click)="reject(r)">ไม่อนุมัติ</button>
+                  }
+                </td>
+              </tr>
+            </ng-template>
+            <ng-template #cardRow let-r>
+              <div class="card-field"><span class="card-label">วันที่:</span> {{ r.target_date | slice:0:10 }}</div>
+              <div class="card-field"><span class="card-label">พนักงาน:</span> {{ r.employee_code }} - {{ r.full_name }}</div>
+              <div class="card-field"><span class="card-label">ประเภท:</span> {{ requestTypeText(r.request_type) }}</div>
+              <div class="card-field">
+                <span class="card-label">สถานะ:</span>
+                <span class="badge" [class]="r.status">{{ workflowStatusText(r.status) }}</span>
+              </div>
+            </ng-template>
+            <ng-template #cardActions let-r>
+              @if (r.status === 'pending_admin') {
+                <button mat-stroked-button color="primary" type="button" (click)="confirmAdmin(r)">ยืนยัน</button>
+                <button mat-stroked-button color="warn" type="button" (click)="rejectAdmin(r)">ไม่อนุมัติ</button>
+              } @else if (r.status === 'pending_supervisor') {
+                <button mat-stroked-button color="primary" type="button" (click)="approve(r)">อนุมัติแทนหัวหน้า</button>
+                <button mat-stroked-button color="warn" type="button" (click)="reject(r)">ไม่อนุมัติ</button>
+              }
+            </ng-template>
+          </app-responsive-table>
+        </mat-card>
+      </mat-tab>
+    }
+  </mat-tab-group>
+</div>

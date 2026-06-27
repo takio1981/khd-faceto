@@ -10,6 +10,7 @@ import { MatFormFieldModule } from '@angular/material/form-field';
 import { MatIconModule } from '@angular/material/icon';
 import { MatInputModule } from '@angular/material/input';
 import { MatPaginatorModule, PageEvent } from '@angular/material/paginator';
+import { MatSelectModule } from '@angular/material/select';
 import { MatSlideToggleModule } from '@angular/material/slide-toggle';
 import { MatTabsModule } from '@angular/material/tabs';
 import { MatTooltipModule } from '@angular/material/tooltip';
@@ -19,9 +20,11 @@ import { NotifyService } from '../../core/services/notify.service';
 import { ScanLocationService } from '../../core/services/scan-location.service';
 import { HolidayService } from '../../core/services/holiday.service';
 import { AuditLogService } from '../../core/services/audit-log.service';
+import { OrgStructureService } from '../../core/services/org-structure.service';
+import { EmployeeService } from '../../core/services/employee.service';
 import { patchLeafletDefaultIcon } from '../../shared/utils/leaflet-icon-fix';
 import { SettingsService } from '../../core/services/settings.service';
-import { AuditLogEntry, Holiday, NotificationSettings, ScanLocation } from '../../core/models/models';
+import { AuditLogEntry, Department, Division, Employee, Holiday, NotificationSettings, ScanLocation } from '../../core/models/models';
 import { ResponsiveTableComponent, TableColumn } from '../../shared/components/responsive-table/responsive-table.component';
 
 declare const L: any;
@@ -42,6 +45,7 @@ const GMAIL_PORT = 465;
     MatInputModule,
     MatButtonModule,
     MatIconModule,
+    MatSelectModule,
     MatSlideToggleModule,
     MatCheckboxModule,
     MatDividerModule,
@@ -61,6 +65,8 @@ export class SettingsComponent implements OnInit, AfterViewInit {
   private scanLocationService = inject(ScanLocationService);
   private holidayService = inject(HolidayService);
   private auditLogService = inject(AuditLogService);
+  private orgStructureService = inject(OrgStructureService);
+  private employeeService = inject(EmployeeService);
   private notificationService = inject(NotificationService);
   private notify = inject(NotifyService);
 
@@ -131,6 +137,15 @@ export class SettingsComponent implements OnInit, AfterViewInit {
     'scan_location.update': 'แก้ไขจุดสแกน',
     'scan_location.delete': 'ลบจุดสแกน',
     'notification_settings.update': 'แก้ไขการตั้งค่าแจ้งเตือน',
+    'division.create': 'เพิ่มกลุ่มงาน',
+    'division.update': 'แก้ไขกลุ่มงาน',
+    'division.delete': 'ลบกลุ่มงาน',
+    'department.create': 'เพิ่มแผนก',
+    'department.update': 'แก้ไขแผนก',
+    'department.delete': 'ลบแผนก',
+    'correction_request.create': 'ยื่นคำขอแก้ไข/อุทธรณ์เวลา',
+    'correction_request.supervisor_decision': 'หัวหน้าพิจารณาคำขอแก้ไขเวลา',
+    'correction_request.admin_decision': 'admin ยืนยันคำขอแก้ไขเวลา',
   };
   auditLog: AuditLogEntry[] = [];
   auditTotal = 0;
@@ -139,6 +154,37 @@ export class SettingsComponent implements OnInit, AfterViewInit {
   auditLoading = false;
   auditUsernameFilter = '';
   trackByAuditId = (_: number, a: AuditLogEntry) => a.id;
+
+  // ===== 2d. Org structure (กลุ่มงาน/แผนก) =====
+  readonly divisionForm = this.fb.group({
+    name: ['', Validators.required],
+    head_employee_id: [null as number | null],
+  });
+  readonly departmentForm = this.fb.group({
+    name: ['', Validators.required],
+    division_id: [null as number | null],
+    head_employee_id: [null as number | null],
+  });
+  divisions: Division[] = [];
+  departments: Department[] = [];
+  allEmployees: Employee[] = [];
+  editingDivisionId: number | null = null;
+  editingDepartmentId: number | null = null;
+  divisionSaving = false;
+  departmentSaving = false;
+  readonly divisionColumns: TableColumn[] = [
+    { key: 'name', label: 'ชื่อกลุ่มงาน' },
+    { key: 'head', label: 'หัวหน้ากลุ่มงาน' },
+    { key: 'actions', label: 'จัดการ' },
+  ];
+  readonly departmentColumns: TableColumn[] = [
+    { key: 'name', label: 'ชื่อแผนก' },
+    { key: 'division', label: 'กลุ่มงาน' },
+    { key: 'head', label: 'หัวหน้าแผนก' },
+    { key: 'actions', label: 'จัดการ' },
+  ];
+  trackByDivisionId = (_: number, d: Division) => d.id;
+  trackByDepartmentId = (_: number, d: Department) => d.id;
 
   // ===== 3. Notifications =====
   readonly notifForm = this.fb.group({
@@ -196,6 +242,7 @@ export class SettingsComponent implements OnInit, AfterViewInit {
     this.loadLocations();
     this.loadHolidays();
     this.loadAuditLog();
+    this.loadOrgStructure();
   }
 
   // Leaflet computes its tile layout from the container's size at the
@@ -486,6 +533,140 @@ export class SettingsComponent implements OnInit, AfterViewInit {
     if (entry.after_data) return entry.after_data.length > 80 ? entry.after_data.slice(0, 80) + '…' : entry.after_data;
     if (entry.before_data) return 'ลบแล้ว';
     return '-';
+  }
+
+  // ---- 2d. Org structure ----
+
+  loadOrgStructure(): void {
+    this.employeeService.list().subscribe({
+      next: (rows) => (this.allEmployees = rows),
+      error: () => {},
+    });
+    this.loadDivisions();
+    this.loadDepartments();
+  }
+
+  loadDivisions(): void {
+    this.orgStructureService.listDivisions().subscribe({
+      next: (rows) => (this.divisions = rows),
+      error: () => this.notify.toast('โหลดรายชื่อกลุ่มงานไม่สำเร็จ', 'error'),
+    });
+  }
+
+  loadDepartments(): void {
+    this.orgStructureService.listDepartments().subscribe({
+      next: (rows) => (this.departments = rows),
+      error: () => this.notify.toast('โหลดรายชื่อแผนกไม่สำเร็จ', 'error'),
+    });
+  }
+
+  editDivision(d: Division): void {
+    this.editingDivisionId = d.id;
+    this.divisionForm.patchValue({ name: d.name, head_employee_id: d.head_employee_id });
+  }
+
+  cancelEditDivision(): void {
+    this.editingDivisionId = null;
+    this.divisionForm.reset({ name: '', head_employee_id: null });
+  }
+
+  saveDivision(): void {
+    if (this.divisionForm.invalid) {
+      this.divisionForm.markAllAsTouched();
+      return;
+    }
+    const v = this.divisionForm.getRawValue();
+    const body = { name: v.name!.trim(), head_employee_id: v.head_employee_id || null };
+    this.divisionSaving = true;
+    const obs: Observable<unknown> = this.editingDivisionId
+      ? this.orgStructureService.updateDivision(this.editingDivisionId, body)
+      : this.orgStructureService.createDivision(body);
+    obs.subscribe({
+      next: () => {
+        this.divisionSaving = false;
+        this.notify.toast('บันทึกกลุ่มงานเรียบร้อยแล้ว', 'success');
+        this.cancelEditDivision();
+        this.loadDivisions();
+      },
+      error: (err: any) => {
+        this.divisionSaving = false;
+        this.notify.toast(err.error?.error || 'บันทึกไม่สำเร็จ', 'error');
+      },
+    });
+  }
+
+  async deleteDivision(d: Division): Promise<void> {
+    const ok = await this.notify.confirm({
+      title: 'ยืนยันการลบ',
+      message: `ลบกลุ่มงาน "${d.name}" นี้? แผนกที่อยู่ในกลุ่มงานนี้จะไม่ถูกลบ แต่จะไม่ผูกกับกลุ่มงานใดอีก`,
+      confirmText: 'ลบ',
+      cancelText: 'ยกเลิก',
+      danger: true,
+    });
+    if (!ok) return;
+    this.orgStructureService.deleteDivision(d.id).subscribe({
+      next: () => {
+        if (this.editingDivisionId === d.id) this.cancelEditDivision();
+        this.notify.toast('ลบกลุ่มงานเรียบร้อยแล้ว', 'success');
+        this.loadDivisions();
+        this.loadDepartments();
+      },
+      error: (err: any) => this.notify.toast(err.error?.error || 'ลบไม่สำเร็จ', 'error'),
+    });
+  }
+
+  editDepartment(d: Department): void {
+    this.editingDepartmentId = d.id;
+    this.departmentForm.patchValue({ name: d.name, division_id: d.division_id, head_employee_id: d.head_employee_id });
+  }
+
+  cancelEditDepartment(): void {
+    this.editingDepartmentId = null;
+    this.departmentForm.reset({ name: '', division_id: null, head_employee_id: null });
+  }
+
+  saveDepartment(): void {
+    if (this.departmentForm.invalid) {
+      this.departmentForm.markAllAsTouched();
+      return;
+    }
+    const v = this.departmentForm.getRawValue();
+    const body = { name: v.name!.trim(), division_id: v.division_id || null, head_employee_id: v.head_employee_id || null };
+    this.departmentSaving = true;
+    const obs: Observable<unknown> = this.editingDepartmentId
+      ? this.orgStructureService.updateDepartment(this.editingDepartmentId, body)
+      : this.orgStructureService.createDepartment(body);
+    obs.subscribe({
+      next: () => {
+        this.departmentSaving = false;
+        this.notify.toast('บันทึกแผนกเรียบร้อยแล้ว', 'success');
+        this.cancelEditDepartment();
+        this.loadDepartments();
+      },
+      error: (err: any) => {
+        this.departmentSaving = false;
+        this.notify.toast(err.error?.error || 'บันทึกไม่สำเร็จ', 'error');
+      },
+    });
+  }
+
+  async deleteDepartment(d: Department): Promise<void> {
+    const ok = await this.notify.confirm({
+      title: 'ยืนยันการลบ',
+      message: `ลบแผนก "${d.name}" นี้? พนักงานในแผนกนี้จะไม่ถูกลบ แต่จะไม่ผูกกับแผนกใดอีก`,
+      confirmText: 'ลบ',
+      cancelText: 'ยกเลิก',
+      danger: true,
+    });
+    if (!ok) return;
+    this.orgStructureService.deleteDepartment(d.id).subscribe({
+      next: () => {
+        if (this.editingDepartmentId === d.id) this.cancelEditDepartment();
+        this.notify.toast('ลบแผนกเรียบร้อยแล้ว', 'success');
+        this.loadDepartments();
+      },
+      error: (err: any) => this.notify.toast(err.error?.error || 'ลบไม่สำเร็จ', 'error'),
+    });
   }
 
   // ---- 3. Notifications ----

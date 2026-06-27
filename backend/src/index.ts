@@ -23,6 +23,8 @@ import scanLocationRoutes from './routes/scanLocations.routes';
 import notificationRoutes from './routes/notification.routes';
 import holidayRoutes from './routes/holidays.routes';
 import auditRoutes from './routes/audit.routes';
+import orgStructureRoutes from './routes/orgStructure.routes';
+import correctionRequestRoutes from './routes/correctionRequests.routes';
 
 async function main() {
   await waitForDb();
@@ -72,6 +74,8 @@ async function main() {
   app.use('/api/notifications', notificationRoutes);
   app.use('/api/holidays', holidayRoutes);
   app.use('/api/audit-log', auditRoutes);
+  app.use('/api/org', orgStructureRoutes);
+  app.use('/api/correction-requests', correctionRequestRoutes);
 
   app.get('/api/health', (_req, res) => res.json({ ok: true, time: new Date().toISOString() }));
 

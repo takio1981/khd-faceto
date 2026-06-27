@@ -21,13 +21,19 @@
 }
 
 .holiday-table-wrap,
-.audit-table-wrap {
+.audit-table-wrap,
+.org-table-wrap {
   max-height: 420px;
   overflow-y: auto;
 }
 
-.audit-card {
+.audit-card,
+.org-card {
   max-width: 1080px;
+}
+
+.org-divider {
+  margin: 24px 0;
 }
 
 .audit-filter-field {

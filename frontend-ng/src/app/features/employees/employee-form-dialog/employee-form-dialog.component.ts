@@ -8,13 +8,14 @@ import { MatInputModule } from '@angular/material/input';
 import { MatProgressSpinnerModule } from '@angular/material/progress-spinner';
 import { MatSelectModule } from '@angular/material/select';
 import { EmployeeService } from '../../../core/services/employee.service';
-import { Employee, EmployeeCreateRequest, Shift } from '../../../core/models/models';
+import { Department, Employee, EmployeeCreateRequest, Shift } from '../../../core/models/models';
 import { NotifyService } from '../../../core/services/notify.service';
 
 export interface EmployeeFormDialogData {
   employee: Employee | null;
   shifts: Shift[];
   employees: Employee[];
+  departments: Department[];
 }
 
 export interface EmployeeFormDialogResult {
@@ -66,7 +67,7 @@ export class EmployeeFormDialogComponent implements OnInit {
   readonly form = this.fb.group({
     employee_code: ['', Validators.required],
     full_name: ['', Validators.required],
-    department: [''],
+    department_id: [null as number | null],
     position: [''],
     employee_type: ['temp_employee'],
     shift_id: [null as number | null],
@@ -90,7 +91,7 @@ export class EmployeeFormDialogComponent implements OnInit {
       this.form.patchValue({
         employee_code: e.employee_code,
         full_name: e.full_name,
-        department: e.department || '',
+        department_id: e.department_id ?? null,
         position: e.position || '',
         employee_type: e.employee_type || 'temp_employee',
         shift_id: e.shift_id,
@@ -117,7 +118,7 @@ export class EmployeeFormDialogComponent implements OnInit {
     const body: EmployeeCreateRequest = {
       employee_code: (v.employee_code || '').trim(),
       full_name: (v.full_name || '').trim(),
-      department: (v.department || '').trim(),
+      department_id: v.department_id || null,
       position: (v.position || '').trim(),
       employee_type: (v.employee_type as Employee['employee_type']) || 'temp_employee',
       shift_id: v.shift_id || null,

@@ -13,15 +13,31 @@ const router = Router();
 // All employee management routes require admin
 router.use(verifyJWT, requireRole('admin'));
 
+// department_id is the structured link (org chart / approval routing); the
+// free-text `department` column is kept in sync with its name so the
+// existing text-based filters in attendance.routes.ts / report.service.ts
+// keep working without a rewrite.
+async function resolveDepartmentText(departmentId: number | null | undefined): Promise<string | null> {
+  if (!departmentId) return null;
+  const [rows] = await pool.query<RowDataPacket[]>('SELECT name FROM departments WHERE id = ?', [departmentId]);
+  return rows[0]?.name ?? null;
+}
+
+const EMPLOYEE_SELECT = `
+  SELECT e.*, s.name AS shift_name, sup.full_name AS supervisor_name,
+         dept.name AS department_name, dv.name AS division_name,
+         (SELECT COUNT(*) FROM face_descriptors fd WHERE fd.employee_id = e.id) AS face_count
+    FROM employees e
+    LEFT JOIN shifts s ON s.id = e.shift_id
+    LEFT JOIN employees sup ON sup.id = e.supervisor_id
+    LEFT JOIN departments dept ON dept.id = e.department_id
+    LEFT JOIN divisions dv ON dv.id = dept.division_id`;
+
 // GET /api/employees  - list (with shift name + descriptor count)
 router.get('/', asyncHandler(async (req, res) => {
   const includeInactive = req.query.includeInactive === '1';
   const [rows] = await pool.query<RowDataPacket[]>(
-    `SELECT e.*, s.name AS shift_name, sup.full_name AS supervisor_name,
-            (SELECT COUNT(*) FROM face_descriptors fd WHERE fd.employee_id = e.id) AS face_count
-       FROM employees e
-       LEFT JOIN shifts s ON s.id = e.shift_id
-       LEFT JOIN employees sup ON sup.id = e.supervisor_id
+    `${EMPLOYEE_SELECT}
       ${includeInactive ? '' : 'WHERE e.is_active = 1'}
       ORDER BY e.employee_code ASC`
   );
@@ -30,15 +46,7 @@ router.get('/', asyncHandler(async (req, res) => {
 
 // GET /api/employees/:id
 router.get('/:id', asyncHandler(async (req, res) => {
-  const [rows] = await pool.query<RowDataPacket[]>(
-    `SELECT e.*, s.name AS shift_name, sup.full_name AS supervisor_name,
-            (SELECT COUNT(*) FROM face_descriptors fd WHERE fd.employee_id = e.id) AS face_count
-       FROM employees e
-       LEFT JOIN shifts s ON s.id = e.shift_id
-       LEFT JOIN employees sup ON sup.id = e.supervisor_id
-      WHERE e.id = ? LIMIT 1`,
-    [req.params.id]
-  );
+  const [rows] = await pool.query<RowDataPacket[]>(`${EMPLOYEE_SELECT} WHERE e.id = ? LIMIT 1`, [req.params.id]);
   if (!rows.length) {
     res.status(404).json({ error: 'ไม่พบพนักงาน' });
     return;
@@ -48,7 +56,7 @@ router.get('/:id', asyncHandler(async (req, res) => {
 
 // POST /api/employees  - create. Optionally create a linked login account.
 router.post('/', asyncHandler(async (req, res) => {
-  const { employee_code, full_name, department, position, employee_type, shift_id, supervisor_id,
+  const { employee_code, full_name, department_id, position, employee_type, shift_id, supervisor_id,
           notify_email, notify_line_user_id, notify_telegram_chat_id, notify_enabled,
           create_login, login_username, login_password, login_role } = req.body ?? {};
 
@@ -61,12 +69,13 @@ router.post('/', asyncHandler(async (req, res) => {
     return;
   }
 
+  const departmentText = await resolveDepartmentText(department_id);
   const [result] = await pool.query<ResultSetHeader>(
-    `INSERT INTO employees (employee_code, full_name, department, position, employee_type, shift_id, supervisor_id,
+    `INSERT INTO employees (employee_code, full_name, department, department_id, position, employee_type, shift_id, supervisor_id,
                              notify_email, notify_line_user_id, notify_telegram_chat_id, notify_enabled)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     [
-      employee_code, full_name, department || null, position || null, employee_type || 'temp_employee',
+      employee_code, full_name, departmentText, department_id || null, position || null, employee_type || 'temp_employee',
       shift_id || null, supervisor_id || null,
       notify_email || null, notify_line_user_id || null, notify_telegram_chat_id || null,
       notify_enabled === undefined ? 1 : notify_enabled ? 1 : 0,
@@ -88,7 +97,7 @@ router.post('/', asyncHandler(async (req, res) => {
 
 // PUT /api/employees/:id
 router.put('/:id', asyncHandler(async (req, res) => {
-  const { employee_code, full_name, department, position, employee_type, shift_id, supervisor_id, is_active,
+  const { employee_code, full_name, department_id, position, employee_type, shift_id, supervisor_id, is_active,
           notify_email, notify_line_user_id, notify_telegram_chat_id, notify_enabled } = req.body ?? {};
 
   if (supervisor_id && Number(supervisor_id) === Number(req.params.id)) {
@@ -101,14 +110,15 @@ router.put('/:id', asyncHandler(async (req, res) => {
   }
 
   const [beforeRows] = await pool.query<RowDataPacket[]>('SELECT * FROM employees WHERE id = ?', [req.params.id]);
+  const departmentText = await resolveDepartmentText(department_id);
   await pool.query<ResultSetHeader>(
     `UPDATE employees
-        SET employee_code = ?, full_name = ?, department = ?, position = ?, employee_type = ?,
+        SET employee_code = ?, full_name = ?, department = ?, department_id = ?, position = ?, employee_type = ?,
             shift_id = ?, supervisor_id = ?, is_active = ?,
             notify_email = ?, notify_line_user_id = ?, notify_telegram_chat_id = ?, notify_enabled = ?
       WHERE id = ?`,
     [
-      employee_code, full_name, department || null, position || null, employee_type || 'temp_employee',
+      employee_code, full_name, departmentText, department_id || null, position || null, employee_type || 'temp_employee',
       shift_id || null, supervisor_id || null, is_active === undefined ? 1 : is_active ? 1 : 0,
       notify_email || null, notify_line_user_id || null, notify_telegram_chat_id || null,
       notify_enabled === undefined ? 1 : notify_enabled ? 1 : 0,

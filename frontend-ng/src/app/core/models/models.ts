@@ -12,6 +12,9 @@ export interface Employee {
   employee_code: string;
   full_name: string;
   department: string | null;
+  department_id?: number | null;
+  department_name?: string | null;
+  division_name?: string | null;
   position: string | null;
   shift_id: number | null;
   shift_name?: string | null;
@@ -29,7 +32,7 @@ export interface Employee {
 export interface EmployeeCreateRequest {
   employee_code: string;
   full_name: string;
-  department?: string | null;
+  department_id?: number | null;
   position?: string | null;
   employee_type?: 'civil_servant' | 'government_employee' | 'temp_employee';
   shift_id?: number | null;
@@ -207,4 +210,48 @@ export interface AuditLogListResponse {
   total: number;
   page: number;
   pageSize: number;
+}
+
+export interface Division {
+  id: number;
+  name: string;
+  head_employee_id: number | null;
+  head_name: string | null;
+}
+
+export interface Department {
+  id: number;
+  name: string;
+  division_id: number | null;
+  division_name: string | null;
+  head_employee_id: number | null;
+  head_name: string | null;
+}
+
+export type CorrectionRequestType = 'correction' | 'appeal_absent' | 'appeal_late';
+export type CorrectionRequestStatus = 'pending_supervisor' | 'pending_admin' | 'approved' | 'rejected';
+
+export interface CorrectionRequest {
+  id: number;
+  employee_id: number;
+  employee_code: string;
+  full_name: string;
+  attendance_record_id: number | null;
+  request_type: CorrectionRequestType;
+  target_date: string;
+  original_scan_time: string | null;
+  original_status: AttendanceStatus | null;
+  requested_scan_time: string | null;
+  requested_status: AttendanceStatus | null;
+  reason: string;
+  status: CorrectionRequestStatus;
+  supervisor_id: number | null;
+  supervisor_name: string | null;
+  supervisor_decision: 'approved' | 'rejected' | null;
+  supervisor_comment: string | null;
+  supervisor_decided_at: string | null;
+  admin_decision: 'approved' | 'rejected' | null;
+  admin_comment: string | null;
+  admin_decided_at: string | null;
+  created_at: string;
 }

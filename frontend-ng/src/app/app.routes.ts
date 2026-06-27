@@ -34,6 +34,11 @@ export const routes: Routes = [
         loadComponent: () => import('./features/reports/reports.component').then((m) => m.ReportsComponent),
       },
       {
+        path: 'correction-requests',
+        loadComponent: () =>
+          import('./features/correction-requests/correction-requests.component').then((m) => m.CorrectionRequestsComponent),
+      },
+      {
         path: 'employees',
         canActivate: [adminGuard],
         loadComponent: () => import('./features/employees/employees.component').then((m) => m.EmployeesComponent),

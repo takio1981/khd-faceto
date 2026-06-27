@@ -1,0 +1,66 @@
+:host {
+  display: block;
+}
+
+.page-title {
+  font-size: 20px;
+  font-weight: 700;
+  color: var(--brand-primary-darker);
+  margin: 16px 0;
+}
+
+.section-card {
+  padding: 20px 24px;
+  margin: 16px 0;
+}
+
+.muted {
+  color: var(--muted);
+}
+
+.form-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 4px 16px;
+
+  mat-form-field {
+    width: 100%;
+  }
+}
+
+.full-width {
+  grid-column: 1 / -1;
+}
+
+.actions-row {
+  display: flex;
+  gap: 10px;
+  margin-top: 8px;
+}
+
+.actions-cell {
+  display: flex;
+  gap: 8px;
+  white-space: nowrap;
+}
+
+.card-field {
+  margin-bottom: 4px;
+
+  .card-label {
+    font-weight: 600;
+    margin-right: 4px;
+  }
+}
+
+// Workflow-status badges (distinct from attendance-status badges in styles.scss)
+.badge.pending_supervisor { background: #fde68a; color: #78350f; }
+.badge.pending_admin { background: #bfdbfe; color: #1e3a8a; }
+.badge.approved { background: #bbf7d0; color: #14532d; }
+.badge.rejected { background: #fecaca; color: #7f1d1d; }
+
+@media (max-width: 700px) {
+  .form-grid {
+    grid-template-columns: 1fr;
+  }
+}
