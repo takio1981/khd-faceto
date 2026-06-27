@@ -43,6 +43,11 @@
           <button mat-icon-button matTooltip="ดูใบหน้า" (click)="openFaceGallery(emp)">
             <mat-icon>photo_library</mat-icon>
           </button>
+          @if (emp.face_count) {
+            <button mat-icon-button matTooltip="เพิกถอนความยินยอม (PDPA) และลบข้อมูลใบหน้า" color="warn" (click)="withdrawConsent(emp)">
+              <mat-icon>no_accounts</mat-icon>
+            </button>
+          }
           <button mat-icon-button matTooltip="ปิดใช้งาน" color="warn" (click)="deleteEmployee(emp)">
             <mat-icon>delete</mat-icon>
           </button>
@@ -83,6 +88,11 @@
       <button mat-icon-button matTooltip="ดูใบหน้า" (click)="openFaceGallery(emp)">
         <mat-icon>photo_library</mat-icon>
       </button>
+      @if (emp.face_count) {
+        <button mat-icon-button matTooltip="เพิกถอนความยินยอม (PDPA) และลบข้อมูลใบหน้า" color="warn" (click)="withdrawConsent(emp)">
+          <mat-icon>no_accounts</mat-icon>
+        </button>
+      }
       <button mat-icon-button matTooltip="ปิดใช้งาน" color="warn" (click)="deleteEmployee(emp)">
         <mat-icon>delete</mat-icon>
       </button>

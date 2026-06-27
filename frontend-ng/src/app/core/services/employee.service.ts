@@ -2,7 +2,7 @@ import { HttpClient } from '@angular/common/http';
 import { Injectable } from '@angular/core';
 import { Observable } from 'rxjs';
 import { environment } from '../../../environments/environment';
-import { Employee, EmployeeCreateRequest, FaceRecord } from '../models/models';
+import { ConsentStatus, Employee, EmployeeCreateRequest, FaceRecord } from '../models/models';
 
 const base = `${environment.apiBaseUrl}/employees`;
 
@@ -40,5 +40,17 @@ export class EmployeeService {
 
   clearFaces(id: number): Observable<{ ok: boolean }> {
     return this.http.delete<{ ok: boolean }>(`${base}/${id}/face`);
+  }
+
+  getConsent(id: number): Observable<ConsentStatus> {
+    return this.http.get<ConsentStatus>(`${base}/${id}/consent`);
+  }
+
+  recordConsent(id: number): Observable<ConsentStatus> {
+    return this.http.post<ConsentStatus>(`${base}/${id}/consent`, {});
+  }
+
+  withdrawConsent(id: number): Observable<ConsentStatus> {
+    return this.http.delete<ConsentStatus>(`${base}/${id}/consent`);
   }
 }

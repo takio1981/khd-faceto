@@ -2,8 +2,10 @@ import { AfterViewInit, Component, ElementRef, Inject, OnDestroy, ViewChild, inj
 import { CommonModule } from '@angular/common';
 import { MatButtonModule } from '@angular/material/button';
 import { MAT_DIALOG_DATA, MatDialogModule, MatDialogRef } from '@angular/material/dialog';
+import { MatCheckboxModule } from '@angular/material/checkbox';
 import { MatFormFieldModule } from '@angular/material/form-field';
 import { MatSelectModule } from '@angular/material/select';
+import { RouterLink } from '@angular/router';
 import { EmployeeService } from '../../../core/services/employee.service';
 import { FacePipelineService, QualityKey } from '../../../core/services/face-pipeline.service';
 import { NotifyService } from '../../../core/services/notify.service';
@@ -23,7 +25,7 @@ type BannerType = '' | 'scanning' | 'success' | 'warn' | 'error';
 @Component({
   selector: 'app-face-enroll-dialog',
   standalone: true,
-  imports: [CommonModule, MatDialogModule, MatButtonModule, MatFormFieldModule, MatSelectModule],
+  imports: [CommonModule, MatDialogModule, MatButtonModule, MatFormFieldModule, MatSelectModule, MatCheckboxModule, RouterLink],
   templateUrl: './face-enroll-dialog.component.html',
   styleUrl: './face-enroll-dialog.component.scss',
 })
@@ -48,6 +50,7 @@ export class FaceEnrollDialogComponent implements AfterViewInit, OnDestroy {
   readonly statusText = signal('กดปุ่ม "เริ่มกล้อง" เพื่อเริ่มถ่ายภาพ');
   readonly statusType = signal<BannerType>('');
   readonly shots = signal<(CapturedShot | null)[]>([null, null, null]);
+  readonly consentChecked = signal(false);
 
   private stream: MediaStream | null = null;
 
@@ -55,6 +58,13 @@ export class FaceEnrollDialogComponent implements AfterViewInit, OnDestroy {
 
   ngAfterViewInit(): void {
     this.refreshCameras();
+    // Pre-check the box if this employee already has valid consent on file
+    // (e.g. re-taking photos after an earlier enrollment) so admin doesn't
+    // have to re-confirm something already recorded.
+    this.employeeService.getConsent(this.data.employeeId).subscribe({
+      next: (status) => this.consentChecked.set(status.hasConsent),
+      error: () => {},
+    });
   }
 
   ngOnDestroy(): void {
@@ -105,6 +115,10 @@ export class FaceEnrollDialogComponent implements AfterViewInit, OnDestroy {
   }
 
   async startCamera(): Promise<void> {
+    if (!this.consentChecked()) {
+      this.setStatus('กรุณายืนยันความยินยอมในการเก็บข้อมูลใบหน้าก่อนเริ่มกล้อง', 'warn');
+      return;
+    }
     this.setStatus('กำลังโหลดโมเดล AI...', 'scanning');
     try {
       await this.facePipeline.loadModels();
@@ -168,6 +182,12 @@ export class FaceEnrollDialogComponent implements AfterViewInit, OnDestroy {
     this.saving.set(true);
     this.setStatus('กำลังบันทึกใบหน้า 3 ภาพ...', 'scanning');
     try {
+      // Record consent every time enrollment is saved — a fresh, timestamped
+      // confirmation rather than relying solely on a possibly-stale earlier
+      // record. Extra grant rows are harmless (latest one governs status).
+      await new Promise<void>((resolve, reject) => {
+        this.employeeService.recordConsent(this.data.employeeId).subscribe({ next: () => resolve(), error: (e) => reject(e) });
+      });
       await new Promise<void>((resolve, reject) => {
         this.employeeService.clearFaces(this.data.employeeId).subscribe({ next: () => resolve(), error: (e) => reject(e) });
       });

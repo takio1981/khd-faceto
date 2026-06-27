@@ -5,6 +5,7 @@ import { pool } from '../db';
 import { asyncHandler } from '../middleware/errorHandler';
 import { verifyJWT, requireRole } from '../middleware/auth';
 import { invalidateFaceCache } from '../services/faceCache';
+import { getConsentStatus, recordConsent, withdrawConsent } from '../services/consent.service';
 
 const router = Router();
 
@@ -109,11 +110,40 @@ router.delete('/:id', asyncHandler(async (req, res) => {
   res.json({ ok: true });
 }));
 
+// ---- PDPA consent (มาตรา 26 — face data is sensitive/biometric data) ----
+
+// GET /api/employees/:id/consent
+router.get('/:id/consent', asyncHandler(async (req, res) => {
+  res.json(await getConsentStatus(Number(req.params.id)));
+}));
+
+// POST /api/employees/:id/consent - record that the employee has given explicit
+// consent (in person; an admin/HR staff records it on their behalf)
+router.post('/:id/consent', asyncHandler(async (req, res) => {
+  await recordConsent(Number(req.params.id), req.user!.sub ?? null);
+  res.status(201).json(await getConsentStatus(Number(req.params.id)));
+}));
+
+// DELETE /api/employees/:id/consent - withdraw consent. Also wipes any
+// already-collected face data, since there's no remaining legal basis to
+// keep it once consent is withdrawn (PDPA มาตรา 30-36 right to withdraw).
+router.delete('/:id/consent', asyncHandler(async (req, res) => {
+  await withdrawConsent(Number(req.params.id), req.user!.sub ?? null);
+  await pool.query<ResultSetHeader>('DELETE FROM face_descriptors WHERE employee_id = ?', [req.params.id]);
+  invalidateFaceCache();
+  res.json(await getConsentStatus(Number(req.params.id)));
+}));
+
 // POST /api/employees/:id/face  - enroll a descriptor (128 floats) + optional thumbnail (base64 JPEG)
 router.post('/:id/face', asyncHandler(async (req, res) => {
   const { descriptor, thumbnail } = req.body ?? {};
   if (!Array.isArray(descriptor) || descriptor.length !== 128) {
     res.status(400).json({ error: 'descriptor ต้องเป็น array ขนาด 128' });
+    return;
+  }
+  const consent = await getConsentStatus(Number(req.params.id));
+  if (!consent.hasConsent) {
+    res.status(403).json({ error: 'ต้องบันทึกความยินยอม (consent) ของพนักงานก่อนเก็บข้อมูลใบหน้า' });
     return;
   }
   await pool.query<ResultSetHeader>(

@@ -7,6 +7,14 @@
     (ไม่ต้องถอดแว่น ยกเว้นแว่นกันแดด/แว่นเลนส์เข้ม)
   </p>
 
+  <div class="consent-box">
+    <mat-checkbox [checked]="consentChecked()" (change)="consentChecked.set($event.checked)">
+      พนักงานได้รับทราบและ<strong>ยินยอมโดยชัดแจ้ง</strong>ให้เก็บและประมวลผลข้อมูลใบหน้า
+      (ข้อมูลชีวมาตร) เพื่อใช้ลงเวลาปฏิบัติงาน ตาม
+      <a routerLink="/privacy" target="_blank">ประกาศความเป็นส่วนตัว</a>
+    </mat-checkbox>
+  </div>
+
   <div class="cam-controls">
     <mat-form-field appearance="outline">
       <mat-label>🎥 เลือกกล้อง</mat-label>
@@ -59,7 +67,7 @@
   <button mat-button type="button" (click)="resetShots()">เริ่มถ่ายใหม่</button>
 
   @if (!cameraStarted()) {
-    <button mat-flat-button color="primary" type="button" (click)="startCamera()">เริ่มกล้อง</button>
+    <button mat-flat-button color="primary" type="button" [disabled]="!consentChecked()" (click)="startCamera()">เริ่มกล้อง</button>
   } @else if (capturedCount < 3) {
     <button mat-flat-button color="primary" type="button" [disabled]="capturing()" (click)="capture()">
       📷 ถ่ายภาพที่ {{ capturedCount + 1 }}

@@ -141,6 +141,27 @@ export class EmployeesComponent implements OnInit {
     });
   }
 
+  // PDPA: withdrawing consent also wipes any already-collected face data
+  // server-side (no remaining legal basis to keep it — see employee.routes.ts).
+  async withdrawConsent(emp: Employee): Promise<void> {
+    const ok = await this.notify.confirm({
+      title: 'ยืนยันการเพิกถอนความยินยอม',
+      message: `เพิกถอนความยินยอมการเก็บข้อมูลใบหน้าของ "${emp.full_name}"? ระบบจะลบข้อมูลใบหน้าที่บันทึกไว้ทั้งหมด พนักงานจะลงเวลาด้วยการสแกนหน้าไม่ได้จนกว่าจะให้ความยินยอมใหม่`,
+      confirmText: 'เพิกถอนและลบข้อมูลใบหน้า',
+      cancelText: 'ยกเลิก',
+      danger: true,
+    });
+    if (!ok) return;
+
+    this.employeeService.withdrawConsent(emp.id).subscribe({
+      next: () => {
+        this.notify.toast('เพิกถอนความยินยอมและลบข้อมูลใบหน้าแล้ว', 'success');
+        this.loadEmployees();
+      },
+      error: (err) => this.notify.toast(err.error?.error || 'ดำเนินการไม่สำเร็จ', 'error'),
+    });
+  }
+
   openFaceGallery(emp: Employee): void {
     const ref = this.dialog.open(FaceGalleryDialogComponent, {
       width: '640px',

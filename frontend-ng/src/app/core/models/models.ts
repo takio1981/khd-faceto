@@ -48,6 +48,13 @@ export interface FaceRecord {
   created_at?: string;
 }
 
+export interface ConsentStatus {
+  hasConsent: boolean;
+  consentVersion: string | null;
+  consentedAt: string | null;
+  withdrawnAt: string | null;
+}
+
 export interface Shift {
   id: number;
   name: string;

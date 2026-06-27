@@ -12,6 +12,10 @@ export const routes: Routes = [
     loadComponent: () => import('./features/checkin/checkin.component').then((m) => m.CheckinComponent),
   },
   {
+    path: 'privacy',
+    loadComponent: () => import('./features/privacy/privacy.component').then((m) => m.PrivacyComponent),
+  },
+  {
     path: '',
     component: AppShellComponent,
     canActivate: [authGuard],
