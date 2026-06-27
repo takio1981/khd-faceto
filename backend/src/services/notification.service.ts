@@ -1,7 +1,8 @@
 import nodemailer from 'nodemailer';
 import { pool } from '../db';
 import { RowDataPacket, ResultSetHeader } from 'mysql2';
-import { ictDateKey, ictSecondsSinceMidnight } from '../utils/ict';
+import { ictDateKey, ictSecondsSinceMidnight, isWeekendDateKey } from '../utils/ict';
+import { isHoliday } from './holidays.service';
 
 export type NotifyEventType = 'late' | 'absent' | 'success';
 
@@ -229,6 +230,10 @@ export function notifyScan(employeeId: number, status: string, message: string):
 async function runAbsentCheck(): Promise<void> {
   const now = new Date();
   const today = ictDateKey(now);
+
+  // Nobody is expected to check in on a weekend or declared holiday — skip
+  // the whole check rather than flagging the entire active staff as absent.
+  if (isWeekendDateKey(today) || (await isHoliday(today))) return;
 
   const nowSec = ictSecondsSinceMidnight(now);
   const [shifts] = await pool.query<RowDataPacket[]>('SELECT id, checkout_end FROM shifts');

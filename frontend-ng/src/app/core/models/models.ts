@@ -100,6 +100,7 @@ export interface DashboardSummary {
   counts: { on_time: number; late: number; absent: number; ot: number };
   totalEmployees: number;
   present: number;
+  isNonWorkday: boolean;
   weekly: { d: string; on_time: number; late: number }[];
   employeeHistory: { d: string; first_checkin: string; status: AttendanceStatus }[];
 }
@@ -109,6 +110,12 @@ export interface ScanLocation {
   name: string;
   latitude: number;
   longitude: number;
+}
+
+export interface Holiday {
+  id: number;
+  holiday_date: string; // YYYY-MM-DD
+  name: string;
 }
 
 export interface SettingsResponse {

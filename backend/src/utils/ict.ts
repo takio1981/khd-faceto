@@ -39,6 +39,23 @@ export function ictDateKey(d: Date): string {
   return `${p.year}-${pad(p.month)}-${pad(p.day)}`;
 }
 
+// True for Saturday/Sunday, ICT wall-clock time. Government offices here
+// work Mon-Fri, so weekends are treated as universal non-work days (unlike
+// public holidays, which are looked up per-date via the `holidays` table).
+export function ictIsWeekend(d: Date): boolean {
+  const ict = new Date(d.getTime() + ICT_OFFSET_MS);
+  const day = ict.getUTCDay(); // 0 = Sunday, 6 = Saturday
+  return day === 0 || day === 6;
+}
+
+// Same check, but for a 'YYYY-MM-DD' calendar-day key (no time component,
+// so no timezone math needed — the date is already the intended calendar day).
+export function isWeekendDateKey(dateKey: string): boolean {
+  const [y, m, d] = dateKey.split('-').map(Number);
+  const day = new Date(Date.UTC(y, m - 1, d)).getUTCDay();
+  return day === 0 || day === 6;
+}
+
 // 'YYYY-MM-DD HH:MM:SS' for MySQL DATETIME, ICT wall-clock time.
 export function ictMysqlDateTime(d: Date): string {
   const p = ictParts(d);

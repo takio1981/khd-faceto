@@ -47,6 +47,19 @@
   text-align: center;
 }
 
+.holiday-banner {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background: var(--brand-primary-light);
+  color: var(--brand-primary-dark);
+  border-radius: var(--radius-sm);
+  padding: 10px 14px;
+  margin-bottom: 14px;
+  font-weight: 600;
+  font-size: 13.5px;
+}
+
 .stat-grid {
   display: grid;
   grid-template-columns: repeat(4, 1fr);

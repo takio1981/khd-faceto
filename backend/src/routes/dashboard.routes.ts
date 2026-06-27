@@ -3,6 +3,8 @@ import { RowDataPacket } from 'mysql2';
 import { pool } from '../db';
 import { asyncHandler } from '../middleware/errorHandler';
 import { verifyJWT } from '../middleware/auth';
+import { isWeekendDateKey } from '../utils/ict';
+import { isHoliday } from '../services/holidays.service';
 
 const router = Router();
 
@@ -47,7 +49,10 @@ router.get('/summary', verifyJWT, asyncHandler(async (req, res) => {
   );
   const totalEmployees = empRows[0].total as number;
   const present = counts.on_time + counts.late;
-  counts.absent = Math.max(0, totalEmployees - present);
+  // Nobody is expected to check in on a non-workday — don't count the whole
+  // staff as "absent" just because it's a weekend or a declared holiday.
+  const isNonWorkday = isWeekendDateKey(date) || (await isHoliday(date));
+  counts.absent = isNonWorkday ? 0 : Math.max(0, totalEmployees - present);
 
   // --- Weekly trend: last 7 days, on_time vs late ---
   const weeklyParams: any[] = [];
@@ -89,6 +94,7 @@ router.get('/summary', verifyJWT, asyncHandler(async (req, res) => {
     counts,
     totalEmployees,
     present,
+    isNonWorkday,
     weekly: weekRows,
     employeeHistory,
   });

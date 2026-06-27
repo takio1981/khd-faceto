@@ -14,9 +14,10 @@ import { MatSlideToggleModule } from '@angular/material/slide-toggle';
 import { NotificationService } from '../../core/services/notification.service';
 import { NotifyService } from '../../core/services/notify.service';
 import { ScanLocationService } from '../../core/services/scan-location.service';
+import { HolidayService } from '../../core/services/holiday.service';
 import { patchLeafletDefaultIcon } from '../../shared/utils/leaflet-icon-fix';
 import { SettingsService } from '../../core/services/settings.service';
-import { NotificationSettings, ScanLocation } from '../../core/models/models';
+import { Holiday, NotificationSettings, ScanLocation } from '../../core/models/models';
 
 declare const L: any;
 
@@ -49,6 +50,7 @@ export class SettingsComponent implements OnInit, AfterViewInit {
   private fb = inject(FormBuilder);
   private settingsService = inject(SettingsService);
   private scanLocationService = inject(ScanLocationService);
+  private holidayService = inject(HolidayService);
   private notificationService = inject(NotificationService);
   private notify = inject(NotifyService);
 
@@ -73,6 +75,15 @@ export class SettingsComponent implements OnInit, AfterViewInit {
   private map: any;
   private pendingMarker: any;
   private readonly markersById = new Map<number, any>();
+
+  // ===== 2b. Holiday calendar =====
+  readonly holidayForm = this.fb.group({
+    holiday_date: ['', Validators.required],
+    name: ['', Validators.required],
+  });
+  holidays: Holiday[] = [];
+  holidaySaving = false;
+  holidayYear = new Date().getFullYear();
 
   // ===== 3. Notifications =====
   readonly notifForm = this.fb.group({
@@ -128,6 +139,7 @@ export class SettingsComponent implements OnInit, AfterViewInit {
   ngAfterViewInit(): void {
     this.initMap();
     this.loadLocations();
+    this.loadHolidays();
   }
 
   // ---- 1. Login security ----
@@ -282,6 +294,58 @@ export class SettingsComponent implements OnInit, AfterViewInit {
         this.locationSaving = false;
         this.notify.toast(err.error?.error || 'บันทึกไม่สำเร็จ', 'error');
       },
+    });
+  }
+
+  // ---- 2b. Holiday calendar ----
+
+  loadHolidays(): void {
+    this.holidayService.list(this.holidayYear).subscribe({
+      next: (rows) => (this.holidays = rows),
+      error: () => this.notify.toast('โหลดปฏิทินวันหยุดไม่สำเร็จ', 'error'),
+    });
+  }
+
+  onHolidayYearChange(): void {
+    this.loadHolidays();
+  }
+
+  saveHoliday(): void {
+    if (this.holidayForm.invalid) {
+      this.holidayForm.markAllAsTouched();
+      return;
+    }
+    const v = this.holidayForm.getRawValue();
+    this.holidaySaving = true;
+    this.holidayService.create({ holiday_date: v.holiday_date!, name: v.name!.trim() }).subscribe({
+      next: () => {
+        this.holidaySaving = false;
+        this.holidayForm.reset({ holiday_date: '', name: '' });
+        this.notify.toast('เพิ่มวันหยุดเรียบร้อยแล้ว', 'success');
+        this.loadHolidays();
+      },
+      error: (err: any) => {
+        this.holidaySaving = false;
+        this.notify.toast(err.error?.error || 'บันทึกไม่สำเร็จ', 'error');
+      },
+    });
+  }
+
+  async deleteHoliday(h: Holiday): Promise<void> {
+    const ok = await this.notify.confirm({
+      title: 'ยืนยันการลบ',
+      message: `ลบวันหยุด "${h.name}" (${h.holiday_date}) นี้?`,
+      confirmText: 'ลบ',
+      cancelText: 'ยกเลิก',
+      danger: true,
+    });
+    if (!ok) return;
+    this.holidayService.delete(h.id).subscribe({
+      next: () => {
+        this.notify.toast('ลบวันหยุดเรียบร้อยแล้ว', 'success');
+        this.loadHolidays();
+      },
+      error: (err: any) => this.notify.toast(err.error?.error || 'ลบไม่สำเร็จ', 'error'),
     });
   }
 

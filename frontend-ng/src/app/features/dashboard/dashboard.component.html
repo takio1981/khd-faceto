@@ -47,6 +47,13 @@
   }
 
   @if (summary() && !loading()) {
+    @if (summary()!.isNonWorkday) {
+      <div class="holiday-banner">
+        <mat-icon>event_busy</mat-icon>
+        วันนี้เป็นวันหยุด — ไม่นับ "ขาดงาน" สำหรับวันที่เลือก
+      </div>
+    }
+
     <div class="stat-grid">
       <mat-card class="stat-card stat-on-time">
         <div class="stat-label">เข้างานตรงเวลา</div>

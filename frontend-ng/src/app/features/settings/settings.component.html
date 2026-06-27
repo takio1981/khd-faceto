@@ -85,6 +85,48 @@
     </div>
   </mat-card>
 
+  <!-- 2b. Holiday calendar -->
+  <mat-card class="section-card">
+    <h2>📅 ปฏิทินวันหยุด</h2>
+    <p class="muted">วันหยุดที่ตั้งไว้ที่นี่ (รวมกับวันเสาร์-อาทิตย์โดยอัตโนมัติ) จะไม่ถูกนับเป็น "ขาดงาน" ในแดชบอร์ดและไม่ส่งแจ้งเตือนขาดงาน</p>
+
+    <form [formGroup]="holidayForm" class="form-grid two-col">
+      <mat-form-field appearance="outline">
+        <mat-label>วันที่</mat-label>
+        <input matInput type="date" formControlName="holiday_date" />
+      </mat-form-field>
+      <mat-form-field appearance="outline">
+        <mat-label>ชื่อวันหยุด</mat-label>
+        <input matInput formControlName="name" placeholder="เช่น วันสงกรานต์" />
+      </mat-form-field>
+    </form>
+
+    <div class="actions-row">
+      <button mat-flat-button color="primary" [disabled]="holidaySaving" (click)="saveHoliday()">เพิ่มวันหยุด</button>
+    </div>
+
+    <mat-form-field appearance="outline" class="year-field">
+      <mat-label>ปี</mat-label>
+      <input matInput type="number" [(ngModel)]="holidayYear" (ngModelChange)="onHolidayYearChange()" />
+    </mat-form-field>
+
+    <div class="loc-list">
+      @for (h of holidays; track h.id) {
+        <div class="loc-item">
+          <div class="loc-info">
+            <div class="loc-name">{{ h.name }}</div>
+            <div class="loc-coords muted">{{ h.holiday_date }}</div>
+          </div>
+          <div class="loc-actions">
+            <button mat-stroked-button color="warn" type="button" (click)="deleteHoliday(h)">ลบ</button>
+          </div>
+        </div>
+      } @empty {
+        <div class="empty-state muted">ยังไม่มีวันหยุดที่ตั้งไว้สำหรับปีนี้</div>
+      }
+    </div>
+  </mat-card>
+
   <!-- 3. Notifications -->
   <mat-card class="section-card" [formGroup]="notifForm">
     <h2 class="section-title">🔔 ตั้งค่าการแจ้งเตือน</h2>
