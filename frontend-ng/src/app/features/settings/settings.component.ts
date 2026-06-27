@@ -94,6 +94,7 @@ export class SettingsComponent implements OnInit, AfterViewInit {
   holidays: Holiday[] = [];
   holidaySaving = false;
   holidayYear = new Date().getFullYear();
+  editingHolidayId: number | null = null;
   readonly holidayColumns: TableColumn[] = [
     { key: 'holiday_date', label: 'วันที่' },
     { key: 'name', label: 'ชื่อวันหยุด' },
@@ -190,6 +191,19 @@ export class SettingsComponent implements OnInit, AfterViewInit {
     this.loadLocations();
     this.loadHolidays();
     this.loadAuditLog();
+  }
+
+  // Leaflet computes its tile layout from the container's size at the
+  // moment .invalidateSize() runs. The "จุดสแกนใบหน้า" tab (index 1) is
+  // hidden behind another active tab when the map first initializes, so it
+  // sees a 0×0 container and never recovers on its own — re-measure every
+  // time that tab becomes the active one.
+  private static readonly SCAN_LOCATIONS_TAB_INDEX = 1;
+
+  onTabChange(event: { index: number }): void {
+    if (event.index === SettingsComponent.SCAN_LOCATIONS_TAB_INDEX && this.map) {
+      setTimeout(() => this.map.invalidateSize(), 0);
+    }
   }
 
   // ---- 1. Login security ----
@@ -360,18 +374,32 @@ export class SettingsComponent implements OnInit, AfterViewInit {
     this.loadHolidays();
   }
 
+  editHoliday(h: Holiday): void {
+    this.editingHolidayId = h.id;
+    this.holidayForm.patchValue({ holiday_date: h.holiday_date, name: h.name });
+  }
+
+  cancelEditHoliday(): void {
+    this.editingHolidayId = null;
+    this.holidayForm.reset({ holiday_date: '', name: '' });
+  }
+
   saveHoliday(): void {
     if (this.holidayForm.invalid) {
       this.holidayForm.markAllAsTouched();
       return;
     }
     const v = this.holidayForm.getRawValue();
+    const body = { holiday_date: v.holiday_date!, name: v.name!.trim() };
     this.holidaySaving = true;
-    this.holidayService.create({ holiday_date: v.holiday_date!, name: v.name!.trim() }).subscribe({
+    const obs: Observable<unknown> = this.editingHolidayId
+      ? this.holidayService.update(this.editingHolidayId, body)
+      : this.holidayService.create(body);
+    obs.subscribe({
       next: () => {
         this.holidaySaving = false;
-        this.holidayForm.reset({ holiday_date: '', name: '' });
-        this.notify.toast('เพิ่มวันหยุดเรียบร้อยแล้ว', 'success');
+        this.notify.toast(this.editingHolidayId ? 'บันทึกการแก้ไขเรียบร้อยแล้ว' : 'เพิ่มวันหยุดเรียบร้อยแล้ว', 'success');
+        this.cancelEditHoliday();
         this.loadHolidays();
       },
       error: (err: any) => {
@@ -392,6 +420,7 @@ export class SettingsComponent implements OnInit, AfterViewInit {
     if (!ok) return;
     this.holidayService.delete(h.id).subscribe({
       next: () => {
+        if (this.editingHolidayId === h.id) this.cancelEditHoliday();
         this.notify.toast('ลบวันหยุดเรียบร้อยแล้ว', 'success');
         this.loadHolidays();
       },

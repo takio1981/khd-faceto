@@ -1,7 +1,7 @@
 import { Router } from 'express';
 import { asyncHandler } from '../middleware/errorHandler';
 import { verifyJWT, requireRole } from '../middleware/auth';
-import { listHolidays, createHoliday, deleteHoliday } from '../services/holidays.service';
+import { listHolidays, createHoliday, updateHoliday, deleteHoliday } from '../services/holidays.service';
 
 const router = Router();
 
@@ -28,6 +28,24 @@ router.post('/', verifyJWT, requireRole('admin'), asyncHandler(async (req, res) 
   try {
     const id = await createHoliday(parsed.holidayDate, parsed.name);
     res.status(201).json({ id, holiday_date: parsed.holidayDate, name: parsed.name });
+  } catch (err: any) {
+    if (err && err.code === 'ER_DUP_ENTRY') {
+      res.status(409).json({ error: 'มีวันหยุดของวันนี้อยู่แล้ว' });
+      return;
+    }
+    throw err;
+  }
+}));
+
+router.put('/:id', verifyJWT, requireRole('admin'), asyncHandler(async (req, res) => {
+  const parsed = parseHolidayBody(req.body);
+  if (!parsed) {
+    res.status(400).json({ error: 'กรุณากรอกวันที่ (YYYY-MM-DD) และชื่อวันหยุดให้ถูกต้อง' });
+    return;
+  }
+  try {
+    await updateHoliday(Number(req.params.id), parsed.holidayDate, parsed.name);
+    res.json({ id: Number(req.params.id), holiday_date: parsed.holidayDate, name: parsed.name });
   } catch (err: any) {
     if (err && err.code === 'ER_DUP_ENTRY') {
       res.status(409).json({ error: 'มีวันหยุดของวันนี้อยู่แล้ว' });

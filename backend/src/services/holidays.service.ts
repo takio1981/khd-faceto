@@ -33,6 +33,10 @@ export async function createHoliday(holidayDate: string, name: string): Promise<
   return result.insertId;
 }
 
+export async function updateHoliday(id: number, holidayDate: string, name: string): Promise<void> {
+  await pool.query('UPDATE holidays SET holiday_date = ?, name = ? WHERE id = ?', [holidayDate, name, id]);
+}
+
 export async function deleteHoliday(id: number): Promise<void> {
   await pool.query('DELETE FROM holidays WHERE id = ?', [id]);
 }

@@ -18,6 +18,10 @@ export class HolidayService {
     return this.http.post<Holiday>(base, body);
   }
 
+  update(id: number, body: { holiday_date: string; name: string }): Observable<Holiday> {
+    return this.http.put<Holiday>(`${base}/${id}`, body);
+  }
+
   delete(id: number): Observable<{ ok: boolean }> {
     return this.http.delete<{ ok: boolean }>(`${base}/${id}`);
   }
