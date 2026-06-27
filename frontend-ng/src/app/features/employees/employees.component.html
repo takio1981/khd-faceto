@@ -16,7 +16,10 @@
     <ng-template #desktopRow let-emp>
       <tr>
         <td>{{ emp.employee_code }}</td>
-        <td>{{ emp.full_name }}</td>
+        <td>
+          {{ emp.full_name }}
+          <div class="emp-type-tag muted">{{ employeeTypeText(emp.employee_type) }}</div>
+        </td>
         <td>{{ emp.department || '-' }}</td>
         <td>{{ emp.supervisor_name || '-' }}</td>
         <td>{{ emp.shift_name || '-' }}</td>
@@ -58,6 +61,7 @@
 
     <ng-template #cardRow let-emp>
       <div class="card-title">{{ emp.employee_code }} — {{ emp.full_name }}</div>
+      <div class="card-field"><span>ประเภทบุคลากร:</span> {{ employeeTypeText(emp.employee_type) }}</div>
       <div class="card-field"><span>แผนก:</span> {{ emp.department || '-' }}</div>
       <div class="card-field"><span>ตำแหน่ง:</span> {{ emp.position || '-' }}</div>
       <div class="card-field"><span>ผู้บังคับบัญชา:</span> {{ emp.supervisor_name || '-' }}</div>

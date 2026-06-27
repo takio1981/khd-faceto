@@ -57,11 +57,18 @@ export class EmployeeFormDialogComponent implements OnInit {
     (e) => e.is_active && e.id !== this.data.employee?.id
   );
 
+  readonly employeeTypeOptions: { value: string; label: string }[] = [
+    { value: 'civil_servant', label: 'ข้าราชการ' },
+    { value: 'government_employee', label: 'พนักงานราชการ' },
+    { value: 'temp_employee', label: 'ลูกจ้าง' },
+  ];
+
   readonly form = this.fb.group({
     employee_code: ['', Validators.required],
     full_name: ['', Validators.required],
     department: [''],
     position: [''],
+    employee_type: ['temp_employee'],
     shift_id: [null as number | null],
     supervisor_id: [null as number | null],
     is_active: [true],
@@ -85,6 +92,7 @@ export class EmployeeFormDialogComponent implements OnInit {
         full_name: e.full_name,
         department: e.department || '',
         position: e.position || '',
+        employee_type: e.employee_type || 'temp_employee',
         shift_id: e.shift_id,
         supervisor_id: e.supervisor_id ?? null,
         is_active: !!e.is_active,
@@ -111,6 +119,7 @@ export class EmployeeFormDialogComponent implements OnInit {
       full_name: (v.full_name || '').trim(),
       department: (v.department || '').trim(),
       position: (v.position || '').trim(),
+      employee_type: (v.employee_type as Employee['employee_type']) || 'temp_employee',
       shift_id: v.shift_id || null,
       supervisor_id: v.supervisor_id || null,
       notify_enabled: !!v.notify_enabled,

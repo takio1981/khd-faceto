@@ -25,6 +25,7 @@ export interface ReportRow {
   employee_code: string;
   full_name: string;
   department: string | null;
+  employee_type: string;
   scan_time: string;
   scan_type: string;
   status: string;
@@ -58,6 +59,7 @@ export async function fetchReportRows(type: ReportType, q: any): Promise<{ rows:
   if (q.status)     { extra.push('ar.status = ?'); params.push(q.status); }
   if (q.scanType)   { extra.push('ar.scan_type = ?'); params.push(q.scanType); }
   if (q.department) { extra.push('e.department = ?'); params.push(q.department); }
+  if (q.employeeType) { extra.push('e.employee_type = ?'); params.push(q.employeeType); }
   if (q.search) {
     extra.push('(e.full_name LIKE ? OR e.employee_code LIKE ? OR e.department LIKE ?)');
     const kw = `%${q.search}%`;
@@ -66,7 +68,7 @@ export async function fetchReportRows(type: ReportType, q: any): Promise<{ rows:
   const whereSql = [where, ...extra].join(' AND ');
 
   const [rows] = await pool.query<RowDataPacket[]>(
-    `SELECT e.employee_code, e.full_name, e.department,
+    `SELECT e.employee_code, e.full_name, e.department, e.employee_type,
             ar.scan_time, ar.scan_type, ar.status, sl.name AS scan_location_name
        FROM attendance_records ar
        JOIN employees e ON e.id = ar.employee_id

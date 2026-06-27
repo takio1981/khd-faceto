@@ -60,6 +60,16 @@ export class EmployeesComponent implements OnInit {
 
   trackById = (_: number, e: Employee) => e.id;
 
+  private readonly employeeTypeLabel: Record<string, string> = {
+    civil_servant: 'ข้าราชการ',
+    government_employee: 'พนักงานราชการ',
+    temp_employee: 'ลูกจ้าง',
+  };
+
+  employeeTypeText(type: Employee['employee_type']): string {
+    return type ? this.employeeTypeLabel[type] || type : '-';
+  }
+
   loadShifts(): void {
     this.shiftService.list().subscribe({
       next: (shifts) => this.shifts.set(shifts),

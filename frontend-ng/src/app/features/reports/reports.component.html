@@ -61,6 +61,16 @@
         </mat-form-field>
 
         <mat-form-field appearance="outline">
+          <mat-label>ประเภทบุคลากร</mat-label>
+          <mat-select [ngModel]="employeeType()" (ngModelChange)="employeeType.set($event)">
+            <mat-option value="">ทั้งหมด</mat-option>
+            @for (t of employeeTypeOptions; track t.value) {
+              <mat-option [value]="t.value">{{ t.label }}</mat-option>
+            }
+          </mat-select>
+        </mat-form-field>
+
+        <mat-form-field appearance="outline">
           <mat-label>ประเภท</mat-label>
           <mat-select [ngModel]="scanType()" (ngModelChange)="scanType.set($event)">
             <mat-option value="">ทั้งหมด</mat-option>

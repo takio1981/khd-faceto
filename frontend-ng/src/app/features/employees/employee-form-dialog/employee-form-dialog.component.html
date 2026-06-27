@@ -24,6 +24,15 @@
       </mat-form-field>
 
       <mat-form-field appearance="outline">
+        <mat-label>ประเภทบุคลากร</mat-label>
+        <mat-select formControlName="employee_type">
+          @for (t of employeeTypeOptions; track t.value) {
+            <mat-option [value]="t.value">{{ t.label }}</mat-option>
+          }
+        </mat-select>
+      </mat-form-field>
+
+      <mat-form-field appearance="outline">
         <mat-label>กะการทำงาน</mat-label>
         <mat-select formControlName="shift_id">
           <mat-option [value]="null">— ไม่ระบุ —</mat-option>

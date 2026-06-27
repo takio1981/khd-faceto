@@ -17,6 +17,7 @@ export interface Employee {
   shift_name?: string | null;
   supervisor_id?: number | null;
   supervisor_name?: string | null;
+  employee_type?: 'civil_servant' | 'government_employee' | 'temp_employee';
   is_active: 0 | 1;
   face_count?: number;
   notify_email?: string | null;
@@ -30,6 +31,7 @@ export interface EmployeeCreateRequest {
   full_name: string;
   department?: string | null;
   position?: string | null;
+  employee_type?: 'civil_servant' | 'government_employee' | 'temp_employee';
   shift_id?: number | null;
   supervisor_id?: number | null;
   notify_email?: string | null;

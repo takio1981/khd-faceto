@@ -43,10 +43,17 @@ const LABELS_TH: Record<string, string> = {
   employee_code: 'รหัส',
   full_name: 'ชื่อ-นามสกุล',
   department: 'แผนก',
+  employee_type: 'ประเภทบุคลากร',
   scan_time: 'วันที่/เวลา',
   scan_type: 'ประเภท',
   status: 'สถานะ',
   scan_location_name: 'จุดสแกน',
+};
+
+const EMPLOYEE_TYPE_TH: Record<string, string> = {
+  civil_servant: 'ข้าราชการ',
+  government_employee: 'พนักงานราชการ',
+  temp_employee: 'ลูกจ้าง',
 };
 
 @Component({
@@ -79,6 +86,8 @@ export class ReportsComponent implements OnInit {
   readonly month = signal<number>(new Date().getMonth() + 1);
 
   readonly department = signal<string>('');
+  readonly employeeType = signal<string>('');
+  readonly employeeTypeOptions = Object.entries(EMPLOYEE_TYPE_TH).map(([value, label]) => ({ value, label }));
   readonly scanType = signal<string>('');
   readonly status = signal<string>('');
   readonly search = signal<string>('');
@@ -130,6 +139,7 @@ export class ReportsComponent implements OnInit {
       params['year'] = this.year();
     }
     if (this.department()) params['department'] = this.department();
+    if (this.employeeType()) params['employeeType'] = this.employeeType();
     if (this.scanType()) params['scanType'] = this.scanType();
     if (this.status()) params['status'] = this.status();
     if (this.search().trim()) params['search'] = this.search().trim();
@@ -172,6 +182,7 @@ export class ReportsComponent implements OnInit {
     if (key === 'scan_time') return this.formatDateTime(value);
     if (key === 'scan_type') return SCANTYPE_TH[value] || value;
     if (key === 'status') return STATUS_TH[value] || value;
+    if (key === 'employee_type') return EMPLOYEE_TYPE_TH[value] || value;
     return String(value);
   }
 
