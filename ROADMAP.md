@@ -28,11 +28,11 @@
   - หน้า Employees: ปุ่ม "เพิกถอนความยินยอม" (แสดงเมื่อมีข้อมูลใบหน้าอยู่) — ยืนยันก่อนลบ
   - ⚠️ **ระหว่างทดสอบ API ได้ลบข้อมูลใบหน้าจริงของพนักงานรหัส 001 (ทีร์ฆะ ติรัตนะ) ไปโดยไม่ตั้งใจ — ต้องลงทะเบียนใบหน้าใหม่ให้คนนี้**
 
-- [ ] **A3. Audit log การกระทำของ admin**
-  ไม่มี log ว่าใครแก้/ลบ attendance, เปลี่ยน setting, ดูภาพใบหน้าใคร — เสี่ยงทั้ง PDPA และ พ.ร.บ.คอมพิวเตอร์ (สอบสวนเหตุไม่ได้)
-  - ตาราง `audit_log` (user_id, action, target_table, target_id, before/after JSON, ip, created_at)
-  - เขียน log ในทุก mutation route ของ admin (employee/shift/settings/attendance edit-delete, ดูภาพใบหน้า)
-  - หน้า Settings → ดู audit log (admin only, filter ตามวันที่/ผู้ใช้/ประเภทการกระทำ)
+- [x] **A3. Audit log การกระทำของ admin** — เสร็จ 2026-06-27
+  - ตาราง `audit_log` (migration `017_create_audit_log.sql`) — user_id, username (denormalized), action, target_table/id, before/after JSON, ip, created_at
+  - `audit.service.ts` (`logAudit()` helper) เรียกใช้ใน mutation routes: employee (update/deactivate/consent grant-withdraw), attendance (update/delete/**ดูภาพใบหน้า**), shift (create/update/delete), settings (update), scan-locations (create/update/delete), notification settings (update — ไม่บันทึก payload เพราะมีรหัสผ่าน/token)
+  - หน้า Settings → แท็บ "📋 ประวัติการใช้งาน" — ค้นหาตามผู้ใช้, แสดง before/after แบบ tooltip, pagination
+  - ทดสอบแล้ว: เรียก API จริงแล้วเห็น log ถูกบันทึกพร้อม user/action/IP/after-data ครบถ้วน
 
 - [ ] **A4. นโยบายเก็บ/ลบข้อมูล (data retention) + Backup**
   - กำหนดระยะเวลาเก็บภาพใบหน้า/ประวัติสแกน (เช่น ตามระเบียบราชการ) + job ลบอัตโนมัติเมื่อพ้นกำหนด
@@ -81,6 +81,8 @@
 - [x] A1: ปฏิทินวันหยุด + ไม่นับขาดงานวันเสาร์-อาทิตย์/วันหยุด — 2026-06-27
 - [x] เพิ่มข้อมูลวันหยุดราชการจริง 2026-2027 (45 รายการ) จากปฏิทินสำนักเลขาธิการคณะรัฐมนตรี — 2026-06-27
 - [x] A2: ระบบ PDPA consent ก่อนเก็บข้อมูลใบหน้า + เพิกถอนความยินยอม + Privacy Notice — 2026-06-27
+- [x] ปรับหน้า Settings เป็นแท็บแยกแต่ละเรื่อง + ปฏิทินวันหยุดเป็นตาราง — 2026-06-27
+- [x] A3: Audit log การกระทำของ admin + หน้าดู log ใน Settings — 2026-06-27
 
 ---
 

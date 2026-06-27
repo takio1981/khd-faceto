@@ -2,6 +2,7 @@ import { Router } from 'express';
 import { asyncHandler } from '../middleware/errorHandler';
 import { verifyJWT, requireRole } from '../middleware/auth';
 import { getLoginSettings, setSetting } from '../services/settings.service';
+import { logAudit } from '../services/audit.service';
 
 const router = Router();
 
@@ -26,6 +27,7 @@ router.put('/', verifyJWT, requireRole('admin'), asyncHandler(async (req, res) =
 
   await setSetting('login_max_attempts', String(maxAttempts));
   await setSetting('login_lockout_minutes', String(lockoutMinutes));
+  await logAudit(req, { action: 'settings.update', targetTable: 'app_settings', after: { maxAttempts, lockoutMinutes } });
   res.json({ ok: true });
 }));
 

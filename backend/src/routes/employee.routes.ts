@@ -6,6 +6,7 @@ import { asyncHandler } from '../middleware/errorHandler';
 import { verifyJWT, requireRole } from '../middleware/auth';
 import { invalidateFaceCache } from '../services/faceCache';
 import { getConsentStatus, recordConsent, withdrawConsent } from '../services/consent.service';
+import { logAudit } from '../services/audit.service';
 
 const router = Router();
 
@@ -82,6 +83,7 @@ router.post('/', asyncHandler(async (req, res) => {
 router.put('/:id', asyncHandler(async (req, res) => {
   const { employee_code, full_name, department, position, shift_id, is_active,
           notify_email, notify_line_user_id, notify_telegram_chat_id, notify_enabled } = req.body ?? {};
+  const [beforeRows] = await pool.query<RowDataPacket[]>('SELECT * FROM employees WHERE id = ?', [req.params.id]);
   await pool.query<ResultSetHeader>(
     `UPDATE employees
         SET employee_code = ?, full_name = ?, department = ?, position = ?,
@@ -97,6 +99,13 @@ router.put('/:id', asyncHandler(async (req, res) => {
     ]
   );
   invalidateFaceCache();
+  await logAudit(req, {
+    action: 'employee.update',
+    targetTable: 'employees',
+    targetId: Number(req.params.id),
+    before: beforeRows[0],
+    after: req.body,
+  });
   res.json({ ok: true });
 }));
 
@@ -107,6 +116,7 @@ router.delete('/:id', asyncHandler(async (req, res) => {
     [req.params.id]
   );
   invalidateFaceCache();
+  await logAudit(req, { action: 'employee.deactivate', targetTable: 'employees', targetId: Number(req.params.id) });
   res.json({ ok: true });
 }));
 
@@ -121,6 +131,7 @@ router.get('/:id/consent', asyncHandler(async (req, res) => {
 // consent (in person; an admin/HR staff records it on their behalf)
 router.post('/:id/consent', asyncHandler(async (req, res) => {
   await recordConsent(Number(req.params.id), req.user!.sub ?? null);
+  await logAudit(req, { action: 'consent.grant', targetTable: 'employees', targetId: Number(req.params.id) });
   res.status(201).json(await getConsentStatus(Number(req.params.id)));
 }));
 
@@ -131,6 +142,7 @@ router.delete('/:id/consent', asyncHandler(async (req, res) => {
   await withdrawConsent(Number(req.params.id), req.user!.sub ?? null);
   await pool.query<ResultSetHeader>('DELETE FROM face_descriptors WHERE employee_id = ?', [req.params.id]);
   invalidateFaceCache();
+  await logAudit(req, { action: 'consent.withdraw', targetTable: 'employees', targetId: Number(req.params.id) });
   res.json(await getConsentStatus(Number(req.params.id)));
 }));
 

@@ -183,3 +183,23 @@ export interface RecentNotification {
 export interface ReportRow {
   [key: string]: any;
 }
+
+export interface AuditLogEntry {
+  id: number;
+  user_id: number | null;
+  username: string | null;
+  action: string;
+  target_table: string | null;
+  target_id: number | null;
+  before_data: string | null;
+  after_data: string | null;
+  ip_address: string | null;
+  created_at: string;
+}
+
+export interface AuditLogListResponse {
+  data: AuditLogEntry[];
+  total: number;
+  page: number;
+  pageSize: number;
+}

@@ -9,15 +9,20 @@ import { MatDividerModule } from '@angular/material/divider';
 import { MatFormFieldModule } from '@angular/material/form-field';
 import { MatIconModule } from '@angular/material/icon';
 import { MatInputModule } from '@angular/material/input';
+import { MatPaginatorModule, PageEvent } from '@angular/material/paginator';
 import { MatSlideToggleModule } from '@angular/material/slide-toggle';
+import { MatTabsModule } from '@angular/material/tabs';
+import { MatTooltipModule } from '@angular/material/tooltip';
 
 import { NotificationService } from '../../core/services/notification.service';
 import { NotifyService } from '../../core/services/notify.service';
 import { ScanLocationService } from '../../core/services/scan-location.service';
 import { HolidayService } from '../../core/services/holiday.service';
+import { AuditLogService } from '../../core/services/audit-log.service';
 import { patchLeafletDefaultIcon } from '../../shared/utils/leaflet-icon-fix';
 import { SettingsService } from '../../core/services/settings.service';
-import { Holiday, NotificationSettings, ScanLocation } from '../../core/models/models';
+import { AuditLogEntry, Holiday, NotificationSettings, ScanLocation } from '../../core/models/models';
+import { ResponsiveTableComponent, TableColumn } from '../../shared/components/responsive-table/responsive-table.component';
 
 declare const L: any;
 
@@ -40,6 +45,10 @@ const GMAIL_PORT = 465;
     MatSlideToggleModule,
     MatCheckboxModule,
     MatDividerModule,
+    MatTabsModule,
+    MatPaginatorModule,
+    MatTooltipModule,
+    ResponsiveTableComponent,
   ],
   templateUrl: './settings.component.html',
   styleUrl: './settings.component.scss',
@@ -51,6 +60,7 @@ export class SettingsComponent implements OnInit, AfterViewInit {
   private settingsService = inject(SettingsService);
   private scanLocationService = inject(ScanLocationService);
   private holidayService = inject(HolidayService);
+  private auditLogService = inject(AuditLogService);
   private notificationService = inject(NotificationService);
   private notify = inject(NotifyService);
 
@@ -84,6 +94,45 @@ export class SettingsComponent implements OnInit, AfterViewInit {
   holidays: Holiday[] = [];
   holidaySaving = false;
   holidayYear = new Date().getFullYear();
+  readonly holidayColumns: TableColumn[] = [
+    { key: 'holiday_date', label: 'วันที่' },
+    { key: 'name', label: 'ชื่อวันหยุด' },
+    { key: 'actions', label: 'จัดการ' },
+  ];
+  trackByHolidayId = (_: number, h: Holiday) => h.id;
+
+  // ===== 2c. Audit log =====
+  readonly auditColumns: TableColumn[] = [
+    { key: 'created_at', label: 'เวลา' },
+    { key: 'username', label: 'ผู้ใช้' },
+    { key: 'action', label: 'การกระทำ' },
+    { key: 'target', label: 'เป้าหมาย' },
+    { key: 'details', label: 'รายละเอียด' },
+  ];
+  readonly auditActionLabel: Record<string, string> = {
+    'employee.update': 'แก้ไขข้อมูลพนักงาน',
+    'employee.deactivate': 'ปิดใช้งานพนักงาน',
+    'consent.grant': 'บันทึกความยินยอม (PDPA)',
+    'consent.withdraw': 'เพิกถอนความยินยอม (PDPA)',
+    'attendance.view_image': 'ดูภาพใบหน้าในประวัติลงเวลา',
+    'attendance.update': 'แก้ไขประวัติลงเวลา',
+    'attendance.delete': 'ลบประวัติลงเวลา',
+    'shift.create': 'เพิ่มกะการทำงาน',
+    'shift.update': 'แก้ไขกะการทำงาน',
+    'shift.delete': 'ลบกะการทำงาน',
+    'settings.update': 'แก้ไขการตั้งค่าความปลอดภัย',
+    'scan_location.create': 'เพิ่มจุดสแกน',
+    'scan_location.update': 'แก้ไขจุดสแกน',
+    'scan_location.delete': 'ลบจุดสแกน',
+    'notification_settings.update': 'แก้ไขการตั้งค่าแจ้งเตือน',
+  };
+  auditLog: AuditLogEntry[] = [];
+  auditTotal = 0;
+  auditPage = 0; // zero-based for mat-paginator
+  auditPageSize = 20;
+  auditLoading = false;
+  auditUsernameFilter = '';
+  trackByAuditId = (_: number, a: AuditLogEntry) => a.id;
 
   // ===== 3. Notifications =====
   readonly notifForm = this.fb.group({
@@ -140,6 +189,7 @@ export class SettingsComponent implements OnInit, AfterViewInit {
     this.initMap();
     this.loadLocations();
     this.loadHolidays();
+    this.loadAuditLog();
   }
 
   // ---- 1. Login security ----
@@ -347,6 +397,56 @@ export class SettingsComponent implements OnInit, AfterViewInit {
       },
       error: (err: any) => this.notify.toast(err.error?.error || 'ลบไม่สำเร็จ', 'error'),
     });
+  }
+
+  // ---- 2c. Audit log ----
+
+  loadAuditLog(): void {
+    this.auditLoading = true;
+    this.auditLogService
+      .list({
+        page: this.auditPage + 1,
+        pageSize: this.auditPageSize,
+        username: this.auditUsernameFilter || undefined,
+      })
+      .subscribe({
+        next: (res) => {
+          this.auditLog = res.data;
+          this.auditTotal = res.total;
+          this.auditLoading = false;
+        },
+        error: () => {
+          this.auditLoading = false;
+          this.notify.toast('โหลดประวัติการใช้งานไม่สำเร็จ', 'error');
+        },
+      });
+  }
+
+  onAuditPage(event: PageEvent): void {
+    this.auditPage = event.pageIndex;
+    this.auditPageSize = event.pageSize;
+    this.loadAuditLog();
+  }
+
+  onAuditFilterApply(): void {
+    this.auditPage = 0;
+    this.loadAuditLog();
+  }
+
+  auditActionText(action: string): string {
+    return this.auditActionLabel[action] || action;
+  }
+
+  auditTargetText(entry: AuditLogEntry): string {
+    if (!entry.target_table) return '-';
+    return entry.target_id ? `${entry.target_table} #${entry.target_id}` : entry.target_table;
+  }
+
+  // Compact one-line diff for the table; full JSON is in the tooltip.
+  auditDetailsText(entry: AuditLogEntry): string {
+    if (entry.after_data) return entry.after_data.length > 80 ? entry.after_data.slice(0, 80) + '…' : entry.after_data;
+    if (entry.before_data) return 'ลบแล้ว';
+    return '-';
   }
 
   // ---- 3. Notifications ----

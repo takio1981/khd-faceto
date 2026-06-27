@@ -7,11 +7,43 @@
   }
 }
 
+.settings-tabs {
+  ::ng-deep .mat-mdc-tab-body-wrapper {
+    padding-top: 16px;
+  }
+}
+
 .section-card {
   max-width: 880px;
   padding: 20px 24px;
   border-radius: 14px;
   margin-bottom: 20px;
+}
+
+.holiday-table-wrap,
+.audit-table-wrap {
+  max-height: 420px;
+  overflow-y: auto;
+}
+
+.audit-card {
+  max-width: 1080px;
+}
+
+.audit-filter-field {
+  width: 220px;
+}
+
+.audit-details-cell {
+  max-width: 240px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  cursor: help;
+}
+
+.year-field {
+  width: 110px;
 }
 
 .section-title {
@@ -40,11 +72,6 @@
 
 .form-grid.two-col {
   grid-template-columns: repeat(2, minmax(0, 1fr));
-}
-
-.year-field {
-  width: 120px;
-  margin-bottom: 8px;
 }
 
 .form-grid.three-col {

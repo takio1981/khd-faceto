@@ -7,6 +7,7 @@ import {
   updateScanLocation,
   deleteScanLocation,
 } from '../services/scanLocations.service';
+import { logAudit } from '../services/audit.service';
 
 const router = Router();
 
@@ -33,6 +34,7 @@ router.post('/', verifyJWT, requireRole('admin'), asyncHandler(async (req, res) 
     return;
   }
   const id = await createScanLocation(parsed.name, parsed.latitude, parsed.longitude);
+  await logAudit(req, { action: 'scan_location.create', targetTable: 'scan_locations', targetId: id, after: parsed });
   res.json({ id, ...parsed });
 }));
 
@@ -43,11 +45,13 @@ router.put('/:id', verifyJWT, requireRole('admin'), asyncHandler(async (req, res
     return;
   }
   await updateScanLocation(Number(req.params.id), parsed.name, parsed.latitude, parsed.longitude);
+  await logAudit(req, { action: 'scan_location.update', targetTable: 'scan_locations', targetId: Number(req.params.id), after: parsed });
   res.json({ ok: true });
 }));
 
 router.delete('/:id', verifyJWT, requireRole('admin'), asyncHandler(async (req, res) => {
   await deleteScanLocation(Number(req.params.id));
+  await logAudit(req, { action: 'scan_location.delete', targetTable: 'scan_locations', targetId: Number(req.params.id) });
   res.json({ ok: true });
 }));
 

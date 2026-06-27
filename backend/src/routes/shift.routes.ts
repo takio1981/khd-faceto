@@ -4,6 +4,7 @@ import { pool } from '../db';
 import { asyncHandler } from '../middleware/errorHandler';
 import { verifyJWT, requireRole } from '../middleware/auth';
 import { validateShiftOrder } from '../services/shift.service';
+import { logAudit } from '../services/audit.service';
 
 const router = Router();
 
@@ -53,6 +54,7 @@ router.post('/', verifyJWT, requireRole('admin'), asyncHandler(async (req, res) 
      VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
     [s.name, s.checkin_start, s.checkin_end, s.late_cutoff, s.checkout_start, s.checkout_end, s.ot_start, s.ot_end]
   );
+  await logAudit(req, { action: 'shift.create', targetTable: 'shifts', targetId: result.insertId, after: s });
   res.status(201).json({ id: result.insertId });
 }));
 
@@ -63,6 +65,7 @@ router.put('/:id', verifyJWT, requireRole('admin'), asyncHandler(async (req, res
     res.status(400).json({ error: err });
     return;
   }
+  const [beforeRows] = await pool.query<RowDataPacket[]>('SELECT * FROM shifts WHERE id = ?', [req.params.id]);
   await pool.query<ResultSetHeader>(
     `UPDATE shifts
         SET name = ?, checkin_start = ?, checkin_end = ?, late_cutoff = ?,
@@ -70,11 +73,14 @@ router.put('/:id', verifyJWT, requireRole('admin'), asyncHandler(async (req, res
       WHERE id = ?`,
     [s.name, s.checkin_start, s.checkin_end, s.late_cutoff, s.checkout_start, s.checkout_end, s.ot_start, s.ot_end, req.params.id]
   );
+  await logAudit(req, { action: 'shift.update', targetTable: 'shifts', targetId: Number(req.params.id), before: beforeRows[0], after: s });
   res.json({ ok: true });
 }));
 
 router.delete('/:id', verifyJWT, requireRole('admin'), asyncHandler(async (req, res) => {
+  const [beforeRows] = await pool.query<RowDataPacket[]>('SELECT * FROM shifts WHERE id = ?', [req.params.id]);
   await pool.query<ResultSetHeader>('DELETE FROM shifts WHERE id = ?', [req.params.id]);
+  await logAudit(req, { action: 'shift.delete', targetTable: 'shifts', targetId: Number(req.params.id), before: beforeRows[0] });
   res.json({ ok: true });
 }));
 

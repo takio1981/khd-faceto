@@ -4,6 +4,7 @@ import { pool } from '../db';
 import { asyncHandler } from '../middleware/errorHandler';
 import { verifyJWT, requireRole } from '../middleware/auth';
 import { getNotificationSettings, saveNotificationSettings, sendTestMessage } from '../services/notification.service';
+import { logAudit } from '../services/audit.service';
 
 const router = Router();
 
@@ -18,6 +19,9 @@ router.put('/', verifyJWT, requireRole('admin'), asyncHandler(async (req, res) =
     return;
   }
   await saveNotificationSettings(s);
+  // Don't store the payload — it contains SMTP/LINE/Telegram credentials,
+  // which have no business being duplicated in plaintext in the audit log.
+  await logAudit(req, { action: 'notification_settings.update', targetTable: 'app_settings' });
   res.json({ ok: true });
 }));
 

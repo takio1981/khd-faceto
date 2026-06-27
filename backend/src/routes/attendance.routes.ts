@@ -10,6 +10,7 @@ import { asyncHandler } from '../middleware/errorHandler';
 import { verifyJWT, requireRole } from '../middleware/auth';
 import { processScan, processScanPreview } from '../services/shift.service';
 import { ictDateKey, ictTimeStamp } from '../utils/ict';
+import { logAudit } from '../services/audit.service';
 
 const router = Router();
 
@@ -144,6 +145,12 @@ router.get('/image/:id', verifyJWT, asyncHandler(async (req, res) => {
     res.status(400).json({ error: 'invalid path' });
     return;
   }
+  // Log admin access to a face image — viewing someone else's biometric
+  // photo is exactly the kind of access PDPA/the Computer Crime Act expects
+  // to be traceable. Not logged for a user viewing their own image.
+  if (req.user!.role === 'admin') {
+    await logAudit(req, { action: 'attendance.view_image', targetTable: 'attendance_records', targetId: Number(req.params.id) });
+  }
   res.setHeader('Content-Type', 'image/jpeg');
   createReadStream(abs).on('error', () => res.status(404).end()).pipe(res);
 }));
@@ -163,6 +170,7 @@ router.put('/:id', verifyJWT, requireRole('admin'), asyncHandler(async (req, res
     return;
   }
 
+  const [beforeRows] = await pool.query<RowDataPacket[]>('SELECT * FROM attendance_records WHERE id = ?', [req.params.id]);
   params.push(req.params.id);
   try {
     await pool.query<ResultSetHeader>(
@@ -176,6 +184,13 @@ router.put('/:id', verifyJWT, requireRole('admin'), asyncHandler(async (req, res
     }
     throw err;
   }
+  await logAudit(req, {
+    action: 'attendance.update',
+    targetTable: 'attendance_records',
+    targetId: Number(req.params.id),
+    before: beforeRows[0],
+    after: { scan_time, scan_type, status },
+  });
   res.json({ ok: true });
 }));
 
@@ -195,10 +210,17 @@ router.post('/preview', scanLimiter, asyncHandler(async (req, res) => {
 
 // DELETE /api/attendance/:id  - Admin: delete a record
 router.delete('/:id', verifyJWT, requireRole('admin'), asyncHandler(async (req, res) => {
+  const [beforeRows] = await pool.query<RowDataPacket[]>('SELECT * FROM attendance_records WHERE id = ?', [req.params.id]);
   await pool.query<ResultSetHeader>(
     'DELETE FROM attendance_records WHERE id = ?',
     [req.params.id]
   );
+  await logAudit(req, {
+    action: 'attendance.delete',
+    targetTable: 'attendance_records',
+    targetId: Number(req.params.id),
+    before: beforeRows[0],
+  });
   res.json({ ok: true });
 }));
 
