@@ -33,6 +33,16 @@
         </mat-select>
       </mat-form-field>
 
+      <mat-form-field appearance="outline">
+        <mat-label>ผู้บังคับบัญชา</mat-label>
+        <mat-select formControlName="supervisor_id">
+          <mat-option [value]="null">— ไม่ระบุ —</mat-option>
+          @for (s of supervisorOptions; track s.id) {
+            <mat-option [value]="s.id">{{ s.employee_code }} - {{ s.full_name }}</mat-option>
+          }
+        </mat-select>
+      </mat-form-field>
+
       @if (isEdit) {
         <mat-form-field appearance="outline">
           <mat-label>สถานะ</mat-label>

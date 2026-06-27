@@ -18,6 +18,7 @@
         <td>{{ emp.employee_code }}</td>
         <td>{{ emp.full_name }}</td>
         <td>{{ emp.department || '-' }}</td>
+        <td>{{ emp.supervisor_name || '-' }}</td>
         <td>{{ emp.shift_name || '-' }}</td>
         <td>
           @if (emp.face_count) {
@@ -59,6 +60,7 @@
       <div class="card-title">{{ emp.employee_code }} — {{ emp.full_name }}</div>
       <div class="card-field"><span>แผนก:</span> {{ emp.department || '-' }}</div>
       <div class="card-field"><span>ตำแหน่ง:</span> {{ emp.position || '-' }}</div>
+      <div class="card-field"><span>ผู้บังคับบัญชา:</span> {{ emp.supervisor_name || '-' }}</div>
       <div class="card-field"><span>กะ:</span> {{ emp.shift_name || '-' }}</div>
       <div class="card-field">
         <span>ใบหน้า:</span>

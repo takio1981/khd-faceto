@@ -98,46 +98,10 @@
   border: 1px solid var(--border);
 }
 
-.loc-list {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
+.loc-table-wrap {
+  max-height: 360px;
+  overflow-y: auto;
   margin-top: 8px;
-}
-
-.loc-item {
-  height: auto !important;
-  padding: 10px 0;
-  border: 1px solid var(--border);
-  border-radius: 9px;
-  margin-bottom: 8px;
-
-  ::ng-deep .mdc-list-item__content {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    width: 100%;
-    flex-wrap: wrap;
-    gap: 8px;
-  }
-}
-
-.loc-info {
-  display: flex;
-  flex-direction: column;
-}
-
-.loc-name {
-  font-weight: 600;
-}
-
-.loc-coords {
-  font-size: 12.5px;
-}
-
-.loc-actions {
-  display: flex;
-  gap: 8px;
 }
 
 .empty-state {

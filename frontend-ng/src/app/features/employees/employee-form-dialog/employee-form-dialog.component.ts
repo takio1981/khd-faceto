@@ -14,6 +14,7 @@ import { NotifyService } from '../../../core/services/notify.service';
 export interface EmployeeFormDialogData {
   employee: Employee | null;
   shifts: Shift[];
+  employees: Employee[];
 }
 
 export interface EmployeeFormDialogResult {
@@ -50,12 +51,19 @@ export class EmployeeFormDialogComponent implements OnInit {
   readonly isEdit = !!this.data.employee;
   readonly saving = signal(false);
 
+  // Anyone except the employee being edited (can't supervise themselves) and
+  // anyone already inactive (soft-deleted staff shouldn't be a supervisor).
+  readonly supervisorOptions = this.data.employees.filter(
+    (e) => e.is_active && e.id !== this.data.employee?.id
+  );
+
   readonly form = this.fb.group({
     employee_code: ['', Validators.required],
     full_name: ['', Validators.required],
     department: [''],
     position: [''],
     shift_id: [null as number | null],
+    supervisor_id: [null as number | null],
     is_active: [true],
     notify_enabled: [true],
     notify_email: [''],
@@ -78,6 +86,7 @@ export class EmployeeFormDialogComponent implements OnInit {
         department: e.department || '',
         position: e.position || '',
         shift_id: e.shift_id,
+        supervisor_id: e.supervisor_id ?? null,
         is_active: !!e.is_active,
         notify_enabled: e.notify_enabled !== 0,
         notify_email: e.notify_email || '',
@@ -103,6 +112,7 @@ export class EmployeeFormDialogComponent implements OnInit {
       department: (v.department || '').trim(),
       position: (v.position || '').trim(),
       shift_id: v.shift_id || null,
+      supervisor_id: v.supervisor_id || null,
       notify_enabled: !!v.notify_enabled,
       notify_email: (v.notify_email || '').trim(),
       notify_line_user_id: (v.notify_line_user_id || '').trim(),

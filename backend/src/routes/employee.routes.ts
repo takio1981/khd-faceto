@@ -17,10 +17,11 @@ router.use(verifyJWT, requireRole('admin'));
 router.get('/', asyncHandler(async (req, res) => {
   const includeInactive = req.query.includeInactive === '1';
   const [rows] = await pool.query<RowDataPacket[]>(
-    `SELECT e.*, s.name AS shift_name,
+    `SELECT e.*, s.name AS shift_name, sup.full_name AS supervisor_name,
             (SELECT COUNT(*) FROM face_descriptors fd WHERE fd.employee_id = e.id) AS face_count
        FROM employees e
        LEFT JOIN shifts s ON s.id = e.shift_id
+       LEFT JOIN employees sup ON sup.id = e.supervisor_id
       ${includeInactive ? '' : 'WHERE e.is_active = 1'}
       ORDER BY e.employee_code ASC`
   );
@@ -30,10 +31,11 @@ router.get('/', asyncHandler(async (req, res) => {
 // GET /api/employees/:id
 router.get('/:id', asyncHandler(async (req, res) => {
   const [rows] = await pool.query<RowDataPacket[]>(
-    `SELECT e.*, s.name AS shift_name,
+    `SELECT e.*, s.name AS shift_name, sup.full_name AS supervisor_name,
             (SELECT COUNT(*) FROM face_descriptors fd WHERE fd.employee_id = e.id) AS face_count
        FROM employees e
        LEFT JOIN shifts s ON s.id = e.shift_id
+       LEFT JOIN employees sup ON sup.id = e.supervisor_id
       WHERE e.id = ? LIMIT 1`,
     [req.params.id]
   );
@@ -46,7 +48,7 @@ router.get('/:id', asyncHandler(async (req, res) => {
 
 // POST /api/employees  - create. Optionally create a linked login account.
 router.post('/', asyncHandler(async (req, res) => {
-  const { employee_code, full_name, department, position, shift_id,
+  const { employee_code, full_name, department, position, shift_id, supervisor_id,
           notify_email, notify_line_user_id, notify_telegram_chat_id, notify_enabled,
           create_login, login_username, login_password, login_role } = req.body ?? {};
 
@@ -56,11 +58,11 @@ router.post('/', asyncHandler(async (req, res) => {
   }
 
   const [result] = await pool.query<ResultSetHeader>(
-    `INSERT INTO employees (employee_code, full_name, department, position, shift_id,
+    `INSERT INTO employees (employee_code, full_name, department, position, shift_id, supervisor_id,
                              notify_email, notify_line_user_id, notify_telegram_chat_id, notify_enabled)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     [
-      employee_code, full_name, department || null, position || null, shift_id || null,
+      employee_code, full_name, department || null, position || null, shift_id || null, supervisor_id || null,
       notify_email || null, notify_line_user_id || null, notify_telegram_chat_id || null,
       notify_enabled === undefined ? 1 : notify_enabled ? 1 : 0,
     ]
@@ -81,18 +83,24 @@ router.post('/', asyncHandler(async (req, res) => {
 
 // PUT /api/employees/:id
 router.put('/:id', asyncHandler(async (req, res) => {
-  const { employee_code, full_name, department, position, shift_id, is_active,
+  const { employee_code, full_name, department, position, shift_id, supervisor_id, is_active,
           notify_email, notify_line_user_id, notify_telegram_chat_id, notify_enabled } = req.body ?? {};
+
+  if (supervisor_id && Number(supervisor_id) === Number(req.params.id)) {
+    res.status(400).json({ error: 'พนักงานไม่สามารถเป็นผู้บังคับบัญชาของตัวเองได้' });
+    return;
+  }
+
   const [beforeRows] = await pool.query<RowDataPacket[]>('SELECT * FROM employees WHERE id = ?', [req.params.id]);
   await pool.query<ResultSetHeader>(
     `UPDATE employees
         SET employee_code = ?, full_name = ?, department = ?, position = ?,
-            shift_id = ?, is_active = ?,
+            shift_id = ?, supervisor_id = ?, is_active = ?,
             notify_email = ?, notify_line_user_id = ?, notify_telegram_chat_id = ?, notify_enabled = ?
       WHERE id = ?`,
     [
       employee_code, full_name, department || null, position || null,
-      shift_id || null, is_active === undefined ? 1 : is_active ? 1 : 0,
+      shift_id || null, supervisor_id || null, is_active === undefined ? 1 : is_active ? 1 : 0,
       notify_email || null, notify_line_user_id || null, notify_telegram_chat_id || null,
       notify_enabled === undefined ? 1 : notify_enabled ? 1 : 0,
       req.params.id,

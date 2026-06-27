@@ -71,21 +71,35 @@
           }
         </div>
 
-        <div class="loc-list">
-          @for (loc of locations; track trackByLocationId($index, loc)) {
-            <div class="loc-item">
-              <div class="loc-info">
-                <div class="loc-name">{{ loc.name }}</div>
-                <div class="loc-coords muted">{{ formatCoord(loc.latitude) }}, {{ formatCoord(loc.longitude) }}</div>
-              </div>
-              <div class="loc-actions">
-                <button mat-stroked-button type="button" (click)="editLocation(loc)">แก้ไข</button>
-                <button mat-stroked-button color="warn" type="button" (click)="deleteLocation(loc)">ลบ</button>
-              </div>
-            </div>
-          } @empty {
-            <div class="empty-state muted">ยังไม่มีจุดสแกน</div>
-          }
+        <div class="loc-table-wrap">
+          <app-responsive-table [columns]="locationColumns" [data]="locations" [trackByFn]="trackByLocationId">
+            <ng-template #desktopRow let-loc>
+              <tr>
+                <td>{{ loc.name }}</td>
+                <td>{{ formatCoord(loc.latitude) }}, {{ formatCoord(loc.longitude) }}</td>
+                <td class="actions-cell">
+                  <button mat-icon-button matTooltip="แก้ไข" (click)="editLocation(loc)">
+                    <mat-icon>edit</mat-icon>
+                  </button>
+                  <button mat-icon-button matTooltip="ลบ" color="warn" (click)="deleteLocation(loc)">
+                    <mat-icon>delete</mat-icon>
+                  </button>
+                </td>
+              </tr>
+            </ng-template>
+            <ng-template #cardRow let-loc>
+              <div class="card-field"><span class="card-label">ชื่อจุดติดตั้ง:</span> {{ loc.name }}</div>
+              <div class="card-field"><span class="card-label">พิกัด:</span> {{ formatCoord(loc.latitude) }}, {{ formatCoord(loc.longitude) }}</div>
+            </ng-template>
+            <ng-template #cardActions let-loc>
+              <button mat-icon-button matTooltip="แก้ไข" (click)="editLocation(loc)">
+                <mat-icon>edit</mat-icon>
+              </button>
+              <button mat-icon-button matTooltip="ลบ" color="warn" (click)="deleteLocation(loc)">
+                <mat-icon>delete</mat-icon>
+              </button>
+            </ng-template>
+          </app-responsive-table>
         </div>
       </mat-card>
     </mat-tab>

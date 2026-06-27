@@ -81,6 +81,11 @@ export class SettingsComponent implements OnInit, AfterViewInit {
   editingLocationId: number | null = null;
   locationSaving = false;
   locatingGps = false;
+  readonly locationColumns: TableColumn[] = [
+    { key: 'name', label: 'ชื่อจุดติดตั้ง' },
+    { key: 'coords', label: 'พิกัด' },
+    { key: 'actions', label: 'จัดการ' },
+  ];
 
   private map: any;
   private pendingMarker: any;
@@ -202,7 +207,12 @@ export class SettingsComponent implements OnInit, AfterViewInit {
 
   onTabChange(event: { index: number }): void {
     if (event.index === SettingsComponent.SCAN_LOCATIONS_TAB_INDEX && this.map) {
-      setTimeout(() => this.map.invalidateSize(), 0);
+      // mat-tab-group's own switch animation (animationDuration="150ms") is
+      // still resizing the panel when this event fires — invalidateSize()
+      // before that finishes measures a too-small/zero box again. Wait past
+      // the animation, then re-check once more for good measure.
+      setTimeout(() => this.map.invalidateSize(), 200);
+      setTimeout(() => this.map.invalidateSize(), 500);
     }
   }
 

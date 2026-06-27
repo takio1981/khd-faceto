@@ -15,6 +15,8 @@ export interface Employee {
   position: string | null;
   shift_id: number | null;
   shift_name?: string | null;
+  supervisor_id?: number | null;
+  supervisor_name?: string | null;
   is_active: 0 | 1;
   face_count?: number;
   notify_email?: string | null;
@@ -29,6 +31,7 @@ export interface EmployeeCreateRequest {
   department?: string | null;
   position?: string | null;
   shift_id?: number | null;
+  supervisor_id?: number | null;
   notify_email?: string | null;
   notify_line_user_id?: string | null;
   notify_telegram_chat_id?: string | null;

@@ -34,6 +34,7 @@ export class EmployeesComponent implements OnInit {
     { key: 'code', label: 'รหัส' },
     { key: 'name', label: 'ชื่อ-นามสกุล' },
     { key: 'department', label: 'แผนก' },
+    { key: 'supervisor', label: 'ผู้บังคับบัญชา' },
     { key: 'shift', label: 'กะ' },
     { key: 'faces', label: 'ใบหน้า' },
     { key: 'status', label: 'สถานะ' },
@@ -89,7 +90,7 @@ export class EmployeesComponent implements OnInit {
     const ref = this.dialog.open(EmployeeFormDialogComponent, {
       width: '640px',
       maxWidth: '95vw',
-      data: { employee: null, shifts: this.shifts() },
+      data: { employee: null, shifts: this.shifts(), employees: this.employees() },
     });
     ref.afterClosed().subscribe((result: EmployeeFormDialogResult | undefined) => {
       if (!result?.saved) return;
@@ -104,7 +105,7 @@ export class EmployeesComponent implements OnInit {
     const ref = this.dialog.open(EmployeeFormDialogComponent, {
       width: '640px',
       maxWidth: '95vw',
-      data: { employee: emp, shifts: this.shifts() },
+      data: { employee: emp, shifts: this.shifts(), employees: this.employees() },
     });
     ref.afterClosed().subscribe((result: EmployeeFormDialogResult | undefined) => {
       if (result?.saved) this.loadEmployees();
