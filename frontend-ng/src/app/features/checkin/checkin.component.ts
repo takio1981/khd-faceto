@@ -169,10 +169,10 @@ export class CheckinComponent implements AfterViewInit, OnDestroy {
 
   private readonly toasted: Record<number, number> = {};
   private readonly pendingMatch: Record<number, PendingMatch> = {};
-  // Smoothed box per detection slot (index-based — fine for the small,
-  // mostly-1-2-face kiosk case this screen is used for) so the drawn
-  // rectangle/landmarks glide between frames instead of jumping with
-  // every detector reading.
+  // Previous frame's smoothed boxes, matched to this frame's detections by
+  // nearest center (not array index — face-api.js detection order isn't
+  // stable across frames) so each face's box/landmarks/name label glides
+  // continuously instead of jumping or latching onto the wrong face.
   private smoothedBoxes: { x: number; y: number; width: number; height: number }[] = [];
 
   readonly homeLink: string;
@@ -415,13 +415,16 @@ export class CheckinComponent implements AfterViewInit, OnDestroy {
     const flipH = this.flipH;
     const flipV = this.flipV;
 
-    // Trim/grow the smoothing buffer to match this frame's face count so
-    // stale slots from a previous, larger detection set don't linger.
-    if (this.smoothedBoxes.length > results.length) {
-      this.smoothedBoxes.length = results.length;
-    }
+    // face-api.js doesn't guarantee detection order is stable between
+    // frames — with 2+ faces, index i can refer to a different physical
+    // face on every call. Matching by nearest previous box center (instead
+    // of by array index) keeps each face's smoothing target — and so its
+    // drawn box/name label — locked onto the right person.
+    const pool = [...this.smoothedBoxes];
+    const nextSmoothedBoxes: typeof this.smoothedBoxes = [];
+    const matchRadius = Math.max(overlay.width, overlay.height) * 0.25;
 
-    results.forEach(({ det, r }, i) => {
+    results.forEach(({ det, r }) => {
       const b = det.box;
       const color = this.colorFor(r);
       const label = this.labelFor(r);
@@ -430,8 +433,22 @@ export class CheckinComponent implements AfterViewInit, OnDestroy {
       const rawYFull = b.y * sy;
       const wFull = b.width * sx;
       const hFull = b.height * sy;
+      const cx = rawXFull + wFull / 2;
+      const cy = rawYFull + hFull / 2;
 
-      const prev = this.smoothedBoxes[i];
+      let bestIdx = -1;
+      let bestDist = matchRadius;
+      pool.forEach((p, idx) => {
+        const pcx = p.x + p.width / 2;
+        const pcy = p.y + p.height / 2;
+        const dist = Math.hypot(cx - pcx, cy - pcy);
+        if (dist < bestDist) {
+          bestDist = dist;
+          bestIdx = idx;
+        }
+      });
+
+      const prev = bestIdx >= 0 ? pool.splice(bestIdx, 1)[0] : undefined;
       const factor = this.boxSmoothing;
       const smoothed = prev
         ? {
@@ -441,7 +458,7 @@ export class CheckinComponent implements AfterViewInit, OnDestroy {
             height: prev.height + (hFull - prev.height) * factor,
           }
         : { x: rawXFull, y: rawYFull, width: wFull, height: hFull };
-      this.smoothedBoxes[i] = smoothed;
+      nextSmoothedBoxes.push(smoothed);
 
       const rawX = smoothed.x;
       const rawY = smoothed.y;
@@ -476,6 +493,8 @@ export class CheckinComponent implements AfterViewInit, OnDestroy {
         ctx.restore();
       }
     });
+
+    this.smoothedBoxes = nextSmoothedBoxes;
   }
 
   private colorFor(r: DetWithResult['r']): string {
