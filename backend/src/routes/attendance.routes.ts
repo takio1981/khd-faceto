@@ -124,6 +124,62 @@ router.get('/', verifyJWT, asyncHandler(async (req, res) => {
   res.json({ data: rows, total, page, pageSize, totalPages: Math.ceil(total / pageSize) });
 }));
 
+// GET /api/attendance/recent  - public: powers the checkin kiosk's "ภาพและ
+// ข้อมูลการสแกนล่าสุด" feed (same reasoning as /scan and /preview above —
+// the kiosk runs without login by design). Sourced from the real
+// attendance_records table, scoped to just today and optionally one scan
+// location, and capped to a small limit, so an unauthenticated kiosk only
+// ever sees a bounded slice of "who scanned here today" — the same category
+// of info the kiosk already shows live as people scan, just sourced from
+// the database instead of a client-only cache, so edits/deletes made via
+// the admin Attendance page show up here too on the next poll.
+router.get('/recent', asyncHandler(async (req, res) => {
+  const scanLocationId = req.query.scanLocationId ? Number(req.query.scanLocationId) : null;
+  const limit = Math.min(50, Math.max(1, parseInt(String(req.query.limit || '20'), 10)));
+
+  const where: string[] = ['DATE(ar.scan_time) = ?'];
+  const params: any[] = [ictDateKey(new Date())];
+  if (scanLocationId) {
+    where.push('ar.scan_location_id = ?');
+    params.push(scanLocationId);
+  }
+
+  const [rows] = await pool.query<RowDataPacket[]>(
+    `SELECT ar.id, ar.scan_time, ar.scan_type, ar.status, ar.face_image_path, e.full_name
+       FROM attendance_records ar
+       JOIN employees e ON e.id = ar.employee_id
+      WHERE ${where.join(' AND ')}
+      ORDER BY ar.scan_time DESC
+      LIMIT ?`,
+    [...params, limit]
+  );
+
+  const data = await Promise.all(rows.map(async (r) => {
+    let imageBase64: string | null = null;
+    if (r.face_image_path) {
+      try {
+        const abs = path.join(config.face.imageDir, r.face_image_path);
+        if (abs.startsWith(path.resolve(config.face.imageDir))) {
+          const buf = await fs.readFile(abs);
+          imageBase64 = `data:image/jpeg;base64,${buf.toString('base64')}`;
+        }
+      } catch {
+        // image missing on disk — just omit the thumbnail
+      }
+    }
+    return {
+      id: r.id,
+      name: r.full_name,
+      scanType: r.scan_type,
+      status: r.status,
+      time: r.scan_time,
+      imageBase64,
+    };
+  }));
+
+  res.json(data);
+}));
+
 // GET /api/attendance/image/:id  - stream the saved face JPEG (admin or owner)
 router.get('/image/:id', verifyJWT, asyncHandler(async (req, res) => {
   const [rows] = await pool.query<RowDataPacket[]>(

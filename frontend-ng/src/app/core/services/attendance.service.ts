@@ -2,7 +2,7 @@ import { HttpClient } from '@angular/common/http';
 import { Injectable } from '@angular/core';
 import { Observable } from 'rxjs';
 import { environment } from '../../../environments/environment';
-import { AttendanceListResponse, AttendanceRecord, AttendanceStatus, ScanResult, ScanType } from '../models/models';
+import { AttendanceListResponse, AttendanceRecord, AttendanceStatus, RecentScanItem, ScanResult, ScanType } from '../models/models';
 
 const base = `${environment.apiBaseUrl}/attendance`;
 
@@ -48,5 +48,16 @@ export class AttendanceService {
 
   preview(descriptor: number[]): Observable<ScanResult> {
     return this.http.post<ScanResult>(`${base}/preview`, { descriptor });
+  }
+
+  // Public endpoint (no auth) backing the checkin kiosk's live feed — see
+  // backend/src/routes/attendance.routes.ts GET /recent. Sourced from the
+  // real attendance_records table (scoped to today + optionally one scan
+  // location) so edits/deletes made via the admin Attendance page are
+  // reflected on the next poll, unlike a client-only cache.
+  recent(scanLocationId: number | null, limit: number): Observable<RecentScanItem[]> {
+    const params: Record<string, string> = { limit: String(limit) };
+    if (scanLocationId) params['scanLocationId'] = String(scanLocationId);
+    return this.http.get<RecentScanItem[]>(`${base}/recent`, { params });
   }
 }

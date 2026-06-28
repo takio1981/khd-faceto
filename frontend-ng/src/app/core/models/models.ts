@@ -116,6 +116,17 @@ export interface ScanResult {
   message?: string;
 }
 
+// Backs the checkin kiosk's "ภาพและข้อมูลการสแกนล่าสุด" feed — see
+// GET /api/attendance/recent (public, scoped to today + one scan location).
+export interface RecentScanItem {
+  id: number;
+  name: string;
+  scanType: ScanType | null;
+  status: AttendanceStatus | null;
+  time: string; // ISO datetime
+  imageBase64: string | null;
+}
+
 export interface DashboardSummary {
   date: string;
   counts: { on_time: number; late: number; absent: number; ot: number };

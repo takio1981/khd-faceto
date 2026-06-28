@@ -25,7 +25,7 @@ import { AttendanceService } from '../../core/services/attendance.service';
 import { AuthService } from '../../core/services/auth.service';
 import { ScanLocationService } from '../../core/services/scan-location.service';
 import { NotifyService } from '../../core/services/notify.service';
-import { ScanLocation, ScanResult, ScanType } from '../../core/models/models';
+import { RecentScanItem, ScanLocation, ScanResult } from '../../core/models/models';
 
 declare const faceapi: any;
 
@@ -49,14 +49,6 @@ interface DetWithResult {
   imageBase64?: string;
 }
 
-interface FeedItem {
-  imageBase64?: string;
-  name: string;
-  scanType?: ScanType;
-  status?: string;
-  time: string; // ISO
-}
-
 interface PendingMatch {
   count: number;
   scanType: string;
@@ -64,8 +56,8 @@ interface PendingMatch {
 }
 
 const LOCATION_STORAGE_KEY = 'khd_checkin_location_id';
-const FEED_DATE_KEY = 'khd_checkin_feed_date';
-const FEED_ITEMS_KEY = 'khd_checkin_feed_items';
+const FEED_POLL_MS = 8000;
+const FEED_LIMIT = 20;
 const CONFIRM_COUNT = 2;
 const PENDING_TIMEOUT_MS = 3000;
 const TOAST_GAP_MS = 60 * 1000;
@@ -172,7 +164,7 @@ export class CheckinComponent implements AfterViewInit, OnDestroy {
   showDeviceSettings = false;
   showGuide = false;
 
-  feedItems: FeedItem[] = [];
+  feedItems: RecentScanItem[] = [];
 
   clockTime = '';
   clockDate = '';
@@ -183,7 +175,7 @@ export class CheckinComponent implements AfterViewInit, OnDestroy {
   private stream: MediaStream | null = null;
   private detectionTimer: ReturnType<typeof setTimeout> | null = null;
   private clockTimer: ReturnType<typeof setInterval> | null = null;
-  private feedResetTimer: ReturnType<typeof setInterval> | null = null;
+  private feedPollTimer: ReturnType<typeof setInterval> | null = null;
   private resultBannerTimer: ReturnType<typeof setTimeout> | null = null;
   private countdownToken = 0;
   private destroyed = false;
@@ -260,9 +252,8 @@ export class CheckinComponent implements AfterViewInit, OnDestroy {
     this.tickClock();
     this.clockTimer = setInterval(() => this.tickClock(), 1000);
 
-    this.resetFeedIfNewDay();
-    this.restoreFeedItems();
-    this.feedResetTimer = setInterval(() => this.resetFeedIfNewDay(), 60 * 1000);
+    this.loadFeed();
+    this.feedPollTimer = setInterval(() => this.loadFeed(), FEED_POLL_MS);
 
     await this.loadLocations();
     await this.loadCameras();
@@ -275,7 +266,7 @@ export class CheckinComponent implements AfterViewInit, OnDestroy {
     this.countdownToken++;
     if (this.detectionTimer) clearTimeout(this.detectionTimer);
     if (this.clockTimer) clearInterval(this.clockTimer);
-    if (this.feedResetTimer) clearInterval(this.feedResetTimer);
+    if (this.feedPollTimer) clearInterval(this.feedPollTimer);
     if (this.resultBannerTimer) clearTimeout(this.resultBannerTimer);
     this.stopWatchdog();
     this.facePipeline.stopCamera(this.stream);
@@ -322,6 +313,7 @@ export class CheckinComponent implements AfterViewInit, OnDestroy {
   onLocationChange(newId: string): void {
     this.selectedLocationId = newId;
     localStorage.setItem(LOCATION_STORAGE_KEY, newId);
+    this.loadFeed();
   }
 
   private getScanLocationId(): number | null {
@@ -657,51 +649,29 @@ export class CheckinComponent implements AfterViewInit, OnDestroy {
   }
 
   // ===== Feed (live scan list) =====
-  private todayKey(): string {
-    const d = new Date();
-    return `${d.getFullYear()}-${d.getMonth()}-${d.getDate()}`;
-  }
-
-  private loadFeedItemsFromStorage(): FeedItem[] {
-    try {
-      return JSON.parse(localStorage.getItem(FEED_ITEMS_KEY) || '[]') || [];
-    } catch {
-      return [];
-    }
-  }
-
-  private saveFeedItemsToStorage(items: FeedItem[]): void {
-    try {
-      localStorage.setItem(FEED_ITEMS_KEY, JSON.stringify(items));
-    } catch {
-      // storage full — keep in-memory list, just stop persisting
-    }
-  }
-
-  private addFeedEntry(data: FeedItem): void {
-    this.feedItems.unshift(data);
-    const items = this.loadFeedItemsFromStorage();
-    items.unshift(data);
-    this.saveFeedItemsToStorage(items);
-  }
-
-  private restoreFeedItems(): void {
-    this.feedItems = this.loadFeedItemsFromStorage();
-  }
-
-  private resetFeedIfNewDay(): void {
-    const today = this.todayKey();
-    if (localStorage.getItem(FEED_DATE_KEY) !== today) {
-      this.feedItems = [];
-      localStorage.setItem(FEED_DATE_KEY, today);
-      localStorage.removeItem(FEED_ITEMS_KEY);
-    }
+  // Backed by the real attendance_records table (via /api/attendance/recent,
+  // a public endpoint scoped to today + this kiosk's scan location) instead
+  // of a local-only cache — so if a record shown here is edited or deleted
+  // from the Attendance admin page, the next poll picks up the change. The
+  // box no longer needs day-rollover bookkeeping either: "today" is enforced
+  // server-side.
+  loadFeed(): void {
+    this.attendanceService.recent(this.getScanLocationId(), FEED_LIMIT).subscribe({
+      next: (items) => (this.feedItems = items),
+      error: () => {
+        // transient network hiccup — keep showing the last good list
+      },
+    });
   }
 
   feedTime(iso: string): string {
     const d = new Date(iso);
     const p = (n: number) => String(n).padStart(2, '0');
     return `${p(d.getHours())}:${p(d.getMinutes())}:${p(d.getSeconds())}`;
+  }
+
+  trackByFeedId(_: number, item: RecentScanItem): number {
+    return item.id;
   }
 
   // ===== Detection loop =====
@@ -859,7 +829,7 @@ export class CheckinComponent implements AfterViewInit, OnDestroy {
     let confirming = 0;
     const names: string[] = [];
 
-    for (const { r, imageBase64 } of results) {
+    for (const { r } of results) {
       if (!r) continue;
       if (!r.matched || !r.employee) {
         unknown++;
@@ -873,13 +843,6 @@ export class CheckinComponent implements AfterViewInit, OnDestroy {
       if (r.scan_type) {
         recorded++;
         names.push(`${r.employee.full_name} (${SCANTYPE_TH[r.scan_type] || r.scan_type})`);
-        this.addFeedEntry({
-          imageBase64,
-          name: r.employee.full_name,
-          scanType: r.scan_type,
-          status: r.status,
-          time: new Date().toISOString(),
-        });
         if (!this.toasted[r.employee.id] || now - this.toasted[r.employee.id] > TOAST_GAP_MS) {
           this.toasted[r.employee.id] = now;
           this.notify.toast(
@@ -894,6 +857,7 @@ export class CheckinComponent implements AfterViewInit, OnDestroy {
 
     if (recorded > 0) {
       this.playSuccessBeep();
+      this.loadFeed();
       this.setStatus(`✓ บันทึก ${recorded} คน: ${names.join(', ')}`, 'success');
       this.showResult(`✓ บันทึกสำเร็จ ${recorded} คน — ${names.join(', ')}`, 'success');
     } else if (confirming > 0) {

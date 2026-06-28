@@ -158,7 +158,7 @@
                covers #camWrap). Shows every scan recorded today,
                newest first (feedItems is already kept in that order). -->
           <div class="latest-scan-overlay" *ngIf="feedItems.length">
-            <div class="lso-item" *ngFor="let item of feedItems">
+            <div class="lso-item" *ngFor="let item of feedItems; trackBy: trackByFeedId">
               <img class="lso-thumb" *ngIf="item.imageBase64" [src]="item.imageBase64" alt="">
               <div class="lso-info">
                 <div class="lso-name">{{ item.name }}</div>
@@ -178,7 +178,7 @@
     <mat-card class="feed-card">
       <h3>🕒 ภาพและข้อมูลการสแกนล่าสุด</h3>
       <div class="cam-feed-list cam-feed-list-main">
-        <div class="feed-item" *ngFor="let item of feedItems">
+        <div class="feed-item" *ngFor="let item of feedItems; trackBy: trackByFeedId">
           <img class="feed-thumb" *ngIf="item.imageBase64" [src]="item.imageBase64" alt="">
           <div class="feed-info">
             <div class="feed-name">{{ item.name }}</div>
