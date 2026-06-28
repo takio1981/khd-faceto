@@ -36,6 +36,7 @@ const EMPLOYEE_SELECT = `
   SELECT e.*, s.name AS shift_name, sup.full_name AS supervisor_name,
          dept.name AS department_name, dv.name AS division_name, dv.id AS division_id,
          pos.name AS position_name, lvl.name AS level_name,
+         u.username AS login_username, u.role AS login_role,
          (SELECT COUNT(*) FROM face_descriptors fd WHERE fd.employee_id = e.id) AS face_count
     FROM employees e
     LEFT JOIN shifts s ON s.id = e.shift_id
@@ -43,7 +44,8 @@ const EMPLOYEE_SELECT = `
     LEFT JOIN departments dept ON dept.id = e.department_id
     LEFT JOIN divisions dv ON dv.id = dept.division_id
     LEFT JOIN positions pos ON pos.id = e.position_id
-    LEFT JOIN civil_service_levels lvl ON lvl.id = e.level_id`;
+    LEFT JOIN civil_service_levels lvl ON lvl.id = e.level_id
+    LEFT JOIN users u ON u.employee_id = e.id`;
 
 // GET /api/employees  - list (with shift name + descriptor count)
 router.get('/', asyncHandler(async (req, res) => {

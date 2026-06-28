@@ -38,6 +38,7 @@ export class EmployeesComponent implements OnInit {
     { key: 'position', label: 'ตำแหน่ง' },
     { key: 'level', label: 'ระดับ' },
     { key: 'supervisor', label: 'ผู้บังคับบัญชา' },
+    { key: 'login', label: 'บัญชีผู้ใช้' },
     { key: 'shift', label: 'กะ' },
     { key: 'faces', label: 'ใบหน้า' },
     { key: 'status', label: 'สถานะ' },

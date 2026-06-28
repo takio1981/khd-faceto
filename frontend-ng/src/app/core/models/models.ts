@@ -44,6 +44,8 @@ export interface Employee {
   notify_line_user_id?: string | null;
   notify_telegram_chat_id?: string | null;
   notify_enabled?: 0 | 1;
+  login_username?: string | null;
+  login_role?: Role | null;
 }
 
 export interface EmployeeCreateRequest {
