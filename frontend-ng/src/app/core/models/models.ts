@@ -7,6 +7,18 @@ export interface LoginResponse {
   employeeId: number | null;
 }
 
+export interface UserAccount {
+  id: number;
+  username: string;
+  role: Role;
+  employee_id: number | null;
+  employee_code: string | null;
+  full_name: string | null;
+  is_locked: boolean;
+  failed_login_attempts: number;
+  created_at: string;
+}
+
 export interface Employee {
   id: number;
   employee_code: string;

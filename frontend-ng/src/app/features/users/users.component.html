@@ -1,0 +1,102 @@
+<div class="page-container">
+  <div class="page-header">
+    <h1 class="page-title">จัดการผู้ใช้งาน</h1>
+    <button mat-raised-button color="primary" (click)="openAddDialog()">
+      <mat-icon>person_add</mat-icon>
+      เพิ่มผู้ใช้
+    </button>
+  </div>
+
+  <mat-card class="section-card filter-card">
+    <form [formGroup]="filterForm" class="filter-grid">
+      <mat-form-field appearance="outline">
+        <mat-label>สิทธิ์</mat-label>
+        <mat-select formControlName="role">
+          <mat-option value="">ทั้งหมด</mat-option>
+          <mat-option value="admin">Admin</mat-option>
+          <mat-option value="user">User</mat-option>
+        </mat-select>
+      </mat-form-field>
+
+      <mat-form-field appearance="outline" class="search-field">
+        <mat-label>ค้นหา (ชื่อผู้ใช้/ชื่อพนักงาน/รหัสพนักงาน)</mat-label>
+        <input matInput formControlName="search" (keyup.enter)="applyFilter()" />
+      </mat-form-field>
+
+      <div class="checkbox-group">
+        <mat-checkbox formControlName="unlinkedOnly">ยังไม่ผูกกับพนักงาน</mat-checkbox>
+        <mat-checkbox formControlName="lockedOnly">ถูกล็อกอยู่</mat-checkbox>
+      </div>
+    </form>
+    <div class="actions-row">
+      <button mat-flat-button color="primary" type="button" (click)="applyFilter()">กรอง</button>
+      <button mat-stroked-button type="button" (click)="resetFilter()">ล้างตัวกรอง</button>
+    </div>
+  </mat-card>
+
+  <mat-card class="section-card">
+    <app-responsive-table [columns]="columns" [data]="users()" [trackByFn]="trackById">
+      <ng-template #desktopRow let-u>
+        <tr>
+          <td>{{ u.username }}{{ isSelf(u) ? ' (ตัวคุณเอง)' : '' }}</td>
+          <td>{{ u.role === 'admin' ? 'Admin' : 'User' }}</td>
+          <td>{{ u.employee_id ? (u.employee_code + ' - ' + u.full_name) : '-' }}</td>
+          <td>
+            @if (u.is_locked) {
+              <span class="badge late">ถูกล็อก</span>
+            } @else {
+              <span class="badge on_time">ปกติ</span>
+            }
+          </td>
+          <td class="actions-cell">
+            <button mat-icon-button matTooltip="แก้ไข" (click)="openEditDialog(u)">
+              <mat-icon>edit</mat-icon>
+            </button>
+            @if (u.is_locked) {
+              <button mat-icon-button matTooltip="ปลดล็อกบัญชี" (click)="unlock(u)">
+                <mat-icon>lock_open</mat-icon>
+              </button>
+            }
+            @if (!isSelf(u)) {
+              <button mat-icon-button matTooltip="ลบ" color="warn" (click)="deleteUser(u)">
+                <mat-icon>delete</mat-icon>
+              </button>
+            }
+          </td>
+        </tr>
+      </ng-template>
+      <ng-template #cardRow let-u>
+        <div class="card-field"><span class="card-label">ชื่อผู้ใช้:</span> {{ u.username }}{{ isSelf(u) ? ' (ตัวคุณเอง)' : '' }}</div>
+        <div class="card-field"><span class="card-label">สิทธิ์:</span> {{ u.role === 'admin' ? 'Admin' : 'User' }}</div>
+        <div class="card-field"><span class="card-label">ผูกกับพนักงาน:</span> {{ u.employee_id ? (u.employee_code + ' - ' + u.full_name) : '-' }}</div>
+        <div class="card-field">
+          <span class="card-label">สถานะ:</span>
+          @if (u.is_locked) {
+            <span class="badge late">ถูกล็อก</span>
+          } @else {
+            <span class="badge on_time">ปกติ</span>
+          }
+        </div>
+      </ng-template>
+      <ng-template #cardActions let-u>
+        <button mat-icon-button matTooltip="แก้ไข" (click)="openEditDialog(u)">
+          <mat-icon>edit</mat-icon>
+        </button>
+        @if (u.is_locked) {
+          <button mat-icon-button matTooltip="ปลดล็อกบัญชี" (click)="unlock(u)">
+            <mat-icon>lock_open</mat-icon>
+          </button>
+        }
+        @if (!isSelf(u)) {
+          <button mat-icon-button matTooltip="ลบ" color="warn" (click)="deleteUser(u)">
+            <mat-icon>delete</mat-icon>
+          </button>
+        }
+      </ng-template>
+    </app-responsive-table>
+
+    @if (!loading() && !users().length) {
+      <p class="muted empty-state">ไม่พบผู้ใช้ที่ตรงกับตัวกรอง</p>
+    }
+  </mat-card>
+</div>

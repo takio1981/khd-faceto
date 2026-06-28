@@ -25,6 +25,7 @@ import holidayRoutes from './routes/holidays.routes';
 import auditRoutes from './routes/audit.routes';
 import orgStructureRoutes from './routes/orgStructure.routes';
 import correctionRequestRoutes from './routes/correctionRequests.routes';
+import userRoutes from './routes/user.routes';
 
 async function main() {
   await waitForDb();
@@ -76,6 +77,7 @@ async function main() {
   app.use('/api/audit-log', auditRoutes);
   app.use('/api/org', orgStructureRoutes);
   app.use('/api/correction-requests', correctionRequestRoutes);
+  app.use('/api/users', userRoutes);
 
   app.get('/api/health', (_req, res) => res.json({ ok: true, time: new Date().toISOString() }));
 

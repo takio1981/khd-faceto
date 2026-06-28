@@ -49,6 +49,11 @@ export const routes: Routes = [
         loadComponent: () => import('./features/employees/employees.component').then((m) => m.EmployeesComponent),
       },
       {
+        path: 'users',
+        canActivate: [adminGuard],
+        loadComponent: () => import('./features/users/users.component').then((m) => m.UsersComponent),
+      },
+      {
         path: 'shifts',
         canActivate: [adminGuard],
         loadComponent: () => import('./features/shifts/shifts.component').then((m) => m.ShiftsComponent),

@@ -1,0 +1,46 @@
+<h2 mat-dialog-title>{{ isEdit ? 'แก้ไขผู้ใช้' : 'เพิ่มผู้ใช้' }}</h2>
+
+<form [formGroup]="form" (ngSubmit)="save()">
+  <mat-dialog-content>
+    <div class="form-grid">
+      <mat-form-field appearance="outline">
+        <mat-label>ชื่อผู้ใช้ (Username) *</mat-label>
+        <input matInput formControlName="username" />
+      </mat-form-field>
+
+      <mat-form-field appearance="outline">
+        <mat-label>{{ isEdit ? 'รหัสผ่านใหม่ (เว้นว่างถ้าไม่เปลี่ยน)' : 'รหัสผ่าน *' }}</mat-label>
+        <input matInput type="password" formControlName="password" />
+      </mat-form-field>
+
+      <mat-form-field appearance="outline">
+        <mat-label>สิทธิ์ *</mat-label>
+        <mat-select formControlName="role">
+          <mat-option value="user">User</mat-option>
+          <mat-option value="admin">Admin</mat-option>
+        </mat-select>
+      </mat-form-field>
+
+      <mat-form-field appearance="outline">
+        <mat-label>ผูกกับพนักงาน</mat-label>
+        <mat-select formControlName="employee_id">
+          <mat-option [value]="null">— ไม่ผูก —</mat-option>
+          @for (e of employeeOptions; track e.id) {
+            <mat-option [value]="e.id">{{ e.employee_code }} - {{ e.full_name }}</mat-option>
+          }
+        </mat-select>
+      </mat-form-field>
+    </div>
+  </mat-dialog-content>
+
+  <mat-dialog-actions align="end">
+    <button mat-button type="button" (click)="cancel()" [disabled]="saving()">ยกเลิก</button>
+    <button mat-flat-button color="primary" type="submit" [disabled]="saving()">
+      @if (saving()) {
+        <mat-spinner diameter="18"></mat-spinner>
+      } @else {
+        บันทึก
+      }
+    </button>
+  </mat-dialog-actions>
+</form>
