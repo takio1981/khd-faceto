@@ -82,6 +82,20 @@ const COUNTDOWN_SECONDS = 5;
 const DETECTION_INTERVAL_KEY = 'camDetectionIntervalMs';
 const BOX_SMOOTHING_KEY = 'camBoxSmoothing';
 
+// Face "distance" can't be measured directly from a 2D image, but the
+// detected face box height as a % of the frame height is a reliable proxy
+// (closer face = bigger box). minFaceSizePct is effectively "how far away
+// can a face still be detected" (lower = farther), maxFaceSizePct is "how
+// close can a face get before we stop counting it" (lower = must stay
+// farther back — useful to reject something pressed right up against the
+// lens).
+const DEFAULT_MIN_FACE_SIZE_PCT = 8;
+const DEFAULT_MAX_FACE_SIZE_PCT = 90;
+const FACE_SIZE_PCT_FLOOR = 2;
+const FACE_SIZE_PCT_CEIL = 100;
+const MIN_FACE_SIZE_KEY = 'camMinFaceSizePct';
+const MAX_FACE_SIZE_KEY = 'camMaxFaceSizePct';
+
 @Component({
   selector: 'app-checkin',
   standalone: true,
@@ -136,6 +150,11 @@ export class CheckinComponent implements AfterViewInit, OnDestroy {
   readonly maxDetectionIntervalMs = MAX_DETECTION_INTERVAL_MS;
   readonly minBoxSmoothing = MIN_BOX_SMOOTHING;
   readonly maxBoxSmoothing = MAX_BOX_SMOOTHING;
+
+  minFaceSizePct = DEFAULT_MIN_FACE_SIZE_PCT;
+  maxFaceSizePct = DEFAULT_MAX_FACE_SIZE_PCT;
+  readonly faceSizePctFloor = FACE_SIZE_PCT_FLOOR;
+  readonly faceSizePctCeil = FACE_SIZE_PCT_CEIL;
 
   isFullscreen = false;
 
@@ -221,6 +240,16 @@ export class CheckinComponent implements AfterViewInit, OnDestroy {
       Number(localStorage.getItem(BOX_SMOOTHING_KEY)) || DEFAULT_BOX_SMOOTHING,
       MIN_BOX_SMOOTHING,
       MAX_BOX_SMOOTHING
+    );
+    this.minFaceSizePct = this.clampNumber(
+      Number(localStorage.getItem(MIN_FACE_SIZE_KEY)) || DEFAULT_MIN_FACE_SIZE_PCT,
+      FACE_SIZE_PCT_FLOOR,
+      FACE_SIZE_PCT_CEIL
+    );
+    this.maxFaceSizePct = this.clampNumber(
+      Number(localStorage.getItem(MAX_FACE_SIZE_KEY)) || DEFAULT_MAX_FACE_SIZE_PCT,
+      FACE_SIZE_PCT_FLOOR,
+      FACE_SIZE_PCT_CEIL
     );
     this.selectedLocationId = localStorage.getItem(LOCATION_STORAGE_KEY) || '';
   }
@@ -397,6 +426,16 @@ export class CheckinComponent implements AfterViewInit, OnDestroy {
   onBoxSmoothingChange(value: number): void {
     this.boxSmoothing = this.clampNumber(value, MIN_BOX_SMOOTHING, MAX_BOX_SMOOTHING);
     localStorage.setItem(BOX_SMOOTHING_KEY, String(this.boxSmoothing));
+  }
+
+  onMinFaceSizeChange(value: number): void {
+    this.minFaceSizePct = this.clampNumber(value, FACE_SIZE_PCT_FLOOR, this.maxFaceSizePct);
+    localStorage.setItem(MIN_FACE_SIZE_KEY, String(this.minFaceSizePct));
+  }
+
+  onMaxFaceSizeChange(value: number): void {
+    this.maxFaceSizePct = this.clampNumber(value, this.minFaceSizePct, FACE_SIZE_PCT_CEIL);
+    localStorage.setItem(MAX_FACE_SIZE_KEY, String(this.maxFaceSizePct));
   }
 
   // ===== Collapsible panels =====
@@ -673,11 +712,39 @@ export class CheckinComponent implements AfterViewInit, OnDestroy {
     setTimeout(() => location.reload(), 1200);
   }
 
-  private async handleDetections(dets: FaceDetectionResult[]): Promise<void> {
+  // Face "distance" can't be measured from a single 2D camera, but the
+  // detected box height as a % of the frame height is a reliable stand-in
+  // (closer face = taller box) — lets the device-settings range slider
+  // reject faces that are too far away or pressed too close to the lens.
+  private filterByFaceSize(dets: FaceDetectionResult[]): { kept: FaceDetectionResult[]; hadOutOfRange: boolean } {
+    const frameHeight = this.videoRef.nativeElement.videoHeight || 480;
+    let hadOutOfRange = false;
+    const kept = dets.filter((d) => {
+      const pct = (d.box.height / frameHeight) * 100;
+      const ok = pct >= this.minFaceSizePct && pct <= this.maxFaceSizePct;
+      if (!ok) hadOutOfRange = true;
+      return ok;
+    });
+    return { kept, hadOutOfRange };
+  }
+
+  private async handleDetections(rawDets: FaceDetectionResult[]): Promise<void> {
     if (!this.running) return;
-    if (!dets.length) {
+    if (!rawDets.length) {
       this.drawAll([]);
       this.setStatus('กำลังค้นหาใบหน้า... กรุณาหันหน้าเข้ากล้อง', 'scanning');
+      return;
+    }
+
+    const { kept: dets, hadOutOfRange } = this.filterByFaceSize(rawDets);
+    if (!dets.length) {
+      this.drawAll([]);
+      this.setStatus(
+        hadOutOfRange
+          ? 'ตรวจพบใบหน้าแต่อยู่ไกล/ใกล้เกินระยะที่ตั้งไว้ — กรุณาขยับระยะให้อยู่ในช่วงที่กำหนด'
+          : 'กำลังค้นหาใบหน้า... กรุณาหันหน้าเข้ากล้อง',
+        'scanning'
+      );
       return;
     }
 

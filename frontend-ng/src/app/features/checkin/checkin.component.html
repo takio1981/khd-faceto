@@ -103,6 +103,20 @@
               ลากไปทาง "สมูท" (ค่าน้อย) ให้กรอบไหลลื่นนิ่งขึ้นแต่จะตามหน้าช้าลงเล็กน้อย แนะนำเริ่มที่ 0.45
             </p>
           </div>
+
+          <div class="cam-select">
+            <label>📏 ระยะห่างในการตรวจจับใบหน้า — {{ minFaceSizePct }}% – {{ maxFaceSizePct }}%</label>
+            <mat-slider [min]="faceSizePctFloor" [max]="faceSizePctCeil" [step]="1" discrete>
+              <input matSliderStartThumb [(ngModel)]="minFaceSizePct" (ngModelChange)="onMinFaceSizeChange($event)" />
+              <input matSliderEndThumb [(ngModel)]="maxFaceSizePct" (ngModelChange)="onMaxFaceSizeChange($event)" />
+            </mat-slider>
+            <p class="cam-setting-hint">
+              ค่าเป็น % ของขนาดใบหน้าเทียบกับความสูงของภาพจากกล้อง (ยิ่งใบหน้าอยู่ใกล้กล้อง ใบหน้าจะมีขนาด % สูงขึ้น) —
+              ค่าต่ำสุด ({{ minFaceSizePct }}%) คือ "ระยะไกลสุด" ที่ยังตรวจจับได้ ลดค่านี้เพื่อให้ตรวจจับคนที่ยืนไกลจากกล้องได้
+              ค่าสูงสุด ({{ maxFaceSizePct }}%) คือ "ระยะใกล้สุด" ที่ยังตรวจจับได้ ลดค่านี้เพื่อกันใบหน้า/วัตถุที่จ่อเลนส์ใกล้เกินไป
+              แนะนำเริ่มที่ 8%-90%
+            </p>
+          </div>
         </div>
       </div>
 
