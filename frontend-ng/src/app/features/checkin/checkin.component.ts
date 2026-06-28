@@ -168,6 +168,20 @@ export class CheckinComponent implements AfterViewInit, OnDestroy {
   private countdownToken = 0;
   private destroyed = false;
 
+  // Camera watchdog: if the video stream silently freezes (track ends
+  // without an event, OS suspends the camera, driver hiccup, etc.) the
+  // detector keeps "running" against a static frame forever — no faces
+  // ever match, with no error to catch. Track currentTime advancing; if
+  // it's stuck for a few checks in a row while we should be scanning,
+  // assume the stream died and reacquire it automatically instead of
+  // requiring the user to refresh the page.
+  private watchdogTimer: ReturnType<typeof setInterval> | null = null;
+  private lastVideoTime = -1;
+  private staleFrameChecks = 0;
+  private recovering = false;
+  private static readonly WATCHDOG_INTERVAL_MS = 4000;
+  private static readonly STALE_CHECKS_BEFORE_RECOVERY = 2;
+
   private readonly toasted: Record<number, number> = {};
   private readonly pendingMatch: Record<number, PendingMatch> = {};
   // Previous frame's smoothed boxes, matched to this frame's detections by
@@ -232,6 +246,7 @@ export class CheckinComponent implements AfterViewInit, OnDestroy {
     if (this.clockTimer) clearInterval(this.clockTimer);
     if (this.feedResetTimer) clearInterval(this.feedResetTimer);
     if (this.resultBannerTimer) clearTimeout(this.resultBannerTimer);
+    this.stopWatchdog();
     this.facePipeline.stopCamera(this.stream);
   }
 
@@ -246,6 +261,9 @@ export class CheckinComponent implements AfterViewInit, OnDestroy {
     if (this.isFullscreen && this.running) {
       this.facePipeline.stopCamera(this.stream);
       this.stream = await this.facePipeline.startCamera(this.videoRef.nativeElement, this.selectedCameraId, this.facingMode);
+      this.attachStreamWatchers(this.stream);
+      this.lastVideoTime = -1;
+      this.staleFrameChecks = 0;
     }
   }
 
@@ -303,6 +321,9 @@ export class CheckinComponent implements AfterViewInit, OnDestroy {
     if (this.running) {
       this.facePipeline.stopCamera(this.stream);
       this.stream = await this.facePipeline.startCamera(this.videoRef.nativeElement, newId, this.facingMode);
+      this.attachStreamWatchers(this.stream);
+      this.lastVideoTime = -1;
+      this.staleFrameChecks = 0;
     }
   }
 
@@ -311,6 +332,9 @@ export class CheckinComponent implements AfterViewInit, OnDestroy {
     if (this.running) {
       this.facePipeline.stopCamera(this.stream);
       this.stream = await this.facePipeline.startCamera(this.videoRef.nativeElement, this.selectedCameraId, this.facingMode);
+      this.attachStreamWatchers(this.stream);
+      this.lastVideoTime = -1;
+      this.staleFrameChecks = 0;
     }
   }
 
@@ -325,6 +349,9 @@ export class CheckinComponent implements AfterViewInit, OnDestroy {
     if (this.running) {
       this.facePipeline.stopCamera(this.stream);
       this.stream = await this.facePipeline.startCamera(this.videoRef.nativeElement, this.selectedCameraId, this.facingMode);
+      this.attachStreamWatchers(this.stream);
+      this.lastVideoTime = -1;
+      this.staleFrameChecks = 0;
       await this.loadCameras();
     }
   }
@@ -336,6 +363,9 @@ export class CheckinComponent implements AfterViewInit, OnDestroy {
     if (this.running) {
       this.facePipeline.stopCamera(this.stream);
       this.stream = await this.facePipeline.startCamera(this.videoRef.nativeElement, this.selectedCameraId, this.facingMode);
+      this.attachStreamWatchers(this.stream);
+      this.lastVideoTime = -1;
+      this.staleFrameChecks = 0;
     }
   }
 
@@ -750,6 +780,7 @@ export class CheckinComponent implements AfterViewInit, OnDestroy {
 
       this.setStatus('กำลังเปิดกล้อง...', 'scanning');
       this.stream = await this.facePipeline.startCamera(this.videoRef.nativeElement, this.selectedCameraId, this.facingMode);
+      this.attachStreamWatchers(this.stream);
       await this.loadCameras(); // labels become available after permission is granted
 
       this.setStatus('เตรียมตัว... กำลังจะเริ่มสแกน', 'scanning');
@@ -765,6 +796,7 @@ export class CheckinComponent implements AfterViewInit, OnDestroy {
       this.starting = false;
       this.setStatus('พร้อมสแกน — รองรับหลายคนพร้อมกัน', 'scanning');
       this.loop();
+      this.startWatchdog();
     } catch (e: any) {
       this.modelsLoading = false;
       this.loadError = e?.message || String(e);
@@ -779,8 +811,70 @@ export class CheckinComponent implements AfterViewInit, OnDestroy {
     this.starting = false;
     this.countdownToken++; // cancel any in-progress countdown
     this.countdownActive = false;
+    this.stopWatchdog();
     this.facePipeline.stopCamera(this.stream);
     this.drawAll([]); // clear overlay immediately
     this.setStatus('หยุดสแกนแล้ว — กดเริ่มสแกนเพื่อเริ่มใหม่', '');
+  }
+
+  // ===== Camera watchdog =====
+  private attachStreamWatchers(stream: MediaStream): void {
+    stream.getVideoTracks().forEach((track) => {
+      track.onended = () => this.recoverCamera();
+    });
+  }
+
+  private startWatchdog(): void {
+    this.stopWatchdog();
+    this.lastVideoTime = -1;
+    this.staleFrameChecks = 0;
+    this.watchdogTimer = setInterval(() => this.checkStreamHealth(), CheckinComponent.WATCHDOG_INTERVAL_MS);
+  }
+
+  private stopWatchdog(): void {
+    if (this.watchdogTimer) {
+      clearInterval(this.watchdogTimer);
+      this.watchdogTimer = null;
+    }
+  }
+
+  private checkStreamHealth(): void {
+    if (!this.running || this.recovering) return;
+    const video = this.videoRef?.nativeElement;
+    if (!video) return;
+
+    const t = video.currentTime;
+    if (t === this.lastVideoTime) {
+      this.staleFrameChecks++;
+    } else {
+      this.staleFrameChecks = 0;
+      this.lastVideoTime = t;
+    }
+
+    if (this.staleFrameChecks >= CheckinComponent.STALE_CHECKS_BEFORE_RECOVERY) {
+      this.recoverCamera();
+    }
+  }
+
+  private async recoverCamera(): Promise<void> {
+    if (!this.running || this.recovering) return;
+    this.recovering = true;
+    this.setStatus('กล้องไม่ตอบสนอง กำลังเชื่อมต่อใหม่อัตโนมัติ...', 'warn');
+    try {
+      this.facePipeline.stopCamera(this.stream);
+      this.stream = await this.facePipeline.startCamera(this.videoRef.nativeElement, this.selectedCameraId, this.facingMode);
+      this.attachStreamWatchers(this.stream);
+      this.lastVideoTime = -1;
+      this.staleFrameChecks = 0;
+      if (this.running) {
+        this.setStatus('เชื่อมต่อกล้องใหม่สำเร็จ — พร้อมสแกน', 'scanning');
+      }
+    } catch (e: any) {
+      this.setStatus('เชื่อมต่อกล้องใหม่ไม่สำเร็จ: ' + (e?.message || e) + ' — กรุณากดเริ่มสแกนใหม่', 'error');
+      this.running = false;
+      this.stopWatchdog();
+    } finally {
+      this.recovering = false;
+    }
   }
 }
