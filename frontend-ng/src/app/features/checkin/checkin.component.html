@@ -106,8 +106,6 @@
         </div>
       </div>
 
-      <div class="scan-result" *ngIf="showResultBanner" [class]="resultType">{{ resultText }}</div>
-
       <div class="cam-wrap" #camWrap>
         <div class="cam-stage" [class.flip-h]="flipH" [class.flip-v]="flipV">
           <div class="cam-frame">
@@ -123,6 +121,8 @@
             <div class="countdown-overlay" *ngIf="countdownActive">
               <span>{{ countdownValue }}</span>
             </div>
+
+            <div class="scan-result-toast" *ngIf="showResultBanner" [class]="resultType">{{ resultText }}</div>
           </div>
 
           <div class="cam-status" [class]="statusType">

@@ -164,6 +164,7 @@ export class CheckinComponent implements AfterViewInit, OnDestroy {
   private detectionTimer: ReturnType<typeof setTimeout> | null = null;
   private clockTimer: ReturnType<typeof setInterval> | null = null;
   private feedResetTimer: ReturnType<typeof setInterval> | null = null;
+  private resultBannerTimer: ReturnType<typeof setTimeout> | null = null;
   private countdownToken = 0;
   private destroyed = false;
 
@@ -230,6 +231,7 @@ export class CheckinComponent implements AfterViewInit, OnDestroy {
     if (this.detectionTimer) clearTimeout(this.detectionTimer);
     if (this.clockTimer) clearInterval(this.clockTimer);
     if (this.feedResetTimer) clearInterval(this.feedResetTimer);
+    if (this.resultBannerTimer) clearTimeout(this.resultBannerTimer);
     this.facePipeline.stopCamera(this.stream);
   }
 
@@ -393,10 +395,28 @@ export class CheckinComponent implements AfterViewInit, OnDestroy {
     this.statusType = type;
   }
 
+  private static readonly RESULT_BANNER_MS = 3500;
+
   private showResult(text: string, type: 'success' | 'error' | 'warn'): void {
-    this.resultText = text;
-    this.resultType = type;
-    this.showResultBanner = true;
+    if (this.resultBannerTimer) clearTimeout(this.resultBannerTimer);
+
+    const display = () => {
+      this.resultText = text;
+      this.resultType = type;
+      this.showResultBanner = true;
+      this.resultBannerTimer = setTimeout(() => {
+        this.showResultBanner = false;
+      }, CheckinComponent.RESULT_BANNER_MS);
+    };
+
+    if (this.showResultBanner) {
+      // Re-trigger the pop-in animation even if a banner is already showing
+      // (e.g. two scans in quick succession) by remounting the element.
+      this.showResultBanner = false;
+      setTimeout(display, 0);
+    } else {
+      display();
+    }
   }
 
   // ===== Drawing =====
