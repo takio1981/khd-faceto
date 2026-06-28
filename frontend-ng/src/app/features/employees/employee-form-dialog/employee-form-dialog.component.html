@@ -14,18 +14,33 @@
       </mat-form-field>
 
       <mat-form-field appearance="outline">
+        <mat-label>กลุ่มงาน</mat-label>
+        <mat-select [value]="selectedDivisionId()" (selectionChange)="onDivisionChange($event.value)">
+          <mat-option [value]="null">— ไม่ระบุ —</mat-option>
+          @for (dv of data.divisions; track dv.id) {
+            <mat-option [value]="dv.id">{{ dv.name }}</mat-option>
+          }
+        </mat-select>
+      </mat-form-field>
+
+      <mat-form-field appearance="outline">
         <mat-label>แผนก</mat-label>
         <mat-select formControlName="department_id">
           <mat-option [value]="null">— ไม่ระบุ —</mat-option>
-          @for (d of data.departments; track d.id) {
-            <mat-option [value]="d.id">{{ d.name }}{{ d.division_name ? ' (' + d.division_name + ')' : '' }}</mat-option>
+          @for (d of filteredDepartments; track d.id) {
+            <mat-option [value]="d.id">{{ d.name }}</mat-option>
           }
         </mat-select>
       </mat-form-field>
 
       <mat-form-field appearance="outline">
         <mat-label>ตำแหน่ง</mat-label>
-        <input matInput formControlName="position" />
+        <mat-select formControlName="position_id">
+          <mat-option [value]="null">— ไม่ระบุ —</mat-option>
+          @for (p of data.positions; track p.id) {
+            <mat-option [value]="p.id">{{ p.name }}</mat-option>
+          }
+        </mat-select>
       </mat-form-field>
 
       <mat-form-field appearance="outline">

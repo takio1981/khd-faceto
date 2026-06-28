@@ -8,14 +8,16 @@ import { MatInputModule } from '@angular/material/input';
 import { MatProgressSpinnerModule } from '@angular/material/progress-spinner';
 import { MatSelectModule } from '@angular/material/select';
 import { EmployeeService } from '../../../core/services/employee.service';
-import { Department, Employee, EmployeeCreateRequest, Shift } from '../../../core/models/models';
+import { Department, Division, Employee, EmployeeCreateRequest, Position, Shift } from '../../../core/models/models';
 import { NotifyService } from '../../../core/services/notify.service';
 
 export interface EmployeeFormDialogData {
   employee: Employee | null;
   shifts: Shift[];
   employees: Employee[];
+  divisions: Division[];
   departments: Department[];
+  positions: Position[];
 }
 
 export interface EmployeeFormDialogResult {
@@ -64,11 +66,19 @@ export class EmployeeFormDialogComponent implements OnInit {
     { value: 'temp_employee', label: 'ลูกจ้าง' },
   ];
 
+  selectedDivisionId = signal<number | null>(null);
+
+  get filteredDepartments(): Department[] {
+    const divId = this.selectedDivisionId();
+    if (!divId) return this.data.departments;
+    return this.data.departments.filter((d) => d.division_id === divId);
+  }
+
   readonly form = this.fb.group({
     employee_code: ['', Validators.required],
     full_name: ['', Validators.required],
     department_id: [null as number | null],
-    position: [''],
+    position_id: [null as number | null],
     employee_type: ['temp_employee'],
     shift_id: [null as number | null],
     supervisor_id: [null as number | null],
@@ -88,11 +98,12 @@ export class EmployeeFormDialogComponent implements OnInit {
   ngOnInit(): void {
     const e = this.data.employee;
     if (e) {
+      this.selectedDivisionId.set(e.division_id ?? null);
       this.form.patchValue({
         employee_code: e.employee_code,
         full_name: e.full_name,
         department_id: e.department_id ?? null,
-        position: e.position || '',
+        position_id: e.position_id ?? null,
         employee_type: e.employee_type || 'temp_employee',
         shift_id: e.shift_id,
         supervisor_id: e.supervisor_id ?? null,
@@ -102,6 +113,14 @@ export class EmployeeFormDialogComponent implements OnInit {
         notify_line_user_id: e.notify_line_user_id || '',
         notify_telegram_chat_id: e.notify_telegram_chat_id || '',
       });
+    }
+  }
+
+  onDivisionChange(divisionId: number | null): void {
+    this.selectedDivisionId.set(divisionId);
+    const current = this.form.controls.department_id.value;
+    if (current && !this.filteredDepartments.some((d) => d.id === current)) {
+      this.form.controls.department_id.setValue(null);
     }
   }
 
@@ -119,7 +138,7 @@ export class EmployeeFormDialogComponent implements OnInit {
       employee_code: (v.employee_code || '').trim(),
       full_name: (v.full_name || '').trim(),
       department_id: v.department_id || null,
-      position: (v.position || '').trim(),
+      position_id: v.position_id || null,
       employee_type: (v.employee_type as Employee['employee_type']) || 'temp_employee',
       shift_id: v.shift_id || null,
       supervisor_id: v.supervisor_id || null,

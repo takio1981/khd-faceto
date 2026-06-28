@@ -91,3 +91,35 @@ export async function getDepartment(id: number): Promise<Department | null> {
   const [rows] = await pool.query<RowDataPacket[]>(`${SELECT_DEPARTMENT} WHERE dept.id = ?`, [id]);
   return (rows[0] as Department) ?? null;
 }
+
+// ---- Positions (ตำแหน่ง) ----
+
+export interface Position {
+  id: number;
+  name: string;
+  category: string | null;
+  sort_order: number;
+}
+
+export async function listPositions(): Promise<Position[]> {
+  const [rows] = await pool.query<RowDataPacket[]>(
+    'SELECT id, name, category, sort_order FROM positions ORDER BY sort_order, name'
+  );
+  return rows as Position[];
+}
+
+export async function createPosition(name: string, category: string | null): Promise<number> {
+  const [result] = await pool.query<ResultSetHeader>(
+    'INSERT INTO positions (name, category) VALUES (?, ?)',
+    [name, category]
+  );
+  return result.insertId;
+}
+
+export async function updatePosition(id: number, name: string, category: string | null): Promise<void> {
+  await pool.query('UPDATE positions SET name = ?, category = ? WHERE id = ?', [name, category, id]);
+}
+
+export async function deletePosition(id: number): Promise<void> {
+  await pool.query('DELETE FROM positions WHERE id = ?', [id]);
+}

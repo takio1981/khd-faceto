@@ -5,6 +5,7 @@ import { logAudit } from '../services/audit.service';
 import {
   listDivisions, createDivision, updateDivision, deleteDivision,
   listDepartments, createDepartment, updateDepartment, deleteDepartment,
+  listPositions, createPosition, updatePosition, deletePosition,
 } from '../services/orgStructure.service';
 
 const router = Router();
@@ -72,6 +73,38 @@ router.put('/departments/:id', verifyJWT, requireRole('admin'), asyncHandler(asy
 router.delete('/departments/:id', verifyJWT, requireRole('admin'), asyncHandler(async (req, res) => {
   await deleteDepartment(Number(req.params.id));
   await logAudit(req, { action: 'department.delete', targetTable: 'departments', targetId: Number(req.params.id) });
+  res.json({ ok: true });
+}));
+
+router.get('/positions', verifyJWT, asyncHandler(async (_req, res) => {
+  res.json(await listPositions());
+}));
+
+router.post('/positions', verifyJWT, requireRole('admin'), asyncHandler(async (req, res) => {
+  const name = String(req.body?.name || '').trim();
+  if (!name) {
+    res.status(400).json({ error: 'กรุณากรอกชื่อตำแหน่ง' });
+    return;
+  }
+  const id = await createPosition(name, req.body?.category || null);
+  await logAudit(req, { action: 'position.create', targetTable: 'positions', targetId: id, after: req.body });
+  res.status(201).json({ id });
+}));
+
+router.put('/positions/:id', verifyJWT, requireRole('admin'), asyncHandler(async (req, res) => {
+  const name = String(req.body?.name || '').trim();
+  if (!name) {
+    res.status(400).json({ error: 'กรุณากรอกชื่อตำแหน่ง' });
+    return;
+  }
+  await updatePosition(Number(req.params.id), name, req.body?.category || null);
+  await logAudit(req, { action: 'position.update', targetTable: 'positions', targetId: Number(req.params.id), after: req.body });
+  res.json({ ok: true });
+}));
+
+router.delete('/positions/:id', verifyJWT, requireRole('admin'), asyncHandler(async (req, res) => {
+  await deletePosition(Number(req.params.id));
+  await logAudit(req, { action: 'position.delete', targetTable: 'positions', targetId: Number(req.params.id) });
   res.json({ ok: true });
 }));
 

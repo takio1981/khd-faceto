@@ -301,6 +301,62 @@
             </ng-template>
           </app-responsive-table>
         </div>
+
+        <mat-divider class="org-divider"></mat-divider>
+
+        <h2 class="section-title">ตำแหน่ง</h2>
+        <p class="muted">รายชื่อตำแหน่งมาตรฐาน ใช้เลือกในหน้าข้อมูลพนักงาน</p>
+
+        <form [formGroup]="positionForm" class="form-grid two-col">
+          <mat-form-field appearance="outline">
+            <mat-label>ชื่อตำแหน่ง</mat-label>
+            <input matInput formControlName="name" placeholder="เช่น นักวิชาการสาธารณสุข" />
+          </mat-form-field>
+          <mat-form-field appearance="outline">
+            <mat-label>หมวด (ถ้ามี)</mat-label>
+            <input matInput formControlName="category" placeholder="เช่น สายวิชาชีพ" />
+          </mat-form-field>
+        </form>
+
+        <div class="actions-row">
+          <button mat-flat-button color="primary" [disabled]="positionSaving" (click)="savePosition()">
+            {{ editingPositionId ? 'บันทึกการแก้ไข' : 'เพิ่มตำแหน่ง' }}
+          </button>
+          @if (editingPositionId) {
+            <button mat-stroked-button type="button" (click)="cancelEditPosition()">ยกเลิกแก้ไข</button>
+          }
+        </div>
+
+        <div class="org-table-wrap">
+          <app-responsive-table [columns]="positionColumns" [data]="positions" [trackByFn]="trackByPositionId">
+            <ng-template #desktopRow let-p>
+              <tr>
+                <td>{{ p.name }}</td>
+                <td>{{ p.category || '-' }}</td>
+                <td class="actions-cell">
+                  <button mat-icon-button matTooltip="แก้ไข" (click)="editPosition(p)">
+                    <mat-icon>edit</mat-icon>
+                  </button>
+                  <button mat-icon-button matTooltip="ลบ" color="warn" (click)="deletePosition(p)">
+                    <mat-icon>delete</mat-icon>
+                  </button>
+                </td>
+              </tr>
+            </ng-template>
+            <ng-template #cardRow let-p>
+              <div class="card-field"><span class="card-label">ชื่อตำแหน่ง:</span> {{ p.name }}</div>
+              <div class="card-field"><span class="card-label">หมวด:</span> {{ p.category || '-' }}</div>
+            </ng-template>
+            <ng-template #cardActions let-p>
+              <button mat-icon-button matTooltip="แก้ไข" (click)="editPosition(p)">
+                <mat-icon>edit</mat-icon>
+              </button>
+              <button mat-icon-button matTooltip="ลบ" color="warn" (click)="deletePosition(p)">
+                <mat-icon>delete</mat-icon>
+              </button>
+            </ng-template>
+          </app-responsive-table>
+        </div>
       </mat-card>
     </mat-tab>
 

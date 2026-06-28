@@ -10,7 +10,7 @@ import { EmployeeService } from '../../core/services/employee.service';
 import { ShiftService } from '../../core/services/shift.service';
 import { OrgStructureService } from '../../core/services/org-structure.service';
 import { NotifyService } from '../../core/services/notify.service';
-import { Department, Employee, Shift } from '../../core/models/models';
+import { Department, Division, Employee, Position, Shift } from '../../core/models/models';
 import { EmployeeFormDialogComponent, EmployeeFormDialogResult } from './employee-form-dialog/employee-form-dialog.component';
 import { FaceEnrollDialogComponent } from './face-enroll-dialog/face-enroll-dialog.component';
 import { FaceGalleryDialogComponent, FaceGalleryDialogResult } from './face-gallery-dialog/face-gallery-dialog.component';
@@ -35,6 +35,7 @@ export class EmployeesComponent implements OnInit {
     { key: 'code', label: 'รหัส' },
     { key: 'name', label: 'ชื่อ-นามสกุล' },
     { key: 'department', label: 'แผนก' },
+    { key: 'position', label: 'ตำแหน่ง' },
     { key: 'supervisor', label: 'ผู้บังคับบัญชา' },
     { key: 'shift', label: 'กะ' },
     { key: 'faces', label: 'ใบหน้า' },
@@ -44,7 +45,9 @@ export class EmployeesComponent implements OnInit {
 
   readonly employees = signal<Employee[]>([]);
   readonly shifts = signal<Shift[]>([]);
+  readonly divisions = signal<Division[]>([]);
   readonly departments = signal<Department[]>([]);
+  readonly positions = signal<Position[]>([]);
   readonly showInactive = signal(false);
   readonly loading = signal(false);
 
@@ -58,13 +61,29 @@ export class EmployeesComponent implements OnInit {
 
   ngOnInit(): void {
     this.loadShifts();
+    this.loadDivisions();
     this.loadDepartments();
+    this.loadPositions();
     this.loadEmployees();
+  }
+
+  loadDivisions(): void {
+    this.orgStructureService.listDivisions().subscribe({
+      next: (rows) => this.divisions.set(rows),
+      error: () => {},
+    });
   }
 
   loadDepartments(): void {
     this.orgStructureService.listDepartments().subscribe({
       next: (rows) => this.departments.set(rows),
+      error: () => {},
+    });
+  }
+
+  loadPositions(): void {
+    this.orgStructureService.listPositions().subscribe({
+      next: (rows) => this.positions.set(rows),
       error: () => {},
     });
   }
@@ -111,7 +130,14 @@ export class EmployeesComponent implements OnInit {
     const ref = this.dialog.open(EmployeeFormDialogComponent, {
       width: '640px',
       maxWidth: '95vw',
-      data: { employee: null, shifts: this.shifts(), employees: this.employees(), departments: this.departments() },
+      data: {
+        employee: null,
+        shifts: this.shifts(),
+        employees: this.employees(),
+        divisions: this.divisions(),
+        departments: this.departments(),
+        positions: this.positions(),
+      },
     });
     ref.afterClosed().subscribe((result: EmployeeFormDialogResult | undefined) => {
       if (!result?.saved) return;
@@ -126,7 +152,14 @@ export class EmployeesComponent implements OnInit {
     const ref = this.dialog.open(EmployeeFormDialogComponent, {
       width: '640px',
       maxWidth: '95vw',
-      data: { employee: emp, shifts: this.shifts(), employees: this.employees(), departments: this.departments() },
+      data: {
+        employee: emp,
+        shifts: this.shifts(),
+        employees: this.employees(),
+        divisions: this.divisions(),
+        departments: this.departments(),
+        positions: this.positions(),
+      },
     });
     ref.afterClosed().subscribe((result: EmployeeFormDialogResult | undefined) => {
       if (result?.saved) this.loadEmployees();

@@ -24,7 +24,7 @@ import { OrgStructureService } from '../../core/services/org-structure.service';
 import { EmployeeService } from '../../core/services/employee.service';
 import { patchLeafletDefaultIcon } from '../../shared/utils/leaflet-icon-fix';
 import { SettingsService } from '../../core/services/settings.service';
-import { AuditLogEntry, Department, Division, Employee, Holiday, NotificationSettings, ScanLocation } from '../../core/models/models';
+import { AuditLogEntry, Department, Division, Employee, Holiday, NotificationSettings, Position, ScanLocation } from '../../core/models/models';
 import { ResponsiveTableComponent, TableColumn } from '../../shared/components/responsive-table/responsive-table.component';
 
 declare const L: any;
@@ -143,6 +143,9 @@ export class SettingsComponent implements OnInit, AfterViewInit {
     'department.create': 'เพิ่มแผนก',
     'department.update': 'แก้ไขแผนก',
     'department.delete': 'ลบแผนก',
+    'position.create': 'เพิ่มตำแหน่ง',
+    'position.update': 'แก้ไขตำแหน่ง',
+    'position.delete': 'ลบตำแหน่ง',
     'correction_request.create': 'ยื่นคำขอแก้ไข/อุทธรณ์เวลา',
     'correction_request.supervisor_decision': 'หัวหน้าพิจารณาคำขอแก้ไขเวลา',
     'correction_request.admin_decision': 'admin ยืนยันคำขอแก้ไขเวลา',
@@ -185,6 +188,20 @@ export class SettingsComponent implements OnInit, AfterViewInit {
   ];
   trackByDivisionId = (_: number, d: Division) => d.id;
   trackByDepartmentId = (_: number, d: Department) => d.id;
+
+  readonly positionForm = this.fb.group({
+    name: ['', Validators.required],
+    category: [''],
+  });
+  positions: Position[] = [];
+  editingPositionId: number | null = null;
+  positionSaving = false;
+  readonly positionColumns: TableColumn[] = [
+    { key: 'name', label: 'ชื่อตำแหน่ง' },
+    { key: 'category', label: 'หมวด' },
+    { key: 'actions', label: 'จัดการ' },
+  ];
+  trackByPositionId = (_: number, p: Position) => p.id;
 
   // ===== 3. Notifications =====
   readonly notifForm = this.fb.group({
@@ -544,6 +561,68 @@ export class SettingsComponent implements OnInit, AfterViewInit {
     });
     this.loadDivisions();
     this.loadDepartments();
+    this.loadPositions();
+  }
+
+  loadPositions(): void {
+    this.orgStructureService.listPositions().subscribe({
+      next: (rows) => (this.positions = rows),
+      error: () => this.notify.toast('โหลดรายชื่อตำแหน่งไม่สำเร็จ', 'error'),
+    });
+  }
+
+  editPosition(p: Position): void {
+    this.editingPositionId = p.id;
+    this.positionForm.patchValue({ name: p.name, category: p.category || '' });
+  }
+
+  cancelEditPosition(): void {
+    this.editingPositionId = null;
+    this.positionForm.reset({ name: '', category: '' });
+  }
+
+  savePosition(): void {
+    if (this.positionForm.invalid) {
+      this.positionForm.markAllAsTouched();
+      return;
+    }
+    const v = this.positionForm.getRawValue();
+    const body = { name: v.name!.trim(), category: (v.category || '').trim() || null };
+    this.positionSaving = true;
+    const obs: Observable<unknown> = this.editingPositionId
+      ? this.orgStructureService.updatePosition(this.editingPositionId, body)
+      : this.orgStructureService.createPosition(body);
+    obs.subscribe({
+      next: () => {
+        this.positionSaving = false;
+        this.notify.toast('บันทึกตำแหน่งเรียบร้อยแล้ว', 'success');
+        this.cancelEditPosition();
+        this.loadPositions();
+      },
+      error: (err: any) => {
+        this.positionSaving = false;
+        this.notify.toast(err.error?.error || 'บันทึกไม่สำเร็จ', 'error');
+      },
+    });
+  }
+
+  async deletePosition(p: Position): Promise<void> {
+    const ok = await this.notify.confirm({
+      title: 'ยืนยันการลบ',
+      message: `ลบตำแหน่ง "${p.name}" นี้? พนักงานที่มีตำแหน่งนี้จะไม่ถูกลบ แต่จะไม่ผูกกับตำแหน่งใดอีก`,
+      confirmText: 'ลบ',
+      cancelText: 'ยกเลิก',
+      danger: true,
+    });
+    if (!ok) return;
+    this.orgStructureService.deletePosition(p.id).subscribe({
+      next: () => {
+        if (this.editingPositionId === p.id) this.cancelEditPosition();
+        this.notify.toast('ลบตำแหน่งเรียบร้อยแล้ว', 'success');
+        this.loadPositions();
+      },
+      error: (err: any) => this.notify.toast(err.error?.error || 'ลบไม่สำเร็จ', 'error'),
+    });
   }
 
   loadDivisions(): void {

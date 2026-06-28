@@ -14,8 +14,11 @@ export interface Employee {
   department: string | null;
   department_id?: number | null;
   department_name?: string | null;
+  division_id?: number | null;
   division_name?: string | null;
   position: string | null;
+  position_id?: number | null;
+  position_name?: string | null;
   shift_id: number | null;
   shift_name?: string | null;
   supervisor_id?: number | null;
@@ -33,7 +36,7 @@ export interface EmployeeCreateRequest {
   employee_code: string;
   full_name: string;
   department_id?: number | null;
-  position?: string | null;
+  position_id?: number | null;
   employee_type?: 'civil_servant' | 'government_employee' | 'temp_employee';
   shift_id?: number | null;
   supervisor_id?: number | null;
@@ -226,6 +229,13 @@ export interface Department {
   division_name: string | null;
   head_employee_id: number | null;
   head_name: string | null;
+}
+
+export interface Position {
+  id: number;
+  name: string;
+  category: string | null;
+  sort_order: number;
 }
 
 export type CorrectionRequestType = 'correction' | 'appeal_absent' | 'appeal_late';
