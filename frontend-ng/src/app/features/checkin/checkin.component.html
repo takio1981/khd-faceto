@@ -111,17 +111,19 @@
 
           <!-- Latest-scan overlay: only useful in fullscreen, where the
                feed-card sidebar below isn't visible (fullscreen only
-               covers #camWrap). Shows just the single newest scan, not
-               the full list, so the camera stays the focus. -->
+               covers #camWrap). Shows every scan recorded today,
+               newest first (feedItems is already kept in that order). -->
           <div class="latest-scan-overlay" *ngIf="feedItems.length">
-            <img class="lso-thumb" *ngIf="feedItems[0].imageBase64" [src]="feedItems[0].imageBase64" alt="">
-            <div class="lso-info">
-              <div class="lso-name">{{ feedItems[0].name }}</div>
-              <div class="lso-meta">
-                <span class="badge" [class]="feedItems[0].status">{{ statusTh[feedItems[0].status || ''] || feedItems[0].status }}</span>
-                <span class="lso-type">{{ scanTypeTh[feedItems[0].scanType || ''] || feedItems[0].scanType }}</span>
+            <div class="lso-item" *ngFor="let item of feedItems">
+              <img class="lso-thumb" *ngIf="item.imageBase64" [src]="item.imageBase64" alt="">
+              <div class="lso-info">
+                <div class="lso-name">{{ item.name }}</div>
+                <div class="lso-meta">
+                  <span class="badge" [class]="item.status">{{ statusTh[item.status || ''] || item.status }}</span>
+                  <span class="lso-type">{{ scanTypeTh[item.scanType || ''] || item.scanType }}</span>
+                </div>
+                <div class="lso-time">{{ feedTime(item.time) }}</div>
               </div>
-              <div class="lso-time">{{ feedTime(feedItems[0].time) }}</div>
             </div>
           </div>
         </div>
