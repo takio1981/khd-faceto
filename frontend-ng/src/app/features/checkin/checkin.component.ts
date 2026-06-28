@@ -14,6 +14,7 @@ import { MatCardModule } from '@angular/material/card';
 import { MatIconModule } from '@angular/material/icon';
 import { MatProgressSpinnerModule } from '@angular/material/progress-spinner';
 import { MatSelectModule } from '@angular/material/select';
+import { MatSliderModule } from '@angular/material/slider';
 import { firstValueFrom } from 'rxjs';
 import {
   FaceDetectionResult,
@@ -68,11 +69,18 @@ const FEED_ITEMS_KEY = 'khd_checkin_feed_items';
 const CONFIRM_COUNT = 2;
 const PENDING_TIMEOUT_MS = 3000;
 const TOAST_GAP_MS = 60 * 1000;
-const DETECTION_INTERVAL_MS = 150;
+const DEFAULT_DETECTION_INTERVAL_MS = 150;
+const MIN_DETECTION_INTERVAL_MS = 80;
+const MAX_DETECTION_INTERVAL_MS = 600;
 // Exponential smoothing factor applied to drawn face boxes/landmarks each
-// frame (0 = frozen, 1 = no smoothing/instant snap to the raw detection).
-const BOX_SMOOTHING = 0.45;
+// frame (0 = frozen/no movement, 1 = no smoothing/instant snap to the raw
+// detection — jitters more but tracks with zero lag).
+const DEFAULT_BOX_SMOOTHING = 0.45;
+const MIN_BOX_SMOOTHING = 0.1;
+const MAX_BOX_SMOOTHING = 0.9;
 const COUNTDOWN_SECONDS = 5;
+const DETECTION_INTERVAL_KEY = 'camDetectionIntervalMs';
+const BOX_SMOOTHING_KEY = 'camBoxSmoothing';
 
 @Component({
   selector: 'app-checkin',
@@ -86,6 +94,7 @@ const COUNTDOWN_SECONDS = 5;
     MatIconModule,
     MatProgressSpinnerModule,
     MatSelectModule,
+    MatSliderModule,
   ],
   templateUrl: './checkin.component.html',
   styleUrl: './checkin.component.scss',
@@ -120,6 +129,13 @@ export class CheckinComponent implements AfterViewInit, OnDestroy {
   flipH = false;
   flipV = false;
   showLandmarks = true;
+
+  detectionIntervalMs = DEFAULT_DETECTION_INTERVAL_MS;
+  boxSmoothing = DEFAULT_BOX_SMOOTHING;
+  readonly minDetectionIntervalMs = MIN_DETECTION_INTERVAL_MS;
+  readonly maxDetectionIntervalMs = MAX_DETECTION_INTERVAL_MS;
+  readonly minBoxSmoothing = MIN_BOX_SMOOTHING;
+  readonly maxBoxSmoothing = MAX_BOX_SMOOTHING;
 
   isFullscreen = false;
 
@@ -181,6 +197,16 @@ export class CheckinComponent implements AfterViewInit, OnDestroy {
     this.flipH = localStorage.getItem('camFlipH') === '1';
     this.flipV = localStorage.getItem('camFlipV') === '1';
     this.showLandmarks = localStorage.getItem('camShowLandmarks') !== '0';
+    this.detectionIntervalMs = this.clampNumber(
+      Number(localStorage.getItem(DETECTION_INTERVAL_KEY)) || DEFAULT_DETECTION_INTERVAL_MS,
+      MIN_DETECTION_INTERVAL_MS,
+      MAX_DETECTION_INTERVAL_MS
+    );
+    this.boxSmoothing = this.clampNumber(
+      Number(localStorage.getItem(BOX_SMOOTHING_KEY)) || DEFAULT_BOX_SMOOTHING,
+      MIN_BOX_SMOOTHING,
+      MAX_BOX_SMOOTHING
+    );
     this.selectedLocationId = localStorage.getItem(LOCATION_STORAGE_KEY) || '';
   }
 
@@ -327,6 +353,20 @@ export class CheckinComponent implements AfterViewInit, OnDestroy {
     localStorage.setItem('camShowLandmarks', this.showLandmarks ? '1' : '0');
   }
 
+  private clampNumber(value: number, min: number, max: number): number {
+    return Math.min(max, Math.max(min, value));
+  }
+
+  onDetectionIntervalChange(value: number): void {
+    this.detectionIntervalMs = this.clampNumber(value, MIN_DETECTION_INTERVAL_MS, MAX_DETECTION_INTERVAL_MS);
+    localStorage.setItem(DETECTION_INTERVAL_KEY, String(this.detectionIntervalMs));
+  }
+
+  onBoxSmoothingChange(value: number): void {
+    this.boxSmoothing = this.clampNumber(value, MIN_BOX_SMOOTHING, MAX_BOX_SMOOTHING);
+    localStorage.setItem(BOX_SMOOTHING_KEY, String(this.boxSmoothing));
+  }
+
   // ===== Collapsible panels =====
   toggleDeviceSettings(): void {
     this.showDeviceSettings = !this.showDeviceSettings;
@@ -392,12 +432,13 @@ export class CheckinComponent implements AfterViewInit, OnDestroy {
       const hFull = b.height * sy;
 
       const prev = this.smoothedBoxes[i];
+      const factor = this.boxSmoothing;
       const smoothed = prev
         ? {
-            x: prev.x + (rawXFull - prev.x) * BOX_SMOOTHING,
-            y: prev.y + (rawYFull - prev.y) * BOX_SMOOTHING,
-            width: prev.width + (wFull - prev.width) * BOX_SMOOTHING,
-            height: prev.height + (hFull - prev.height) * BOX_SMOOTHING,
+            x: prev.x + (rawXFull - prev.x) * factor,
+            y: prev.y + (rawYFull - prev.y) * factor,
+            width: prev.width + (wFull - prev.width) * factor,
+            height: prev.height + (hFull - prev.height) * factor,
           }
         : { x: rawXFull, y: rawYFull, width: wFull, height: hFull };
       this.smoothedBoxes[i] = smoothed;
@@ -514,7 +555,7 @@ export class CheckinComponent implements AfterViewInit, OnDestroy {
           this.busy = false;
         });
     }
-    this.detectionTimer = setTimeout(() => this.loop(), DETECTION_INTERVAL_MS);
+    this.detectionTimer = setTimeout(() => this.loop(), this.detectionIntervalMs);
   }
 
   private async handleDetections(dets: FaceDetectionResult[]): Promise<void> {

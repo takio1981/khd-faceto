@@ -81,6 +81,28 @@
               <mat-option *ngFor="let q of qualityOptions" [value]="q.key">{{ q.label }}</mat-option>
             </mat-select>
           </div>
+
+          <div class="cam-select">
+            <label>⚡ ความเร็วในการตรวจจับใบหน้า — {{ detectionIntervalMs }} ms</label>
+            <mat-slider [min]="minDetectionIntervalMs" [max]="maxDetectionIntervalMs" [step]="10" discrete>
+              <input matSliderThumb [(ngModel)]="detectionIntervalMs" (ngModelChange)="onDetectionIntervalChange($event)" />
+            </mat-slider>
+            <p class="cam-setting-hint">
+              ลากไปทาง "เร็ว" (ค่าน้อย) เพื่อให้ตรวจจับใบหน้าถี่ขึ้น/ตอบสนองไวขึ้น แต่ใช้ CPU มากขึ้น —
+              ถ้าเครื่องช้าหรือภาพกระตุก ให้ลากไปทาง "ช้า" (ค่ามาก) แนะนำเริ่มที่ 150 ms
+            </p>
+          </div>
+
+          <div class="cam-select">
+            <label>🎯 ความสมูทในการติดตามใบหน้า — {{ boxSmoothing | number:'1.1-2' }}</label>
+            <mat-slider [min]="minBoxSmoothing" [max]="maxBoxSmoothing" [step]="0.05" discrete>
+              <input matSliderThumb [(ngModel)]="boxSmoothing" (ngModelChange)="onBoxSmoothingChange($event)" />
+            </mat-slider>
+            <p class="cam-setting-hint">
+              ลากไปทาง "เร็ว" (ค่ามาก) ให้กรอบ/จุดบนใบหน้าตามหน้าได้ไวขึ้นทันที แต่จะกระตุกง่ายขึ้น —
+              ลากไปทาง "สมูท" (ค่าน้อย) ให้กรอบไหลลื่นนิ่งขึ้นแต่จะตามหน้าช้าลงเล็กน้อย แนะนำเริ่มที่ 0.45
+            </p>
+          </div>
         </div>
       </div>
 
