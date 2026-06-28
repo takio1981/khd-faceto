@@ -124,16 +124,25 @@ async function sendTelegram(settings: NotificationSettings, chatId: string, text
   if (!res.ok) throw new Error(`Telegram API error: ${res.status} ${await res.text()}`);
 }
 
-async function pushLocal(settings: NotificationSettings, title: string, body: string, eventType: NotifyEventType): Promise<void> {
+async function pushLocal(
+  settings: NotificationSettings,
+  title: string,
+  body: string,
+  eventType: NotifyEventType,
+  employeeId: number | null = null
+): Promise<void> {
   if (!settings.local.enabled) return;
   await pool.query<ResultSetHeader>(
-    'INSERT INTO notification_inbox (event_type, title, body) VALUES (?, ?, ?)',
-    [eventType, title, body]
+    'INSERT INTO notification_inbox (employee_id, event_type, title, body) VALUES (?, ?, ?, ?)',
+    [employeeId, eventType, title, body]
   );
-  // Keep the inbox from growing forever — only the most recent 200 entries matter.
+  // Keep the inbox from growing forever. Raised from 200 once this table
+  // started doubling as each employee's personal notification history (not
+  // just the admin-facing feed) — 200 system-wide would only leave a
+  // handful of rows per employee in a multi-employee office.
   await pool.query(
     `DELETE FROM notification_inbox WHERE id NOT IN
-       (SELECT id FROM (SELECT id FROM notification_inbox ORDER BY id DESC LIMIT 200) t)`
+       (SELECT id FROM (SELECT id FROM notification_inbox ORDER BY id DESC LIMIT 2000) t)`
   );
 }
 
@@ -190,7 +199,7 @@ async function dispatch(eventType: NotifyEventType, employee: NotifyEmployee, me
     if (settings.admin.lineUserId) jobs.push(sendLine(settings, settings.admin.lineUserId, body));
     if (settings.admin.telegramChatId) jobs.push(sendTelegram(settings, settings.admin.telegramChatId, body));
   }
-  if (evt.employee || evt.admin) jobs.push(pushLocal(settings, title, body, eventType));
+  if (evt.employee || evt.admin) jobs.push(pushLocal(settings, title, body, eventType, employee.id));
 
   const results = await Promise.allSettled(jobs);
   for (const r of results) {
@@ -275,4 +284,85 @@ export function startAbsentCheckScheduler(): void {
   setInterval(() => {
     runAbsentCheck().catch((err) => console.error('[notification] absent check failed:', err));
   }, 60_000);
+}
+
+// ---- Per-employee notification history (personal "ประวัติการแจ้งเตือน") ----
+
+export interface NotificationHistoryItem {
+  id: number;
+  event_type: NotifyEventType;
+  title: string;
+  body: string;
+  is_read: 0 | 1;
+  created_at: string;
+}
+
+export interface NotificationHistoryFilter {
+  eventType?: NotifyEventType;
+  isRead?: '0' | '1';
+  dateFrom?: string;
+  dateTo?: string;
+  page?: number;
+  pageSize?: number;
+}
+
+export async function listMyNotifications(
+  employeeId: number,
+  filter: NotificationHistoryFilter
+): Promise<{ data: NotificationHistoryItem[]; total: number; page: number; pageSize: number; unreadCount: number }> {
+  const page = Math.max(1, filter.page || 1);
+  const pageSize = Math.min(100, Math.max(1, filter.pageSize || 20));
+  const offset = (page - 1) * pageSize;
+
+  const where: string[] = ['employee_id = ?'];
+  const params: any[] = [employeeId];
+  if (filter.eventType) { where.push('event_type = ?'); params.push(filter.eventType); }
+  if (filter.isRead === '0' || filter.isRead === '1') { where.push('is_read = ?'); params.push(filter.isRead); }
+  if (filter.dateFrom) { where.push('DATE(created_at) >= ?'); params.push(filter.dateFrom); }
+  if (filter.dateTo) { where.push('DATE(created_at) <= ?'); params.push(filter.dateTo); }
+  const whereSql = `WHERE ${where.join(' AND ')}`;
+
+  const [countRows] = await pool.query<RowDataPacket[]>(
+    `SELECT COUNT(*) AS total FROM notification_inbox ${whereSql}`,
+    params
+  );
+  const [unreadRows] = await pool.query<RowDataPacket[]>(
+    `SELECT COUNT(*) AS unread FROM notification_inbox WHERE employee_id = ? AND is_read = 0`,
+    [employeeId]
+  );
+  const [rows] = await pool.query<RowDataPacket[]>(
+    `SELECT id, event_type, title, body, is_read, created_at FROM notification_inbox
+       ${whereSql}
+      ORDER BY id DESC
+      LIMIT ? OFFSET ?`,
+    [...params, pageSize, offset]
+  );
+
+  return {
+    data: rows as NotificationHistoryItem[],
+    total: countRows[0].total as number,
+    page,
+    pageSize,
+    unreadCount: unreadRows[0].unread as number,
+  };
+}
+
+export async function setNotificationRead(employeeId: number, id: number, isRead: boolean): Promise<boolean> {
+  const [result] = await pool.query<ResultSetHeader>(
+    'UPDATE notification_inbox SET is_read = ? WHERE id = ? AND employee_id = ?',
+    [isRead ? 1 : 0, id, employeeId]
+  );
+  return result.affectedRows > 0;
+}
+
+export async function setAllNotificationsRead(employeeId: number): Promise<void> {
+  await pool.query('UPDATE notification_inbox SET is_read = 1 WHERE employee_id = ? AND is_read = 0', [employeeId]);
+}
+
+export async function deleteMyNotification(employeeId: number, id: number): Promise<boolean> {
+  const [result] = await pool.query<ResultSetHeader>(
+    'DELETE FROM notification_inbox WHERE id = ? AND employee_id = ?',
+    [id, employeeId]
+  );
+  return result.affectedRows > 0;
 }

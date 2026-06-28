@@ -25,6 +25,7 @@ const NAV_LINKS: NavLink[] = [
   { path: '/attendance', label: 'ประวัติการลงเวลา', icon: 'history' },
   { path: '/reports', label: 'รายงาน', icon: 'summarize' },
   { path: '/correction-requests', label: 'คำขอแก้ไข/อุทธรณ์เวลา', icon: 'gavel' },
+  { path: '/notifications', label: 'ประวัติการแจ้งเตือน', icon: 'notifications' },
   { path: '/employees', label: 'พนักงาน', icon: 'badge', adminOnly: true },
   { path: '/shifts', label: 'กะการทำงาน', icon: 'schedule', adminOnly: true },
   { path: '/settings', label: 'ตั้งค่า', icon: 'settings', adminOnly: true },

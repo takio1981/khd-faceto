@@ -205,6 +205,25 @@ export interface RecentNotification {
   created_at: string;
 }
 
+export type NotifyEventType = 'late' | 'absent' | 'success';
+
+export interface NotificationHistoryItem {
+  id: number;
+  event_type: NotifyEventType;
+  title: string;
+  body: string;
+  is_read: 0 | 1;
+  created_at: string;
+}
+
+export interface NotificationHistoryListResponse {
+  data: NotificationHistoryItem[];
+  total: number;
+  page: number;
+  pageSize: number;
+  unreadCount: number;
+}
+
 export interface ReportRow {
   [key: string]: any;
 }

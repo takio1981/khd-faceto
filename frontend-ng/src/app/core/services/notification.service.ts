@@ -2,7 +2,16 @@ import { HttpClient } from '@angular/common/http';
 import { Injectable } from '@angular/core';
 import { Observable } from 'rxjs';
 import { environment } from '../../../environments/environment';
-import { NotificationSettings, RecentNotification } from '../models/models';
+import { NotificationHistoryListResponse, NotificationSettings, RecentNotification } from '../models/models';
+
+export interface NotificationHistoryFilter {
+  eventType?: 'late' | 'absent' | 'success' | '';
+  isRead?: '0' | '1' | '';
+  dateFrom?: string;
+  dateTo?: string;
+  page?: number;
+  pageSize?: number;
+}
 
 const base = `${environment.apiBaseUrl}/notifications`;
 
@@ -24,5 +33,27 @@ export class NotificationService {
 
   recent(sinceId: number): Observable<RecentNotification[]> {
     return this.http.get<RecentNotification[]>(`${base}/recent`, { params: { sinceId: String(sinceId) } });
+  }
+
+  // ---- Personal notification history ----
+
+  listMine(filter: NotificationHistoryFilter): Observable<NotificationHistoryListResponse> {
+    const params: Record<string, string> = {};
+    Object.entries(filter).forEach(([k, v]) => {
+      if (v !== undefined && v !== null && v !== '') params[k] = String(v);
+    });
+    return this.http.get<NotificationHistoryListResponse>(`${base}/my`, { params });
+  }
+
+  setRead(id: number, isRead: boolean): Observable<{ ok: boolean }> {
+    return this.http.put<{ ok: boolean }>(`${base}/my/${id}/read`, { isRead });
+  }
+
+  markAllRead(): Observable<{ ok: boolean }> {
+    return this.http.put<{ ok: boolean }>(`${base}/my/read-all`, {});
+  }
+
+  deleteMine(id: number): Observable<{ ok: boolean }> {
+    return this.http.delete<{ ok: boolean }>(`${base}/my/${id}`);
   }
 }

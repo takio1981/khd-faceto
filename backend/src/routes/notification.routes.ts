@@ -3,7 +3,10 @@ import { RowDataPacket } from 'mysql2';
 import { pool } from '../db';
 import { asyncHandler } from '../middleware/errorHandler';
 import { verifyJWT, requireRole } from '../middleware/auth';
-import { getNotificationSettings, saveNotificationSettings, sendTestMessage } from '../services/notification.service';
+import {
+  getNotificationSettings, saveNotificationSettings, sendTestMessage,
+  listMyNotifications, setNotificationRead, setAllNotificationsRead, deleteMyNotification,
+} from '../services/notification.service';
 import { logAudit } from '../services/audit.service';
 
 const router = Router();
@@ -51,6 +54,65 @@ router.get('/recent', verifyJWT, requireRole('admin'), asyncHandler(async (req, 
     [sinceId]
   );
   res.json(rows);
+}));
+
+// ---- Personal notification history (any logged-in employee, not admin-only) ----
+
+router.get('/my', verifyJWT, asyncHandler(async (req, res) => {
+  const employeeId = req.user!.employeeId;
+  if (!employeeId) {
+    res.json({ data: [], total: 0, page: 1, pageSize: 20, unreadCount: 0 });
+    return;
+  }
+  const { eventType, isRead, dateFrom, dateTo } = req.query;
+  const result = await listMyNotifications(employeeId, {
+    eventType: eventType as any,
+    isRead: isRead as any,
+    dateFrom: dateFrom ? String(dateFrom) : undefined,
+    dateTo: dateTo ? String(dateTo) : undefined,
+    page: parseInt(String(req.query.page || '1'), 10),
+    pageSize: parseInt(String(req.query.pageSize || '20'), 10),
+  });
+  res.json(result);
+}));
+
+router.put('/my/:id/read', verifyJWT, asyncHandler(async (req, res) => {
+  const employeeId = req.user!.employeeId;
+  if (!employeeId) {
+    res.status(403).json({ error: 'บัญชีนี้ไม่ได้ผูกกับพนักงาน' });
+    return;
+  }
+  const isRead = req.body?.isRead !== false;
+  const ok = await setNotificationRead(employeeId, Number(req.params.id), isRead);
+  if (!ok) {
+    res.status(404).json({ error: 'ไม่พบการแจ้งเตือนนี้' });
+    return;
+  }
+  res.json({ ok: true });
+}));
+
+router.put('/my/read-all', verifyJWT, asyncHandler(async (req, res) => {
+  const employeeId = req.user!.employeeId;
+  if (!employeeId) {
+    res.status(403).json({ error: 'บัญชีนี้ไม่ได้ผูกกับพนักงาน' });
+    return;
+  }
+  await setAllNotificationsRead(employeeId);
+  res.json({ ok: true });
+}));
+
+router.delete('/my/:id', verifyJWT, asyncHandler(async (req, res) => {
+  const employeeId = req.user!.employeeId;
+  if (!employeeId) {
+    res.status(403).json({ error: 'บัญชีนี้ไม่ได้ผูกกับพนักงาน' });
+    return;
+  }
+  const ok = await deleteMyNotification(employeeId, Number(req.params.id));
+  if (!ok) {
+    res.status(404).json({ error: 'ไม่พบการแจ้งเตือนนี้' });
+    return;
+  }
+  res.json({ ok: true });
 }));
 
 export default router;

@@ -1,0 +1,116 @@
+<div class="page-container">
+  <div class="page-header">
+    <h1 class="page-title">
+      ประวัติการแจ้งเตือนของฉัน
+      @if (unreadCount > 0) {
+        <span class="unread-pill">{{ unreadCount }} ยังไม่อ่าน</span>
+      }
+    </h1>
+    @if (hasEmployee && unreadCount > 0) {
+      <button mat-stroked-button type="button" (click)="markAllRead()">
+        <mat-icon>done_all</mat-icon>
+        ทำเครื่องหมายอ่านแล้วทั้งหมด
+      </button>
+    }
+  </div>
+
+  @if (!hasEmployee) {
+    <mat-card class="section-card">
+      <p class="muted">บัญชีนี้ไม่ได้ผูกกับข้อมูลพนักงาน จึงไม่มีประวัติการแจ้งเตือนส่วนตัวให้แสดง</p>
+    </mat-card>
+  } @else {
+    <mat-card class="section-card filter-card">
+      <form [formGroup]="filterForm" class="filter-grid">
+        <mat-form-field appearance="outline">
+          <mat-label>ประเภท</mat-label>
+          <mat-select formControlName="eventType">
+            @for (o of eventTypeOptions; track o.value) {
+              <mat-option [value]="o.value">{{ o.label }}</mat-option>
+            }
+          </mat-select>
+        </mat-form-field>
+
+        <mat-form-field appearance="outline">
+          <mat-label>สถานะอ่าน</mat-label>
+          <mat-select formControlName="isRead">
+            @for (o of readStatusOptions; track o.value) {
+              <mat-option [value]="o.value">{{ o.label }}</mat-option>
+            }
+          </mat-select>
+        </mat-form-field>
+
+        <mat-form-field appearance="outline">
+          <mat-label>ตั้งแต่วันที่</mat-label>
+          <input matInput type="date" formControlName="dateFrom" />
+        </mat-form-field>
+
+        <mat-form-field appearance="outline">
+          <mat-label>ถึงวันที่</mat-label>
+          <input matInput type="date" formControlName="dateTo" />
+        </mat-form-field>
+      </form>
+      <div class="actions-row">
+        <button mat-flat-button color="primary" type="button" (click)="applyFilter()">กรอง</button>
+        <button mat-stroked-button type="button" (click)="resetFilter()">ล้างตัวกรอง</button>
+      </div>
+    </mat-card>
+
+    <mat-card class="section-card">
+      <app-responsive-table [columns]="columns" [data]="items" [trackByFn]="trackById">
+        <ng-template #desktopRow let-item>
+          <tr [class.unread-row]="!item.is_read">
+            <td>{{ item.created_at | date:'short' }}</td>
+            <td>{{ eventTypeText(item.event_type) }}</td>
+            <td>{{ item.title }}</td>
+            <td>{{ item.body }}</td>
+            <td>
+              <span class="badge" [class]="item.is_read ? 'on_time' : 'late'">
+                {{ item.is_read ? 'อ่านแล้ว' : 'ยังไม่อ่าน' }}
+              </span>
+            </td>
+            <td class="actions-cell">
+              <button mat-icon-button [matTooltip]="item.is_read ? 'ทำเครื่องหมายยังไม่อ่าน' : 'ทำเครื่องหมายอ่านแล้ว'" (click)="toggleRead(item)">
+                <mat-icon>{{ item.is_read ? 'mark_email_unread' : 'mark_email_read' }}</mat-icon>
+              </button>
+              <button mat-icon-button matTooltip="ลบ" color="warn" (click)="deleteItem(item)">
+                <mat-icon>delete</mat-icon>
+              </button>
+            </td>
+          </tr>
+        </ng-template>
+        <ng-template #cardRow let-item>
+          <div class="card-field"><span class="card-label">เวลา:</span> {{ item.created_at | date:'short' }}</div>
+          <div class="card-field"><span class="card-label">ประเภท:</span> {{ eventTypeText(item.event_type) }}</div>
+          <div class="card-field"><span class="card-label">หัวข้อ:</span> {{ item.title }}</div>
+          <div class="card-field"><span class="card-label">รายละเอียด:</span> {{ item.body }}</div>
+          <div class="card-field">
+            <span class="card-label">สถานะ:</span>
+            <span class="badge" [class]="item.is_read ? 'on_time' : 'late'">
+              {{ item.is_read ? 'อ่านแล้ว' : 'ยังไม่อ่าน' }}
+            </span>
+          </div>
+        </ng-template>
+        <ng-template #cardActions let-item>
+          <button mat-icon-button [matTooltip]="item.is_read ? 'ทำเครื่องหมายยังไม่อ่าน' : 'ทำเครื่องหมายอ่านแล้ว'" (click)="toggleRead(item)">
+            <mat-icon>{{ item.is_read ? 'mark_email_unread' : 'mark_email_read' }}</mat-icon>
+          </button>
+          <button mat-icon-button matTooltip="ลบ" color="warn" (click)="deleteItem(item)">
+            <mat-icon>delete</mat-icon>
+          </button>
+        </ng-template>
+      </app-responsive-table>
+
+      @if (!loading && !items.length) {
+        <p class="muted empty-state">ไม่มีรายการแจ้งเตือน</p>
+      }
+
+      <mat-paginator
+        [length]="total"
+        [pageIndex]="page"
+        [pageSize]="pageSize"
+        [pageSizeOptions]="[10, 20, 50]"
+        (page)="onPage($event)">
+      </mat-paginator>
+    </mat-card>
+  }
+</div>
