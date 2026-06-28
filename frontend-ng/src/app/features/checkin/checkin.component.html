@@ -45,6 +45,10 @@
             <mat-icon>face_retouching_natural</mat-icon>
             {{ showLandmarks ? 'ซ่อนจุดใบหน้า' : 'แสดงจุดใบหน้า' }}
           </button>
+          <button mat-stroked-button type="button" (click)="toggleSound()" [class.active]="soundEnabled" title="เปิด/ปิดเสียงแจ้งบันทึกสำเร็จ">
+            <mat-icon>{{ soundEnabled ? 'volume_up' : 'volume_off' }}</mat-icon>
+            {{ soundEnabled ? 'ปิดเสียง' : 'เปิดเสียง' }}
+          </button>
           <button mat-stroked-button type="button" (click)="toggleFullscreen()" title="เต็มจอ">
             <mat-icon>{{ isFullscreen ? 'fullscreen_exit' : 'fullscreen' }}</mat-icon>
             {{ isFullscreen ? 'ออก' : 'เต็มจอ' }}

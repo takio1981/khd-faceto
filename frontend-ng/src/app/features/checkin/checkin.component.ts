@@ -143,6 +143,7 @@ export class CheckinComponent implements AfterViewInit, OnDestroy {
   flipH = false;
   flipV = false;
   showLandmarks = true;
+  soundEnabled = true;
 
   detectionIntervalMs = DEFAULT_DETECTION_INTERVAL_MS;
   boxSmoothing = DEFAULT_BOX_SMOOTHING;
@@ -231,6 +232,7 @@ export class CheckinComponent implements AfterViewInit, OnDestroy {
     this.flipH = localStorage.getItem('camFlipH') === '1';
     this.flipV = localStorage.getItem('camFlipV') === '1';
     this.showLandmarks = localStorage.getItem('camShowLandmarks') !== '0';
+    this.soundEnabled = localStorage.getItem('camSoundEnabled') !== '0';
     this.detectionIntervalMs = this.clampNumber(
       Number(localStorage.getItem(DETECTION_INTERVAL_KEY)) || DEFAULT_DETECTION_INTERVAL_MS,
       MIN_DETECTION_INTERVAL_MS,
@@ -412,6 +414,58 @@ export class CheckinComponent implements AfterViewInit, OnDestroy {
   toggleLandmarks(): void {
     this.showLandmarks = !this.showLandmarks;
     localStorage.setItem('camShowLandmarks', this.showLandmarks ? '1' : '0');
+  }
+
+  toggleSound(): void {
+    this.soundEnabled = !this.soundEnabled;
+    localStorage.setItem('camSoundEnabled', this.soundEnabled ? '1' : '0');
+  }
+
+  // ===== Scan-success sound =====
+  // Synthesized via Web Audio (no asset file, works offline on a LAN
+  // kiosk) instead of an <audio> tag. Created lazily on the first call
+  // from start() — that's a real user click/tap, which satisfies
+  // browsers' autoplay-gesture requirement for AudioContext.
+  private audioCtx: AudioContext | null = null;
+
+  private ensureAudioContext(): void {
+    if (this.audioCtx) return;
+    const Ctor = window.AudioContext || (window as any).webkitAudioContext;
+    if (!Ctor) return;
+    try {
+      this.audioCtx = new Ctor();
+    } catch {
+      // Web Audio unavailable — sound is a nice-to-have, scanning still works
+    }
+  }
+
+  private playSuccessBeep(): void {
+    if (!this.soundEnabled) return;
+    const ctx = this.audioCtx;
+    if (!ctx) return;
+    if (ctx.state === 'suspended') ctx.resume().catch(() => {});
+
+    try {
+      const startAt = ctx.currentTime;
+      const playTone = (freq: number, offset: number, duration: number) => {
+        const osc = ctx.createOscillator();
+        const gain = ctx.createGain();
+        osc.type = 'sine';
+        osc.frequency.value = freq;
+        gain.gain.setValueAtTime(0, startAt + offset);
+        gain.gain.linearRampToValueAtTime(0.35, startAt + offset + 0.02);
+        gain.gain.linearRampToValueAtTime(0, startAt + offset + duration);
+        osc.connect(gain);
+        gain.connect(ctx.destination);
+        osc.start(startAt + offset);
+        osc.stop(startAt + offset + duration + 0.02);
+      };
+      // Short two-note ascending chime ("ding-ding") for "saved successfully".
+      playTone(880, 0, 0.12);
+      playTone(1320, 0.12, 0.14);
+    } catch {
+      // non-critical
+    }
   }
 
   private clampNumber(value: number, min: number, max: number): number {
@@ -839,6 +893,7 @@ export class CheckinComponent implements AfterViewInit, OnDestroy {
     }
 
     if (recorded > 0) {
+      this.playSuccessBeep();
       this.setStatus(`✓ บันทึก ${recorded} คน: ${names.join(', ')}`, 'success');
       this.showResult(`✓ บันทึกสำเร็จ ${recorded} คน — ${names.join(', ')}`, 'success');
     } else if (confirming > 0) {
@@ -884,6 +939,7 @@ export class CheckinComponent implements AfterViewInit, OnDestroy {
   async start(): Promise<void> {
     if (this.starting || this.running) return;
     this.starting = true;
+    this.ensureAudioContext(); // must happen on a real user gesture (this click)
     this.setStatus('กำลังโหลดโมเดล AI...', 'scanning');
     try {
       await this.ensureFaceApiLoaded();
