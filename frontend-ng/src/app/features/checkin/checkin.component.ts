@@ -612,19 +612,65 @@ export class CheckinComponent implements AfterViewInit, OnDestroy {
   }
 
   // ===== Detection loop =====
+  //
+  // face-api.js's detectAllFaces() call can hang forever with no error and
+  // no rejection — typically a TensorFlow.js WebGL backend stall (lost GPU
+  // context, browser throttling a backgrounded tab mid-inference, driver
+  // hiccup). When that happens `busy` never resets, so `loop()`'s
+  // `if (!this.busy)` guard silently stops ever calling the detector again
+  // — exactly the "ค้าง, ต้อง refresh" symptom. A bare camera-stream
+  // watchdog (see checkStreamHealth) doesn't catch this case because the
+  // <video> element itself is usually still playing fine; only the
+  // inference call is stuck. Racing each call against a timeout, and
+  // forcing a full reload after several hangs in a row, is the only
+  // reliable way to recover (we can't actually cancel a stuck TF.js op).
+  private static readonly DETECTION_TIMEOUT_MS = 6000;
+  private static readonly MAX_CONSECUTIVE_TIMEOUTS = 3;
+  private detectionAttemptId = 0;
+  private consecutiveDetectionTimeouts = 0;
+
   private loop(): void {
     if (!this.running) return;
     if (!this.busy) {
       this.busy = true;
-      this.facePipeline
-        .getAllDescriptors(this.videoRef.nativeElement)
-        .then((dets) => this.handleDetections(dets))
-        .catch((e) => console.error(e))
+      const attemptId = ++this.detectionAttemptId;
+
+      const detectPromise = this.facePipeline.getAllDescriptors(this.videoRef.nativeElement);
+      const timeoutPromise = new Promise<never>((_, reject) => {
+        setTimeout(() => reject(new Error('face detection timed out')), CheckinComponent.DETECTION_TIMEOUT_MS);
+      });
+
+      Promise.race([detectPromise, timeoutPromise])
+        .then((dets) => {
+          if (attemptId !== this.detectionAttemptId) return; // a later attempt already started/finished
+          this.consecutiveDetectionTimeouts = 0;
+          return this.handleDetections(dets as FaceDetectionResult[]);
+        })
+        .catch((e) => {
+          if (attemptId !== this.detectionAttemptId) return;
+          console.error(e);
+          this.consecutiveDetectionTimeouts++;
+          if (this.consecutiveDetectionTimeouts >= CheckinComponent.MAX_CONSECUTIVE_TIMEOUTS) {
+            this.recoverFromStuckDetection();
+          }
+        })
         .finally(() => {
-          this.busy = false;
+          if (attemptId === this.detectionAttemptId) this.busy = false;
         });
     }
     this.detectionTimer = setTimeout(() => this.loop(), this.detectionIntervalMs);
+  }
+
+  // The detector itself is stuck (not just the camera stream) — restarting
+  // just the camera won't reset a wedged TF.js/WebGL backend. A full page
+  // reload is the only thing that reliably clears it (it's also exactly
+  // what manually refreshing the page already does today), so do that
+  // automatically instead of leaving the kiosk stuck until someone notices.
+  private recoverFromStuckDetection(): void {
+    if (this.destroyed) return;
+    this.running = false;
+    this.setStatus('ระบบตรวจจับใบหน้าค้าง — กำลังรีเฟรชหน้าอัตโนมัติ...', 'error');
+    setTimeout(() => location.reload(), 1200);
   }
 
   private async handleDetections(dets: FaceDetectionResult[]): Promise<void> {
@@ -794,6 +840,7 @@ export class CheckinComponent implements AfterViewInit, OnDestroy {
 
       this.running = true;
       this.starting = false;
+      this.consecutiveDetectionTimeouts = 0;
       this.setStatus('พร้อมสแกน — รองรับหลายคนพร้อมกัน', 'scanning');
       this.loop();
       this.startWatchdog();
