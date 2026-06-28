@@ -357,6 +357,62 @@
             </ng-template>
           </app-responsive-table>
         </div>
+
+        <mat-divider class="org-divider"></mat-divider>
+
+        <h2 class="section-title">ระดับ (ข้าราชการ/พนักงาน)</h2>
+        <p class="muted">เช่น ปฏิบัติการ, ชำนาญงาน — ใช้คู่กับตำแหน่งในหน้าข้อมูลพนักงาน</p>
+
+        <form [formGroup]="levelForm" class="form-grid two-col">
+          <mat-form-field appearance="outline">
+            <mat-label>ชื่อระดับ</mat-label>
+            <input matInput formControlName="name" placeholder="เช่น ชำนาญการ" />
+          </mat-form-field>
+          <mat-form-field appearance="outline">
+            <mat-label>ประเภท (ถ้ามี)</mat-label>
+            <input matInput formControlName="category" placeholder="เช่น วิชาการ" />
+          </mat-form-field>
+        </form>
+
+        <div class="actions-row">
+          <button mat-flat-button color="primary" [disabled]="levelSaving" (click)="saveLevel()">
+            {{ editingLevelId ? 'บันทึกการแก้ไข' : 'เพิ่มระดับ' }}
+          </button>
+          @if (editingLevelId) {
+            <button mat-stroked-button type="button" (click)="cancelEditLevel()">ยกเลิกแก้ไข</button>
+          }
+        </div>
+
+        <div class="org-table-wrap">
+          <app-responsive-table [columns]="levelColumns" [data]="levels" [trackByFn]="trackByLevelId">
+            <ng-template #desktopRow let-l>
+              <tr>
+                <td>{{ l.name }}</td>
+                <td>{{ l.category || '-' }}</td>
+                <td class="actions-cell">
+                  <button mat-icon-button matTooltip="แก้ไข" (click)="editLevel(l)">
+                    <mat-icon>edit</mat-icon>
+                  </button>
+                  <button mat-icon-button matTooltip="ลบ" color="warn" (click)="deleteLevel(l)">
+                    <mat-icon>delete</mat-icon>
+                  </button>
+                </td>
+              </tr>
+            </ng-template>
+            <ng-template #cardRow let-l>
+              <div class="card-field"><span class="card-label">ชื่อระดับ:</span> {{ l.name }}</div>
+              <div class="card-field"><span class="card-label">ประเภท:</span> {{ l.category || '-' }}</div>
+            </ng-template>
+            <ng-template #cardActions let-l>
+              <button mat-icon-button matTooltip="แก้ไข" (click)="editLevel(l)">
+                <mat-icon>edit</mat-icon>
+              </button>
+              <button mat-icon-button matTooltip="ลบ" color="warn" (click)="deleteLevel(l)">
+                <mat-icon>delete</mat-icon>
+              </button>
+            </ng-template>
+          </app-responsive-table>
+        </div>
       </mat-card>
     </mat-tab>
 

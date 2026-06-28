@@ -10,7 +10,7 @@ import { EmployeeService } from '../../core/services/employee.service';
 import { ShiftService } from '../../core/services/shift.service';
 import { OrgStructureService } from '../../core/services/org-structure.service';
 import { NotifyService } from '../../core/services/notify.service';
-import { Department, Division, Employee, Position, Shift } from '../../core/models/models';
+import { CivilServiceLevel, Department, Division, Employee, Position, Shift } from '../../core/models/models';
 import { EmployeeFormDialogComponent, EmployeeFormDialogResult } from './employee-form-dialog/employee-form-dialog.component';
 import { FaceEnrollDialogComponent } from './face-enroll-dialog/face-enroll-dialog.component';
 import { FaceGalleryDialogComponent, FaceGalleryDialogResult } from './face-gallery-dialog/face-gallery-dialog.component';
@@ -36,6 +36,7 @@ export class EmployeesComponent implements OnInit {
     { key: 'name', label: 'ชื่อ-นามสกุล' },
     { key: 'department', label: 'แผนก' },
     { key: 'position', label: 'ตำแหน่ง' },
+    { key: 'level', label: 'ระดับ' },
     { key: 'supervisor', label: 'ผู้บังคับบัญชา' },
     { key: 'shift', label: 'กะ' },
     { key: 'faces', label: 'ใบหน้า' },
@@ -48,6 +49,7 @@ export class EmployeesComponent implements OnInit {
   readonly divisions = signal<Division[]>([]);
   readonly departments = signal<Department[]>([]);
   readonly positions = signal<Position[]>([]);
+  readonly levels = signal<CivilServiceLevel[]>([]);
   readonly showInactive = signal(false);
   readonly loading = signal(false);
 
@@ -64,7 +66,15 @@ export class EmployeesComponent implements OnInit {
     this.loadDivisions();
     this.loadDepartments();
     this.loadPositions();
+    this.loadLevels();
     this.loadEmployees();
+  }
+
+  loadLevels(): void {
+    this.orgStructureService.listLevels().subscribe({
+      next: (rows) => this.levels.set(rows),
+      error: () => {},
+    });
   }
 
   loadDivisions(): void {
@@ -137,6 +147,7 @@ export class EmployeesComponent implements OnInit {
         divisions: this.divisions(),
         departments: this.departments(),
         positions: this.positions(),
+        levels: this.levels(),
       },
     });
     ref.afterClosed().subscribe((result: EmployeeFormDialogResult | undefined) => {
@@ -159,6 +170,7 @@ export class EmployeesComponent implements OnInit {
         divisions: this.divisions(),
         departments: this.departments(),
         positions: this.positions(),
+        levels: this.levels(),
       },
     });
     ref.afterClosed().subscribe((result: EmployeeFormDialogResult | undefined) => {

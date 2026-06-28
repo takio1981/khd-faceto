@@ -2,7 +2,7 @@ import { HttpClient } from '@angular/common/http';
 import { Injectable } from '@angular/core';
 import { Observable } from 'rxjs';
 import { environment } from '../../../environments/environment';
-import { Department, Division, Position } from '../models/models';
+import { CivilServiceLevel, Department, Division, Position } from '../models/models';
 
 const base = `${environment.apiBaseUrl}/org`;
 
@@ -59,5 +59,25 @@ export class OrgStructureService {
 
   deletePosition(id: number): Observable<{ ok: boolean }> {
     return this.http.delete<{ ok: boolean }>(`${base}/positions/${id}`);
+  }
+
+  listLevelsForPosition(positionId: number): Observable<CivilServiceLevel[]> {
+    return this.http.get<CivilServiceLevel[]>(`${base}/positions/${positionId}/levels`);
+  }
+
+  listLevels(): Observable<CivilServiceLevel[]> {
+    return this.http.get<CivilServiceLevel[]>(`${base}/levels`);
+  }
+
+  createLevel(body: { name: string; category: string | null }): Observable<{ id: number }> {
+    return this.http.post<{ id: number }>(`${base}/levels`, body);
+  }
+
+  updateLevel(id: number, body: { name: string; category: string | null }): Observable<{ ok: boolean }> {
+    return this.http.put<{ ok: boolean }>(`${base}/levels/${id}`, body);
+  }
+
+  deleteLevel(id: number): Observable<{ ok: boolean }> {
+    return this.http.delete<{ ok: boolean }>(`${base}/levels/${id}`);
   }
 }

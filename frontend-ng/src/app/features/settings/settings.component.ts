@@ -24,7 +24,7 @@ import { OrgStructureService } from '../../core/services/org-structure.service';
 import { EmployeeService } from '../../core/services/employee.service';
 import { patchLeafletDefaultIcon } from '../../shared/utils/leaflet-icon-fix';
 import { SettingsService } from '../../core/services/settings.service';
-import { AuditLogEntry, Department, Division, Employee, Holiday, NotificationSettings, Position, ScanLocation } from '../../core/models/models';
+import { AuditLogEntry, CivilServiceLevel, Department, Division, Employee, Holiday, NotificationSettings, Position, ScanLocation } from '../../core/models/models';
 import { ResponsiveTableComponent, TableColumn } from '../../shared/components/responsive-table/responsive-table.component';
 
 declare const L: any;
@@ -146,6 +146,9 @@ export class SettingsComponent implements OnInit, AfterViewInit {
     'position.create': 'เพิ่มตำแหน่ง',
     'position.update': 'แก้ไขตำแหน่ง',
     'position.delete': 'ลบตำแหน่ง',
+    'level.create': 'เพิ่มระดับ',
+    'level.update': 'แก้ไขระดับ',
+    'level.delete': 'ลบระดับ',
     'correction_request.create': 'ยื่นคำขอแก้ไข/อุทธรณ์เวลา',
     'correction_request.supervisor_decision': 'หัวหน้าพิจารณาคำขอแก้ไขเวลา',
     'correction_request.admin_decision': 'admin ยืนยันคำขอแก้ไขเวลา',
@@ -202,6 +205,20 @@ export class SettingsComponent implements OnInit, AfterViewInit {
     { key: 'actions', label: 'จัดการ' },
   ];
   trackByPositionId = (_: number, p: Position) => p.id;
+
+  readonly levelForm = this.fb.group({
+    name: ['', Validators.required],
+    category: [''],
+  });
+  levels: CivilServiceLevel[] = [];
+  editingLevelId: number | null = null;
+  levelSaving = false;
+  readonly levelColumns: TableColumn[] = [
+    { key: 'name', label: 'ชื่อระดับ' },
+    { key: 'category', label: 'ประเภท' },
+    { key: 'actions', label: 'จัดการ' },
+  ];
+  trackByLevelId = (_: number, l: CivilServiceLevel) => l.id;
 
   // ===== 3. Notifications =====
   readonly notifForm = this.fb.group({
@@ -562,6 +579,68 @@ export class SettingsComponent implements OnInit, AfterViewInit {
     this.loadDivisions();
     this.loadDepartments();
     this.loadPositions();
+    this.loadLevels();
+  }
+
+  loadLevels(): void {
+    this.orgStructureService.listLevels().subscribe({
+      next: (rows) => (this.levels = rows),
+      error: () => this.notify.toast('โหลดรายชื่อระดับไม่สำเร็จ', 'error'),
+    });
+  }
+
+  editLevel(l: CivilServiceLevel): void {
+    this.editingLevelId = l.id;
+    this.levelForm.patchValue({ name: l.name, category: l.category || '' });
+  }
+
+  cancelEditLevel(): void {
+    this.editingLevelId = null;
+    this.levelForm.reset({ name: '', category: '' });
+  }
+
+  saveLevel(): void {
+    if (this.levelForm.invalid) {
+      this.levelForm.markAllAsTouched();
+      return;
+    }
+    const v = this.levelForm.getRawValue();
+    const body = { name: v.name!.trim(), category: (v.category || '').trim() || null };
+    this.levelSaving = true;
+    const obs: Observable<unknown> = this.editingLevelId
+      ? this.orgStructureService.updateLevel(this.editingLevelId, body)
+      : this.orgStructureService.createLevel(body);
+    obs.subscribe({
+      next: () => {
+        this.levelSaving = false;
+        this.notify.toast('บันทึกระดับเรียบร้อยแล้ว', 'success');
+        this.cancelEditLevel();
+        this.loadLevels();
+      },
+      error: (err: any) => {
+        this.levelSaving = false;
+        this.notify.toast(err.error?.error || 'บันทึกไม่สำเร็จ', 'error');
+      },
+    });
+  }
+
+  async deleteLevel(l: CivilServiceLevel): Promise<void> {
+    const ok = await this.notify.confirm({
+      title: 'ยืนยันการลบ',
+      message: `ลบระดับ "${l.name}" นี้? พนักงานที่มีระดับนี้จะไม่ถูกลบ แต่จะไม่ผูกกับระดับใดอีก`,
+      confirmText: 'ลบ',
+      cancelText: 'ยกเลิก',
+      danger: true,
+    });
+    if (!ok) return;
+    this.orgStructureService.deleteLevel(l.id).subscribe({
+      next: () => {
+        if (this.editingLevelId === l.id) this.cancelEditLevel();
+        this.notify.toast('ลบระดับเรียบร้อยแล้ว', 'success');
+        this.loadLevels();
+      },
+      error: (err: any) => this.notify.toast(err.error?.error || 'ลบไม่สำเร็จ', 'error'),
+    });
   }
 
   loadPositions(): void {

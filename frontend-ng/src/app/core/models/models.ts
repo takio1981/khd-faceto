@@ -19,6 +19,8 @@ export interface Employee {
   position: string | null;
   position_id?: number | null;
   position_name?: string | null;
+  level_id?: number | null;
+  level_name?: string | null;
   shift_id: number | null;
   shift_name?: string | null;
   supervisor_id?: number | null;
@@ -37,6 +39,7 @@ export interface EmployeeCreateRequest {
   full_name: string;
   department_id?: number | null;
   position_id?: number | null;
+  level_id?: number | null;
   employee_type?: 'civil_servant' | 'government_employee' | 'temp_employee';
   shift_id?: number | null;
   supervisor_id?: number | null;
@@ -232,6 +235,13 @@ export interface Department {
 }
 
 export interface Position {
+  id: number;
+  name: string;
+  category: string | null;
+  sort_order: number;
+}
+
+export interface CivilServiceLevel {
   id: number;
   name: string;
   category: string | null;

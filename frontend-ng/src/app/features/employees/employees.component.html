@@ -22,6 +22,7 @@
         </td>
         <td>{{ emp.department || '-' }}</td>
         <td>{{ emp.position || '-' }}</td>
+        <td>{{ emp.level_name || '-' }}</td>
         <td>{{ emp.supervisor_name || '-' }}</td>
         <td>{{ emp.shift_name || '-' }}</td>
         <td>
@@ -65,6 +66,7 @@
       <div class="card-field"><span>ประเภทบุคลากร:</span> {{ employeeTypeText(emp.employee_type) }}</div>
       <div class="card-field"><span>แผนก:</span> {{ emp.department || '-' }}</div>
       <div class="card-field"><span>ตำแหน่ง:</span> {{ emp.position || '-' }}</div>
+      <div class="card-field"><span>ระดับ:</span> {{ emp.level_name || '-' }}</div>
       <div class="card-field"><span>ผู้บังคับบัญชา:</span> {{ emp.supervisor_name || '-' }}</div>
       <div class="card-field"><span>กะ:</span> {{ emp.shift_name || '-' }}</div>
       <div class="card-field">

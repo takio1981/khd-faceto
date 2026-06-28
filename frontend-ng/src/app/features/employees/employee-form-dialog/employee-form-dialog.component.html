@@ -35,10 +35,20 @@
 
       <mat-form-field appearance="outline">
         <mat-label>ตำแหน่ง</mat-label>
-        <mat-select formControlName="position_id">
+        <mat-select [value]="form.controls.position_id.value" (selectionChange)="onPositionChange($event.value)">
           <mat-option [value]="null">— ไม่ระบุ —</mat-option>
           @for (p of data.positions; track p.id) {
             <mat-option [value]="p.id">{{ p.name }}</mat-option>
+          }
+        </mat-select>
+      </mat-form-field>
+
+      <mat-form-field appearance="outline">
+        <mat-label>ระดับ</mat-label>
+        <mat-select formControlName="level_id">
+          <mat-option [value]="null">— ไม่ระบุ —</mat-option>
+          @for (l of eligibleLevels(); track l.id) {
+            <mat-option [value]="l.id">{{ l.name }}</mat-option>
           }
         </mat-select>
       </mat-form-field>

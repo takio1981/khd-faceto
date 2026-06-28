@@ -6,6 +6,7 @@ import {
   listDivisions, createDivision, updateDivision, deleteDivision,
   listDepartments, createDepartment, updateDepartment, deleteDepartment,
   listPositions, createPosition, updatePosition, deletePosition,
+  listLevels, createLevel, updateLevel, deleteLevel, listLevelsForPosition,
 } from '../services/orgStructure.service';
 
 const router = Router();
@@ -106,6 +107,42 @@ router.delete('/positions/:id', verifyJWT, requireRole('admin'), asyncHandler(as
   await deletePosition(Number(req.params.id));
   await logAudit(req, { action: 'position.delete', targetTable: 'positions', targetId: Number(req.params.id) });
   res.json({ ok: true });
+}));
+
+router.get('/levels', verifyJWT, asyncHandler(async (_req, res) => {
+  res.json(await listLevels());
+}));
+
+router.post('/levels', verifyJWT, requireRole('admin'), asyncHandler(async (req, res) => {
+  const name = String(req.body?.name || '').trim();
+  if (!name) {
+    res.status(400).json({ error: 'กรุณากรอกชื่อระดับ' });
+    return;
+  }
+  const id = await createLevel(name, req.body?.category || null);
+  await logAudit(req, { action: 'level.create', targetTable: 'civil_service_levels', targetId: id, after: req.body });
+  res.status(201).json({ id });
+}));
+
+router.put('/levels/:id', verifyJWT, requireRole('admin'), asyncHandler(async (req, res) => {
+  const name = String(req.body?.name || '').trim();
+  if (!name) {
+    res.status(400).json({ error: 'กรุณากรอกชื่อระดับ' });
+    return;
+  }
+  await updateLevel(Number(req.params.id), name, req.body?.category || null);
+  await logAudit(req, { action: 'level.update', targetTable: 'civil_service_levels', targetId: Number(req.params.id), after: req.body });
+  res.json({ ok: true });
+}));
+
+router.delete('/levels/:id', verifyJWT, requireRole('admin'), asyncHandler(async (req, res) => {
+  await deleteLevel(Number(req.params.id));
+  await logAudit(req, { action: 'level.delete', targetTable: 'civil_service_levels', targetId: Number(req.params.id) });
+  res.json({ ok: true });
+}));
+
+router.get('/positions/:id/levels', verifyJWT, asyncHandler(async (req, res) => {
+  res.json(await listLevelsForPosition(Number(req.params.id)));
 }));
 
 export default router;

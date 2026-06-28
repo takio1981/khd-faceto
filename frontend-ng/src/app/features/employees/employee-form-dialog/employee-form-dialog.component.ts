@@ -8,7 +8,8 @@ import { MatInputModule } from '@angular/material/input';
 import { MatProgressSpinnerModule } from '@angular/material/progress-spinner';
 import { MatSelectModule } from '@angular/material/select';
 import { EmployeeService } from '../../../core/services/employee.service';
-import { Department, Division, Employee, EmployeeCreateRequest, Position, Shift } from '../../../core/models/models';
+import { OrgStructureService } from '../../../core/services/org-structure.service';
+import { CivilServiceLevel, Department, Division, Employee, EmployeeCreateRequest, Position, Shift } from '../../../core/models/models';
 import { NotifyService } from '../../../core/services/notify.service';
 
 export interface EmployeeFormDialogData {
@@ -18,6 +19,7 @@ export interface EmployeeFormDialogData {
   divisions: Division[];
   departments: Department[];
   positions: Position[];
+  levels: CivilServiceLevel[];
 }
 
 export interface EmployeeFormDialogResult {
@@ -49,6 +51,7 @@ export class EmployeeFormDialogComponent implements OnInit {
   public data = inject<EmployeeFormDialogData>(MAT_DIALOG_DATA);
   private fb = inject(FormBuilder);
   private employeeService = inject(EmployeeService);
+  private orgStructureService = inject(OrgStructureService);
   private notify = inject(NotifyService);
 
   readonly isEdit = !!this.data.employee;
@@ -74,11 +77,16 @@ export class EmployeeFormDialogComponent implements OnInit {
     return this.data.departments.filter((d) => d.division_id === divId);
   }
 
+  // Levels eligible for the currently selected position; falls back to the
+  // full list when the position has no defined level restriction.
+  eligibleLevels = signal<CivilServiceLevel[]>(this.data.levels);
+
   readonly form = this.fb.group({
     employee_code: ['', Validators.required],
     full_name: ['', Validators.required],
     department_id: [null as number | null],
     position_id: [null as number | null],
+    level_id: [null as number | null],
     employee_type: ['temp_employee'],
     shift_id: [null as number | null],
     supervisor_id: [null as number | null],
@@ -104,6 +112,7 @@ export class EmployeeFormDialogComponent implements OnInit {
         full_name: e.full_name,
         department_id: e.department_id ?? null,
         position_id: e.position_id ?? null,
+        level_id: e.level_id ?? null,
         employee_type: e.employee_type || 'temp_employee',
         shift_id: e.shift_id,
         supervisor_id: e.supervisor_id ?? null,
@@ -113,6 +122,7 @@ export class EmployeeFormDialogComponent implements OnInit {
         notify_line_user_id: e.notify_line_user_id || '',
         notify_telegram_chat_id: e.notify_telegram_chat_id || '',
       });
+      if (e.position_id) this.refreshEligibleLevels(e.position_id);
     }
   }
 
@@ -122,6 +132,28 @@ export class EmployeeFormDialogComponent implements OnInit {
     if (current && !this.filteredDepartments.some((d) => d.id === current)) {
       this.form.controls.department_id.setValue(null);
     }
+  }
+
+  onPositionChange(positionId: number | null): void {
+    this.form.controls.position_id.setValue(positionId);
+    if (!positionId) {
+      this.eligibleLevels.set(this.data.levels);
+      return;
+    }
+    this.refreshEligibleLevels(positionId);
+  }
+
+  private refreshEligibleLevels(positionId: number): void {
+    this.orgStructureService.listLevelsForPosition(positionId).subscribe({
+      next: (levels) => {
+        this.eligibleLevels.set(levels.length ? levels : this.data.levels);
+        const current = this.form.controls.level_id.value;
+        if (current && levels.length && !levels.some((l) => l.id === current)) {
+          this.form.controls.level_id.setValue(null);
+        }
+      },
+      error: () => this.eligibleLevels.set(this.data.levels),
+    });
   }
 
   cancel(): void {
@@ -139,6 +171,7 @@ export class EmployeeFormDialogComponent implements OnInit {
       full_name: (v.full_name || '').trim(),
       department_id: v.department_id || null,
       position_id: v.position_id || null,
+      level_id: v.level_id || null,
       employee_type: (v.employee_type as Employee['employee_type']) || 'temp_employee',
       shift_id: v.shift_id || null,
       supervisor_id: v.supervisor_id || null,

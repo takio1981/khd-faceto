@@ -1,0 +1,8 @@
+<svg viewBox="0 0 48 48" fill="none" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="โลโก้ระบบสแกนใบหน้า">
+  <path d="M6 16V10a4 4 0 0 1 4-4h6" stroke="#fff" stroke-width="3" stroke-linecap="round"/>
+  <path d="M42 16V10a4 4 0 0 0-4-4h-6" stroke="#fff" stroke-width="3" stroke-linecap="round"/>
+  <path d="M6 32v6a4 4 0 0 0 4 4h6" stroke="#fff" stroke-width="3" stroke-linecap="round"/>
+  <path d="M42 32v6a4 4 0 0 1-4 4h-6" stroke="#fff" stroke-width="3" stroke-linecap="round"/>
+  <circle cx="24" cy="20" r="6" stroke="#fff" stroke-width="2.5"/>
+  <path d="M14 34c0-5.5 4.5-9 10-9s10 3.5 10 9" stroke="#fff" stroke-width="2.5" stroke-linecap="round"/>
+</svg>

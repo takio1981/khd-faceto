@@ -89,8 +89,8 @@ body {
   font-weight: 600;
 }
 
-// Shared circular "logo" badge (✚ in a green/teal medallion) used in the
-// navbar and login page. Kept here so both stay visually identical.
+// Shared circular "logo" badge (face-scan icon in a green/teal medallion)
+// used in the navbar and login page. Kept here so both stay visually identical.
 .brand-medallion {
   display: flex;
   align-items: center;
@@ -102,6 +102,10 @@ body {
     0 2px 6px rgba(7, 80, 48, 0.35),
     inset 0 0 0 2px rgba(255, 255, 255, 0.35);
   flex-shrink: 0;
+}
+.brand-icon-img {
+  width: 62%;
+  height: 62%;
 }
 .badge.on_time { background: #bbf7d0; color: #14532d; }
 .badge.late { background: #fde68a; color: #78350f; }

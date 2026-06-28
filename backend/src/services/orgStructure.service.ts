@@ -123,3 +123,61 @@ export async function updatePosition(id: number, name: string, category: string 
 export async function deletePosition(id: number): Promise<void> {
   await pool.query('DELETE FROM positions WHERE id = ?', [id]);
 }
+
+// ---- ระดับ (civil service levels) ----
+
+export interface CivilServiceLevel {
+  id: number;
+  name: string;
+  category: string | null;
+  sort_order: number;
+}
+
+export async function listLevels(): Promise<CivilServiceLevel[]> {
+  const [rows] = await pool.query<RowDataPacket[]>(
+    'SELECT id, name, category, sort_order FROM civil_service_levels ORDER BY sort_order, name'
+  );
+  return rows as CivilServiceLevel[];
+}
+
+export async function createLevel(name: string, category: string | null): Promise<number> {
+  const [result] = await pool.query<ResultSetHeader>(
+    'INSERT INTO civil_service_levels (name, category) VALUES (?, ?)',
+    [name, category]
+  );
+  return result.insertId;
+}
+
+export async function updateLevel(id: number, name: string, category: string | null): Promise<void> {
+  await pool.query('UPDATE civil_service_levels SET name = ?, category = ? WHERE id = ?', [name, category, id]);
+}
+
+export async function deleteLevel(id: number): Promise<void> {
+  await pool.query('DELETE FROM civil_service_levels WHERE id = ?', [id]);
+}
+
+// Levels eligible for a given position (empty array = no restriction defined).
+export async function listLevelsForPosition(positionId: number): Promise<CivilServiceLevel[]> {
+  const [rows] = await pool.query<RowDataPacket[]>(
+    `SELECT l.id, l.name, l.category, l.sort_order
+       FROM position_levels pl
+       JOIN civil_service_levels l ON l.id = pl.level_id
+      WHERE pl.position_id = ?
+      ORDER BY l.sort_order, l.name`,
+    [positionId]
+  );
+  return rows as CivilServiceLevel[];
+}
+
+export async function isLevelAllowedForPosition(positionId: number, levelId: number): Promise<boolean> {
+  const [rows] = await pool.query<RowDataPacket[]>(
+    'SELECT 1 FROM position_levels WHERE position_id = ?',
+    [positionId]
+  );
+  if (!rows.length) return true; // no restriction defined for this position
+  const [match] = await pool.query<RowDataPacket[]>(
+    'SELECT 1 FROM position_levels WHERE position_id = ? AND level_id = ?',
+    [positionId, levelId]
+  );
+  return match.length > 0;
+}
