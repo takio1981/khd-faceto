@@ -41,6 +41,10 @@
           </button>
           <button mat-stroked-button type="button" (click)="toggleFlipH()" [class.active]="flipH" title="สะท้อนกระจก ซ้าย-ขวา">⇄</button>
           <button mat-stroked-button type="button" (click)="toggleFlipV()" [class.active]="flipV" title="สะท้อนกระจก บน-ล่าง">⇵</button>
+          <button mat-stroked-button type="button" (click)="toggleLandmarks()" [class.active]="showLandmarks" title="แสดง/ซ่อนจุดบนใบหน้า">
+            <mat-icon>face_retouching_natural</mat-icon>
+            {{ showLandmarks ? 'ซ่อนจุดใบหน้า' : 'แสดงจุดใบหน้า' }}
+          </button>
           <button mat-stroked-button type="button" (click)="toggleFullscreen()" title="เต็มจอ">
             <mat-icon>{{ isFullscreen ? 'fullscreen_exit' : 'fullscreen' }}</mat-icon>
             {{ isFullscreen ? 'ออก' : 'เต็มจอ' }}

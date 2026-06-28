@@ -68,7 +68,10 @@ const FEED_ITEMS_KEY = 'khd_checkin_feed_items';
 const CONFIRM_COUNT = 2;
 const PENDING_TIMEOUT_MS = 3000;
 const TOAST_GAP_MS = 60 * 1000;
-const DETECTION_INTERVAL_MS = 400;
+const DETECTION_INTERVAL_MS = 150;
+// Exponential smoothing factor applied to drawn face boxes/landmarks each
+// frame (0 = frozen, 1 = no smoothing/instant snap to the raw detection).
+const BOX_SMOOTHING = 0.45;
 const COUNTDOWN_SECONDS = 5;
 
 @Component({
@@ -116,6 +119,7 @@ export class CheckinComponent implements AfterViewInit, OnDestroy {
 
   flipH = false;
   flipV = false;
+  showLandmarks = true;
 
   isFullscreen = false;
 
@@ -149,6 +153,11 @@ export class CheckinComponent implements AfterViewInit, OnDestroy {
 
   private readonly toasted: Record<number, number> = {};
   private readonly pendingMatch: Record<number, PendingMatch> = {};
+  // Smoothed box per detection slot (index-based — fine for the small,
+  // mostly-1-2-face kiosk case this screen is used for) so the drawn
+  // rectangle/landmarks glide between frames instead of jumping with
+  // every detector reading.
+  private smoothedBoxes: { x: number; y: number; width: number; height: number }[] = [];
 
   readonly homeLink: string;
 
@@ -171,6 +180,7 @@ export class CheckinComponent implements AfterViewInit, OnDestroy {
     this.facingMode = this.facePipeline.getPreferredFacingMode();
     this.flipH = localStorage.getItem('camFlipH') === '1';
     this.flipV = localStorage.getItem('camFlipV') === '1';
+    this.showLandmarks = localStorage.getItem('camShowLandmarks') !== '0';
     this.selectedLocationId = localStorage.getItem(LOCATION_STORAGE_KEY) || '';
   }
 
@@ -312,6 +322,11 @@ export class CheckinComponent implements AfterViewInit, OnDestroy {
     localStorage.setItem('camFlipV', this.flipV ? '1' : '0');
   }
 
+  toggleLandmarks(): void {
+    this.showLandmarks = !this.showLandmarks;
+    localStorage.setItem('camShowLandmarks', this.showLandmarks ? '1' : '0');
+  }
+
   // ===== Collapsible panels =====
   toggleDeviceSettings(): void {
     this.showDeviceSettings = !this.showDeviceSettings;
@@ -360,15 +375,37 @@ export class CheckinComponent implements AfterViewInit, OnDestroy {
     const flipH = this.flipH;
     const flipV = this.flipV;
 
-    for (const { det, r } of results) {
+    // Trim/grow the smoothing buffer to match this frame's face count so
+    // stale slots from a previous, larger detection set don't linger.
+    if (this.smoothedBoxes.length > results.length) {
+      this.smoothedBoxes.length = results.length;
+    }
+
+    results.forEach(({ det, r }, i) => {
       const b = det.box;
       const color = this.colorFor(r);
       const label = this.labelFor(r);
 
-      const rawX = b.x * sx;
-      const rawY = b.y * sy;
-      const w = b.width * sx;
-      const h = b.height * sy;
+      const rawXFull = b.x * sx;
+      const rawYFull = b.y * sy;
+      const wFull = b.width * sx;
+      const hFull = b.height * sy;
+
+      const prev = this.smoothedBoxes[i];
+      const smoothed = prev
+        ? {
+            x: prev.x + (rawXFull - prev.x) * BOX_SMOOTHING,
+            y: prev.y + (rawYFull - prev.y) * BOX_SMOOTHING,
+            width: prev.width + (wFull - prev.width) * BOX_SMOOTHING,
+            height: prev.height + (hFull - prev.height) * BOX_SMOOTHING,
+          }
+        : { x: rawXFull, y: rawYFull, width: wFull, height: hFull };
+      this.smoothedBoxes[i] = smoothed;
+
+      const rawX = smoothed.x;
+      const rawY = smoothed.y;
+      const w = smoothed.width;
+      const h = smoothed.height;
       const x = flipH ? overlay.width - rawX - w : rawX;
       const y = flipV ? overlay.height - rawY - h : rawY;
 
@@ -384,7 +421,7 @@ export class CheckinComponent implements AfterViewInit, OnDestroy {
       ctx.fillStyle = '#06281b';
       ctx.fillText(label, x + 8, labelY + 18);
 
-      if (det.landmarks) {
+      if (det.landmarks && this.showLandmarks) {
         ctx.save();
         if (flipH) {
           ctx.translate(overlay.width, 0);
@@ -397,7 +434,7 @@ export class CheckinComponent implements AfterViewInit, OnDestroy {
         this.facePipeline.drawLandmarks(ctx, det.landmarks, color, sx, sy);
         ctx.restore();
       }
-    }
+    });
   }
 
   private colorFor(r: DetWithResult['r']): string {

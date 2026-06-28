@@ -70,9 +70,13 @@
 
 .checkin-grid {
   display: grid;
-  grid-template-columns: 1.7fr 1fr;
+  grid-template-columns: 2.6fr 1fr;
   align-items: start;
   gap: 16px;
+}
+
+.feed-card {
+  max-width: 320px;
 }
 
 @media (max-width: 1023px) {
@@ -81,6 +85,7 @@
   }
   .feed-card {
     order: 2;
+    max-width: none;
   }
 }
 
