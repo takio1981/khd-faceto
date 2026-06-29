@@ -128,6 +128,10 @@ export interface ScanResult {
   scan_type?: ScanType;
   status?: AttendanceStatus;
   message?: string;
+  scanLocationName?: string | null;
+  // Set (server-debounced, ~once/5min/location) on an unmatched preview
+  // result — tells the kiosk to follow up with POST /attendance/unknown-face.
+  unknownFaceAlert?: boolean;
 }
 
 // Backs the checkin kiosk's "ภาพและข้อมูลการสแกนล่าสุด" feed — see
@@ -209,6 +213,9 @@ export interface NotificationSettings {
     late: NotificationEventRule;
     absent: NotificationEventRule;
     success: NotificationEventRule;
+    // Admin-only by nature — no matched employee to notify or to resolve a
+    // supervisor from when a scan doesn't match anyone.
+    unknownFace: { admin: boolean };
   };
 }
 
@@ -218,9 +225,10 @@ export interface RecentNotification {
   title: string;
   body: string;
   created_at: string;
+  image_base64?: string | null;
 }
 
-export type NotifyEventType = 'late' | 'absent' | 'success';
+export type NotifyEventType = 'late' | 'absent' | 'success' | 'unknown_face';
 
 export interface NotificationHistoryItem {
   id: number;
@@ -229,6 +237,7 @@ export interface NotificationHistoryItem {
   body: string;
   is_read: 0 | 1;
   created_at: string;
+  image_base64?: string | null;
 }
 
 export interface NotificationHistoryListResponse {

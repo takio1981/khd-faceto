@@ -46,8 +46,15 @@ export class AttendanceService {
     return this.http.post<ScanResult>(`${base}/scan`, { descriptor, imageBase64, scanLocationId });
   }
 
-  preview(descriptor: number[]): Observable<ScanResult> {
-    return this.http.post<ScanResult>(`${base}/preview`, { descriptor });
+  preview(descriptor: number[], scanLocationId: number | null): Observable<ScanResult> {
+    return this.http.post<ScanResult>(`${base}/preview`, { descriptor, scanLocationId });
+  }
+
+  // Follow-up call after a preview result comes back with unknownFaceAlert:
+  // true (server-debounced ~once/5min/location) — captures the face that
+  // didn't match anyone so admin can review it.
+  reportUnknownFace(imageBase64: string | undefined, scanLocationId: number | null): Observable<{ ok: boolean }> {
+    return this.http.post<{ ok: boolean }>(`${base}/unknown-face`, { imageBase64, scanLocationId });
   }
 
   // Public endpoint (no auth) backing the checkin kiosk's live feed — see

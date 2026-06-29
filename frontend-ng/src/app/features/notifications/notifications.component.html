@@ -64,6 +64,11 @@
             <td>{{ item.title }}</td>
             <td>{{ item.body }}</td>
             <td>
+              @if (item.image_base64) {
+                <img [src]="item.image_base64" class="scan-thumb" alt="ภาพที่สแกนได้" (click)="viewImage(item.image_base64)" />
+              }
+            </td>
+            <td>
               <span class="badge" [class]="item.is_read ? 'on_time' : 'late'">
                 {{ item.is_read ? 'อ่านแล้ว' : 'ยังไม่อ่าน' }}
               </span>
@@ -83,6 +88,11 @@
           <div class="card-field"><span class="card-label">ประเภท:</span> {{ eventTypeText(item.event_type) }}</div>
           <div class="card-field"><span class="card-label">หัวข้อ:</span> {{ item.title }}</div>
           <div class="card-field"><span class="card-label">รายละเอียด:</span> {{ item.body }}</div>
+          @if (item.image_base64) {
+            <div class="card-field">
+              <img [src]="item.image_base64" class="scan-thumb" alt="ภาพที่สแกนได้" (click)="viewImage(item.image_base64)" />
+            </div>
+          }
           <div class="card-field">
             <span class="card-label">สถานะ:</span>
             <span class="badge" [class]="item.is_read ? 'on_time' : 'late'">
@@ -112,5 +122,11 @@
         (page)="onPage($event)">
       </mat-paginator>
     </mat-card>
+  }
+
+  @if (previewImage()) {
+    <div class="image-lightbox" (click)="closeImagePreview()">
+      <img [src]="previewImage()" alt="ภาพที่สแกนได้" />
+    </div>
   }
 </div>

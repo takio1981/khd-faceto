@@ -2,10 +2,10 @@ import { HttpClient } from '@angular/common/http';
 import { Injectable } from '@angular/core';
 import { Observable } from 'rxjs';
 import { environment } from '../../../environments/environment';
-import { NotificationHistoryListResponse, NotificationSettings, RecentNotification } from '../models/models';
+import { NotificationHistoryListResponse, NotificationSettings, NotifyEventType, RecentNotification } from '../models/models';
 
 export interface NotificationHistoryFilter {
-  eventType?: 'late' | 'absent' | 'success' | '';
+  eventType?: NotifyEventType | '';
   isRead?: '0' | '1' | '';
   dateFrom?: string;
   dateTo?: string;

@@ -1,10 +1,12 @@
+import path from 'path';
+import fs from 'fs/promises';
 import { pool } from '../db';
 import { RowDataPacket, ResultSetHeader } from 'mysql2';
 import { config } from '../config';
 import { Shift, ScanType, AttendanceStatus, ScanResult } from '../types';
 import { ensureFaceCache, findBestMatchStrict } from './faceCache';
-import { notifyScan } from './notification.service';
-import { ictSecondsSinceMidnight, ictMysqlDateTime, ictDateKey } from '../utils/ict';
+import { notifyScan, notifyUnknownFace } from './notification.service';
+import { ictSecondsSinceMidnight, ictMysqlDateTime, ictDateKey, ictTimeStamp } from '../utils/ict';
 
 // ---- Time helpers ---------------------------------------------------------
 
@@ -23,6 +25,57 @@ const toMysqlDateTime = ictMysqlDateTime;
 
 // 'YYYY-MM-DD' calendar day, in ICT wall-clock time.
 const dateKey = ictDateKey;
+
+// ---- Face image storage ----------------------------------------------------
+
+// Save a base64 data-URL JPEG to disk under FACE_IMAGE_DIR/<YYYY-MM-DD>/<code>_<ts>.jpg
+// Returns the relative path stored in the DB, or null on failure / no image.
+// `codeOrLabel` is the employee_code for a matched scan, or a fixed label
+// (e.g. "unknown") for an unrecognized-face capture — either way it's just
+// used to keep filenames human-readable, not as a DB key.
+export async function saveFaceImage(imageBase64: string | null | undefined, codeOrLabel: string, now: Date): Promise<string | null> {
+  if (!imageBase64) return null;
+  const match = /^data:image\/\w+;base64,(.+)$/.exec(imageBase64);
+  const data = match ? match[1] : imageBase64;
+  try {
+    const day = ictDateKey(now);
+    const ts = ictTimeStamp(now);
+    const dir = path.join(config.face.imageDir, day);
+    await fs.mkdir(dir, { recursive: true });
+    const filename = `${codeOrLabel}_${ts}_${Date.now() % 1000}.jpg`;
+    const relPath = path.join(day, filename);
+    await fs.writeFile(path.join(config.face.imageDir, relPath), Buffer.from(data, 'base64'));
+    return relPath.split(path.sep).join('/');
+  } catch (err) {
+    console.error('[shift] failed to save face image', err);
+    return null;
+  }
+}
+
+async function getScanLocationName(scanLocationId: number | null): Promise<string | null> {
+  if (!scanLocationId) return null;
+  const [rows] = await pool.query<RowDataPacket[]>('SELECT name FROM scan_locations WHERE id = ?', [scanLocationId]);
+  return rows[0]?.name ?? null;
+}
+
+// ---- Unknown-face alert debounce -------------------------------------------
+// The kiosk calls /preview continuously (every ~150-600ms) while ANY face is
+// in frame, known or not — so we can't notify admin on every unmatched
+// preview without spamming them. Track the last alert time per scan
+// location in memory (resets on server restart, which is fine — worst case
+// is one extra alert) and only flag the preview result for a follow-up
+// image-capture call once the cooldown has elapsed.
+const unknownFaceAlertAt = new Map<string, number>();
+const UNKNOWN_FACE_ALERT_COOLDOWN_MS = 5 * 60 * 1000;
+
+function shouldAlertUnknownFace(scanLocationId: number | null): boolean {
+  const key = String(scanLocationId ?? 'none');
+  const last = unknownFaceAlertAt.get(key) ?? 0;
+  const now = Date.now();
+  if (now - last < UNKNOWN_FACE_ALERT_COOLDOWN_MS) return false;
+  unknownFaceAlertAt.set(key, now);
+  return true;
+}
 
 // ---- Shift lookup ---------------------------------------------------------
 
@@ -157,7 +210,7 @@ function classify(shift: Shift, now: Date, today: TodayScans): Classification | 
 
 export async function processScan(
   descriptor: number[],
-  faceImagePath: string | null,
+  imageBase64: string | null,
   now: Date = new Date(),
   scanLocationId: number | null = null
 ): Promise<ScanResult> {
@@ -211,6 +264,14 @@ export async function processScan(
     };
   }
 
+  // Save the image (if any) before inserting so face_image_path is correct
+  // from the start — this used to be a separate UPDATE the route handler ran
+  // *after* processScan returned, racing against the fire-and-forget
+  // notifyScan() call below for which one saw the path first. Doing it here
+  // means notifyScan always has the right path.
+  const faceImagePath = await saveFaceImage(imageBase64, entry.employeeCode, now);
+  const scanLocationName = await getScanLocationName(scanLocationId);
+
   // Insert the record. A UNIQUE KEY on (employee_id, scan_date, scan_type)
   // guards against a race (two near-simultaneous scans both reading "not
   // recorded yet" before either INSERT commits) creating duplicate rows of
@@ -231,7 +292,11 @@ export async function processScan(
       ]
     );
 
-    notifyScan(entry.employeeId, classification.status, classification.message);
+    notifyScan(entry.employeeId, classification.status, classification.message, {
+      imagePath: faceImagePath,
+      scanLocationName,
+      scanTime: now,
+    });
 
     return {
       matched: true,
@@ -241,6 +306,7 @@ export async function processScan(
       confidence,
       message: classification.message,
       recordId: result.insertId,
+      scanLocationName,
     };
   } catch (err: any) {
     if (err && err.code === 'ER_DUP_ENTRY') {
@@ -266,13 +332,22 @@ const SCANTYPE_LABEL: Record<ScanType, string> = {
 // Preview scan without saving (for frontend confirmation dialog)
 export async function processScanPreview(
   descriptor: number[],
-  now: Date = new Date()
+  now: Date = new Date(),
+  scanLocationId: number | null = null
 ): Promise<ScanResult> {
   await ensureFaceCache();
 
   const best = findBestMatchStrict(descriptor, config.face.matchThreshold, config.face.minMargin);
   if (!best) {
-    return { matched: false, message: 'ไม่พบใบหน้าที่ตรงกัน (Unknown face)', confidence: 0 };
+    // Debounced admin alert for a face nobody recognizes (5 min/location
+    // cooldown — see shouldAlertUnknownFace) — flagged here so the kiosk
+    // knows to follow up with a face-image capture via a separate call
+    // instead of uploading an image on every single preview tick.
+    return {
+      matched: false,
+      message: 'ไม่พบใบหน้าที่ตรงกัน (Unknown face)',
+      unknownFaceAlert: shouldAlertUnknownFace(scanLocationId),
+    };
   }
   if (best.ambiguous) {
     return { matched: false, ambiguous: true, message: 'ใบหน้าไม่ชัดเจนพอ กรุณาสแกนใหม่ (Ambiguous match)', confidence: 0 };
@@ -327,6 +402,20 @@ export async function processScanPreview(
     message: classification.message,
     previewOnly: true, // flag that this is a preview, no record inserted
   };
+}
+
+// Called by POST /attendance/unknown-face — the kiosk's follow-up call after
+// a preview result came back with unknownFaceAlert: true. Saves the capture
+// (separate "unknown" subfolder, no employee_code to file it under) and
+// fires the admin-only notification.
+export async function saveUnknownFaceAndNotify(
+  imageBase64: string | null | undefined,
+  scanLocationId: number | null,
+  now: Date = new Date()
+): Promise<void> {
+  const imagePath = await saveFaceImage(imageBase64, 'unknown', now);
+  const scanLocationName = await getScanLocationName(scanLocationId);
+  notifyUnknownFace(imagePath, scanLocationName, now);
 }
 
 // Validate shift time ordering (used by shift routes).

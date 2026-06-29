@@ -72,6 +72,10 @@ export interface ScanResult {
   ambiguous?: boolean; // true when rejected because two enrolled faces were too close to distinguish
   previewOnly?: boolean; // true when this result is from a preview check (no record inserted)
   scanLocationName?: string | null; // name of the installed scan-camera location, when known
+  // Set (rarely, server-debounced) on an unmatched preview result when the
+  // server wants the kiosk to follow up with POST /attendance/unknown-face —
+  // see processScanPreview in shift.service.ts for the cooldown logic.
+  unknownFaceAlert?: boolean;
 }
 
 // Augment Express Request to carry the authenticated user

@@ -8,8 +8,8 @@ import { pool } from '../db';
 import { config } from '../config';
 import { asyncHandler } from '../middleware/errorHandler';
 import { verifyJWT, requireRole } from '../middleware/auth';
-import { processScan, processScanPreview } from '../services/shift.service';
-import { ictDateKey, ictTimeStamp } from '../utils/ict';
+import { processScan, processScanPreview, saveUnknownFaceAndNotify } from '../services/shift.service';
+import { ictDateKey } from '../utils/ict';
 import { logAudit } from '../services/audit.service';
 
 const router = Router();
@@ -18,27 +18,6 @@ const router = Router();
 // detected face) by design, so it needs a much higher ceiling than the rest
 // of the API's default 300/min limit.
 const scanLimiter = rateLimit({ windowMs: 60_000, max: 6000, standardHeaders: true, legacyHeaders: false });
-
-// Save a base64 data-URL JPEG to disk under FACE_IMAGE_DIR/<YYYY-MM-DD>/<code>_<ts>.jpg
-// Returns the relative path stored in the DB, or null on failure / no image.
-async function saveFaceImage(imageBase64: string | undefined, employeeCode: string, now: Date): Promise<string | null> {
-  if (!imageBase64) return null;
-  const match = /^data:image\/\w+;base64,(.+)$/.exec(imageBase64);
-  const data = match ? match[1] : imageBase64;
-  try {
-    const day = ictDateKey(now);
-    const ts = ictTimeStamp(now);
-    const dir = path.join(config.face.imageDir, day);
-    await fs.mkdir(dir, { recursive: true });
-    const filename = `${employeeCode}_${ts}_${Date.now() % 1000}.jpg`;
-    const relPath = path.join(day, filename);
-    await fs.writeFile(path.join(config.face.imageDir, relPath), Buffer.from(data, 'base64'));
-    return relPath.split(path.sep).join('/');
-  } catch (err) {
-    console.error('[attendance] failed to save face image', err);
-    return null;
-  }
-}
 
 // POST /api/attendance/scan  - public: the checkin kiosk page (frontend/public/checkin.html)
 // is reachable without login by design, so anyone with the page open can scan.
@@ -50,24 +29,23 @@ router.post('/scan', scanLimiter, asyncHandler(async (req, res) => {
   }
   const locId = scanLocationId != null && !Number.isNaN(Number(scanLocationId)) ? Number(scanLocationId) : null;
 
-  const now = new Date();
-
-  // Run the scan: it matches the face, classifies the scan, and inserts a record.
-  // Only after we know the matched employee (for the filename) do we save the image,
-  // then patch the freshly-inserted record by its id.
-  const result = await processScan(descriptor, null, now, locId);
-
-  if (result.recordId && result.employee) {
-    const imgPath = await saveFaceImage(imageBase64, result.employee.employee_code, now);
-    if (imgPath) {
-      await pool.query(
-        'UPDATE attendance_records SET face_image_path = ? WHERE id = ?',
-        [imgPath, result.recordId]
-      );
-    }
-  }
+  // processScan saves the image (if any) and resolves the scan location's
+  // name itself now, so the notification it fires always has the right
+  // face_image_path — no more separate post-hoc UPDATE racing against it.
+  const result = await processScan(descriptor, imageBase64 || null, new Date(), locId);
 
   res.json(result);
+}));
+
+// POST /api/attendance/unknown-face  - public, same reasoning as /scan above.
+// Follow-up call the kiosk makes when a /preview result comes back with
+// unknownFaceAlert: true (server-debounced, see shift.service.ts) — captures
+// the face that didn't match anyone so admin can review it.
+router.post('/unknown-face', scanLimiter, asyncHandler(async (req, res) => {
+  const { imageBase64, scanLocationId } = req.body ?? {};
+  const locId = scanLocationId != null && !Number.isNaN(Number(scanLocationId)) ? Number(scanLocationId) : null;
+  await saveUnknownFaceAndNotify(imageBase64 || null, locId, new Date());
+  res.json({ ok: true });
 }));
 
 // GET /api/attendance  - list with filters
@@ -253,14 +231,15 @@ router.put('/:id', verifyJWT, requireRole('admin'), asyncHandler(async (req, res
 // POST /api/attendance/preview - validate face without inserting (for confirmation dialog)
 // Public for the same reason as /scan above.
 router.post('/preview', scanLimiter, asyncHandler(async (req, res) => {
-  const { descriptor } = req.body ?? {};
+  const { descriptor, scanLocationId } = req.body ?? {};
   if (!Array.isArray(descriptor) || descriptor.length !== 128) {
     res.status(400).json({ error: 'descriptor ต้องเป็น array ขนาด 128' });
     return;
   }
+  const locId = scanLocationId != null && !Number.isNaN(Number(scanLocationId)) ? Number(scanLocationId) : null;
 
   const now = new Date();
-  const previewResult = await processScanPreview(descriptor, now);
+  const previewResult = await processScanPreview(descriptor, now, locId);
   res.json(previewResult);
 }));
 

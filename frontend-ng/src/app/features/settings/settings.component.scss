@@ -178,6 +178,21 @@ mat-divider {
   text-align: center;
 }
 
+.events-admin-only {
+  margin-top: 16px;
+  padding-top: 12px;
+  border-top: 1px dashed var(--border);
+}
+
+.events-admin-only .events-row {
+  grid-template-columns: 1fr auto;
+  border-bottom: none;
+}
+
+.events-admin-only .events-cell {
+  text-align: left;
+}
+
 @media (max-width: 720px) {
   .form-grid.two-col,
   .form-grid.three-col {
@@ -186,6 +201,10 @@ mat-divider {
 
   .events-row {
     grid-template-columns: 1fr 80px 90px 90px;
+  }
+
+  .events-admin-only .events-row {
+    grid-template-columns: 1fr auto;
   }
 }
 

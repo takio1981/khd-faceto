@@ -19,6 +19,7 @@ const EVENT_TYPE_TH: Record<NotifyEventType, string> = {
   late: 'มาสาย',
   absent: 'ขาดงาน',
   success: 'ลงเวลาสำเร็จ',
+  unknown_face: 'พบใบหน้าที่ไม่รู้จัก',
 };
 
 @Component({
@@ -73,6 +74,7 @@ export class NotificationsComponent implements OnInit {
     { key: 'event_type', label: 'ประเภท' },
     { key: 'title', label: 'หัวข้อ' },
     { key: 'body', label: 'รายละเอียด' },
+    { key: 'image', label: 'ภาพ' },
     { key: 'status', label: 'สถานะ' },
     { key: 'actions', label: 'จัดการ' },
   ];
@@ -173,5 +175,15 @@ export class NotificationsComponent implements OnInit {
 
   eventTypeText(type: string): string {
     return EVENT_TYPE_TH[type as NotifyEventType] || type;
+  }
+
+  previewImage = signal<string | null>(null);
+
+  viewImage(base64: string | null | undefined): void {
+    if (base64) this.previewImage.set(base64);
+  }
+
+  closeImagePreview(): void {
+    this.previewImage.set(null);
   }
 }

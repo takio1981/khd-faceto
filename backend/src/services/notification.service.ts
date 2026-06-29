@@ -1,10 +1,13 @@
+import fs from 'fs/promises';
+import path from 'path';
 import nodemailer from 'nodemailer';
 import { pool } from '../db';
 import { RowDataPacket, ResultSetHeader } from 'mysql2';
+import { config } from '../config';
 import { ictDateKey, ictSecondsSinceMidnight, isWeekendDateKey } from '../utils/ict';
 import { isHoliday } from './holidays.service';
 
-export type NotifyEventType = 'late' | 'absent' | 'success';
+export type NotifyEventType = 'late' | 'absent' | 'success' | 'unknown_face';
 
 export interface NotificationSettings {
   email: {
@@ -36,6 +39,9 @@ export interface NotificationSettings {
     late: { employee: boolean; admin: boolean; supervisor: boolean };
     absent: { employee: boolean; admin: boolean; supervisor: boolean };
     success: { employee: boolean; admin: boolean; supervisor: boolean };
+    // Admin-only by nature — there's no matched employee to notify or to
+    // resolve a supervisor from when a scanned face doesn't match anyone.
+    unknownFace: { admin: boolean };
   };
 }
 
@@ -49,6 +55,7 @@ const DEFAULT_SETTINGS: NotificationSettings = {
     late: { employee: true, admin: true, supervisor: false },
     absent: { employee: false, admin: true, supervisor: false },
     success: { employee: true, admin: false, supervisor: false },
+    unknownFace: { admin: true },
   },
 };
 
@@ -73,6 +80,7 @@ export async function getNotificationSettings(): Promise<NotificationSettings> {
         late: { ...DEFAULT_SETTINGS.events.late, ...parsed.events?.late },
         absent: { ...DEFAULT_SETTINGS.events.absent, ...parsed.events?.absent },
         success: { ...DEFAULT_SETTINGS.events.success, ...parsed.events?.success },
+        unknownFace: { ...DEFAULT_SETTINGS.events.unknownFace, ...parsed.events?.unknownFace },
       },
     };
   } catch {
@@ -90,7 +98,16 @@ export async function saveNotificationSettings(settings: NotificationSettings): 
 
 // ---- Channel senders -------------------------------------------------------
 
-async function sendEmail(settings: NotificationSettings, to: string, subject: string, text: string): Promise<void> {
+// `imagePath` is relative to config.face.imageDir (same scheme as
+// attendance_records.face_image_path) — resolved and attached directly, no
+// public URL needed (unlike LINE's image message type, see sendLine below).
+async function sendEmail(
+  settings: NotificationSettings,
+  to: string,
+  subject: string,
+  text: string,
+  imagePath?: string | null
+): Promise<void> {
   if (!settings.email.enabled || !to) return;
   const transporter = nodemailer.createTransport({
     host: settings.email.host,
@@ -98,9 +115,19 @@ async function sendEmail(settings: NotificationSettings, to: string, subject: st
     secure: settings.email.secure,
     auth: settings.email.user ? { user: settings.email.user, pass: settings.email.pass } : undefined,
   });
-  await transporter.sendMail({ from: settings.email.from || settings.email.user, to, subject, text });
+  const attachments = imagePath
+    ? [{ filename: 'scan.jpg', path: path.join(config.face.imageDir, imagePath) }]
+    : undefined;
+  await transporter.sendMail({ from: settings.email.from || settings.email.user, to, subject, text, attachments });
 }
 
+// Text-only, deliberately: LINE's image message type requires
+// originalContentUrl/previewImageUrl to be publicly fetchable HTTPS URLs
+// (LINE's own servers fetch them, no auth header support) — exposing face
+// photos at an unauthenticated URL just so LINE can read them would undercut
+// every other PDPA-conscious access control this app has for biometric
+// images. Email/Telegram below support attaching the image directly
+// (upload, not a fetched URL), so they're the channels that actually carry it.
 async function sendLine(settings: NotificationSettings, userId: string, text: string): Promise<void> {
   if (!settings.line.enabled || !userId || !settings.line.channelAccessToken) return;
   const res = await fetch('https://api.line.me/v2/bot/message/push', {
@@ -114,8 +141,33 @@ async function sendLine(settings: NotificationSettings, userId: string, text: st
   if (!res.ok) throw new Error(`LINE API error: ${res.status} ${await res.text()}`);
 }
 
-async function sendTelegram(settings: NotificationSettings, chatId: string, text: string): Promise<void> {
+async function sendTelegram(
+  settings: NotificationSettings,
+  chatId: string,
+  text: string,
+  imagePath?: string | null
+): Promise<void> {
   if (!settings.telegram.enabled || !chatId || !settings.telegram.botToken) return;
+  if (imagePath) {
+    // sendPhoto takes the image as a direct multipart upload — no public URL
+    // needed (unlike LINE's image message type above).
+    try {
+      const buffer = await fs.readFile(path.join(config.face.imageDir, imagePath));
+      const form = new FormData();
+      form.append('chat_id', chatId);
+      form.append('caption', text);
+      form.append('photo', new Blob([buffer], { type: 'image/jpeg' }), 'scan.jpg');
+      const res = await fetch(`https://api.telegram.org/bot${settings.telegram.botToken}/sendPhoto`, {
+        method: 'POST',
+        body: form,
+      });
+      if (!res.ok) throw new Error(`Telegram API error: ${res.status} ${await res.text()}`);
+      return;
+    } catch (err) {
+      console.error('[notification] telegram sendPhoto failed, falling back to text:', err);
+      // fall through to plain text below
+    }
+  }
   const res = await fetch(`https://api.telegram.org/bot${settings.telegram.botToken}/sendMessage`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -129,12 +181,13 @@ async function pushLocal(
   title: string,
   body: string,
   eventType: NotifyEventType,
-  employeeId: number | null = null
+  employeeId: number | null = null,
+  imagePath: string | null = null
 ): Promise<void> {
   if (!settings.local.enabled) return;
   await pool.query<ResultSetHeader>(
-    'INSERT INTO notification_inbox (employee_id, event_type, title, body) VALUES (?, ?, ?, ?)',
-    [employeeId, eventType, title, body]
+    'INSERT INTO notification_inbox (employee_id, event_type, title, body, image_path) VALUES (?, ?, ?, ?, ?)',
+    [employeeId, eventType, title, body, imagePath]
   );
   // Keep the inbox from growing forever. Raised from 200 once this table
   // started doubling as each employee's personal notification history (not
@@ -178,40 +231,87 @@ const EVENT_LABEL: Record<NotifyEventType, string> = {
   late: 'มาสาย',
   absent: 'ขาดงาน',
   success: 'ลงเวลาสำเร็จ',
+  unknown_face: 'ใบหน้าที่ไม่รู้จัก',
 };
 
-async function dispatch(eventType: NotifyEventType, employee: NotifyEmployee, message: string): Promise<void> {
+export interface DispatchDetail {
+  imagePath?: string | null;
+  scanLocationName?: string | null;
+  scanTime?: Date;
+}
+
+// Builds the "รายละเอียดข้อมูลสำคัญ" line — scan location + exact time when
+// known — appended under the base message so every channel carries the full
+// context, not just the bare status text.
+function formatDetailLine(detail?: DispatchDetail): string {
+  if (!detail) return '';
+  const parts: string[] = [];
+  if (detail.scanTime) {
+    parts.push(`เวลา ${detail.scanTime.toLocaleString('th-TH', { timeZone: 'Asia/Bangkok', hour: '2-digit', minute: '2-digit', second: '2-digit' })}`);
+  }
+  if (detail.scanLocationName) parts.push(`จุดสแกน: ${detail.scanLocationName}`);
+  return parts.length ? `\n${parts.join(' | ')}` : '';
+}
+
+async function dispatch(
+  eventType: 'late' | 'absent' | 'success',
+  employee: NotifyEmployee,
+  message: string,
+  detail?: DispatchDetail
+): Promise<void> {
   const settings = await getNotificationSettings();
   const evt = settings.events[eventType];
   const title = `[${EVENT_LABEL[eventType]}] ${employee.full_name}`;
-  const body = `${employee.employee_code} - ${employee.full_name}: ${message}`;
+  const body = `${employee.employee_code} - ${employee.full_name}: ${message}${formatDetailLine(detail)}`;
+  const imagePath = detail?.imagePath ?? null;
 
   const jobs: Promise<void>[] = [];
 
   if (evt.employee && employee.notify_enabled) {
-    if (employee.notify_email) jobs.push(sendEmail(settings, employee.notify_email, title, body));
+    if (employee.notify_email) jobs.push(sendEmail(settings, employee.notify_email, title, body, imagePath));
     if (employee.notify_line_user_id) jobs.push(sendLine(settings, employee.notify_line_user_id, body));
-    if (employee.notify_telegram_chat_id) jobs.push(sendTelegram(settings, employee.notify_telegram_chat_id, body));
+    if (employee.notify_telegram_chat_id) jobs.push(sendTelegram(settings, employee.notify_telegram_chat_id, body, imagePath));
   }
   if (evt.admin) {
     for (const email of settings.admin.emails.split(',').map((s) => s.trim()).filter(Boolean)) {
-      jobs.push(sendEmail(settings, email, title, body));
+      jobs.push(sendEmail(settings, email, title, body, imagePath));
     }
     if (settings.admin.lineUserId) jobs.push(sendLine(settings, settings.admin.lineUserId, body));
-    if (settings.admin.telegramChatId) jobs.push(sendTelegram(settings, settings.admin.telegramChatId, body));
+    if (settings.admin.telegramChatId) jobs.push(sendTelegram(settings, settings.admin.telegramChatId, body, imagePath));
   }
   if (evt.supervisor && employee.supervisor_id) {
     const supervisor = await loadNotifyEmployee(employee.supervisor_id);
     if (supervisor && supervisor.notify_enabled) {
       const supTitle = `[${EVENT_LABEL[eventType]}] ทีมงาน: ${employee.full_name}`;
       const supBody = `แจ้งเตือนสำหรับหัวหน้างาน — ${body}`;
-      if (supervisor.notify_email) jobs.push(sendEmail(settings, supervisor.notify_email, supTitle, supBody));
+      if (supervisor.notify_email) jobs.push(sendEmail(settings, supervisor.notify_email, supTitle, supBody, imagePath));
       if (supervisor.notify_line_user_id) jobs.push(sendLine(settings, supervisor.notify_line_user_id, supBody));
-      if (supervisor.notify_telegram_chat_id) jobs.push(sendTelegram(settings, supervisor.notify_telegram_chat_id, supBody));
-      jobs.push(pushLocal(settings, supTitle, supBody, eventType, supervisor.id));
+      if (supervisor.notify_telegram_chat_id) jobs.push(sendTelegram(settings, supervisor.notify_telegram_chat_id, supBody, imagePath));
+      jobs.push(pushLocal(settings, supTitle, supBody, eventType, supervisor.id, imagePath));
     }
   }
-  if (evt.employee || evt.admin) jobs.push(pushLocal(settings, title, body, eventType, employee.id));
+  if (evt.employee || evt.admin) jobs.push(pushLocal(settings, title, body, eventType, employee.id, imagePath));
+
+  const results = await Promise.allSettled(jobs);
+  for (const r of results) {
+    if (r.status === 'rejected') console.error('[notification] send failed:', r.reason);
+  }
+}
+
+// Admin-only events (currently just unknown_face) have no employee/
+// supervisor target to resolve — separate, simpler dispatch path.
+async function dispatchAdminOnly(eventType: NotifyEventType, title: string, body: string, imagePath: string | null): Promise<void> {
+  const settings = await getNotificationSettings();
+  const evt = settings.events.unknownFace; // only admin-only event type today
+  if (!evt.admin) return;
+
+  const jobs: Promise<void>[] = [];
+  for (const email of settings.admin.emails.split(',').map((s) => s.trim()).filter(Boolean)) {
+    jobs.push(sendEmail(settings, email, title, body, imagePath));
+  }
+  if (settings.admin.lineUserId) jobs.push(sendLine(settings, settings.admin.lineUserId, body));
+  if (settings.admin.telegramChatId) jobs.push(sendTelegram(settings, settings.admin.telegramChatId, body, imagePath));
+  jobs.push(pushLocal(settings, title, body, eventType, null, imagePath));
 
   const results = await Promise.allSettled(jobs);
   for (const r of results) {
@@ -232,14 +332,26 @@ async function loadNotifyEmployee(employeeId: number): Promise<NotifyEmployee | 
 // the classification status came back late. Fire-and-forget: errors are
 // logged but never bubble up to the scan response (a broken SMTP config
 // should not block the kiosk from recording attendance).
-export function notifyScan(employeeId: number, status: string, message: string): void {
+export function notifyScan(employeeId: number, status: string, message: string, detail?: DispatchDetail): void {
   loadNotifyEmployee(employeeId)
     .then(async (employee) => {
       if (!employee) return;
-      await dispatch('success', employee, message);
-      if (status === 'late') await dispatch('late', employee, message);
+      await dispatch('success', employee, message, detail);
+      if (status === 'late') await dispatch('late', employee, message, detail);
     })
     .catch((err) => console.error('[notification] notifyScan failed:', err));
+}
+
+// Called from POST /attendance/unknown-face after a debounced preview result
+// (see shift.service.ts shouldAlertUnknownFace) — a face that doesn't match
+// any enrolled employee. Admin-only by nature: there's no employee to notify
+// or to resolve a supervisor from.
+export function notifyUnknownFace(imagePath: string | null, scanLocationName: string | null, scanTime: Date): void {
+  const title = 'พบใบหน้าที่ไม่รู้จัก';
+  const body = `ตรวจพบความพยายามสแกนใบหน้าที่ไม่ตรงกับพนักงานคนใด${formatDetailLine({ scanLocationName, scanTime })}`;
+  dispatchAdminOnly('unknown_face', title, body, imagePath).catch((err) =>
+    console.error('[notification] notifyUnknownFace failed:', err)
+  );
 }
 
 // ---- Absent check (scheduled) ----------------------------------------------
@@ -307,6 +419,23 @@ export interface NotificationHistoryItem {
   body: string;
   is_read: 0 | 1;
   created_at: string;
+  image_base64?: string | null;
+}
+
+// Inlines the saved scan image as a data URI, same pattern as
+// GET /api/attendance/recent — authenticated callers only (this is always
+// reached via verifyJWT-protected routes), so unlike the LINE-image
+// limitation above there's no PDPA concern serving it this way.
+export async function inlineImage(imagePath: string | null | undefined): Promise<string | null> {
+  if (!imagePath) return null;
+  try {
+    const abs = path.join(config.face.imageDir, imagePath);
+    if (!abs.startsWith(path.resolve(config.face.imageDir))) return null; // path traversal guard
+    const buf = await fs.readFile(abs);
+    return `data:image/jpeg;base64,${buf.toString('base64')}`;
+  } catch {
+    return null; // image missing on disk — just omit the thumbnail
+  }
 }
 
 export interface NotificationHistoryFilter {
@@ -343,15 +472,27 @@ export async function listMyNotifications(
     [employeeId]
   );
   const [rows] = await pool.query<RowDataPacket[]>(
-    `SELECT id, event_type, title, body, is_read, created_at FROM notification_inbox
+    `SELECT id, event_type, title, body, image_path, is_read, created_at FROM notification_inbox
        ${whereSql}
       ORDER BY id DESC
       LIMIT ? OFFSET ?`,
     [...params, pageSize, offset]
   );
 
+  const data = await Promise.all(
+    rows.map(async (r) => ({
+      id: r.id,
+      event_type: r.event_type,
+      title: r.title,
+      body: r.body,
+      is_read: r.is_read,
+      created_at: r.created_at,
+      image_base64: await inlineImage(r.image_path),
+    }))
+  );
+
   return {
-    data: rows as NotificationHistoryItem[],
+    data: data as NotificationHistoryItem[],
     total: countRows[0].total as number,
     page,
     pageSize,

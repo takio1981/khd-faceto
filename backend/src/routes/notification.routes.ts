@@ -6,6 +6,7 @@ import { verifyJWT, requireRole } from '../middleware/auth';
 import {
   getNotificationSettings, saveNotificationSettings, sendTestMessage,
   listMyNotifications, setNotificationRead, setAllNotificationsRead, deleteMyNotification,
+  inlineImage,
 } from '../services/notification.service';
 import { logAudit } from '../services/audit.service';
 
@@ -50,10 +51,20 @@ router.post('/test', verifyJWT, requireRole('admin'), asyncHandler(async (req, r
 router.get('/recent', verifyJWT, requireRole('admin'), asyncHandler(async (req, res) => {
   const sinceId = parseInt(String(req.query.sinceId || '0'), 10) || 0;
   const [rows] = await pool.query<RowDataPacket[]>(
-    'SELECT id, event_type, title, body, created_at FROM notification_inbox WHERE id > ? ORDER BY id ASC LIMIT 50',
+    'SELECT id, event_type, title, body, image_path, created_at FROM notification_inbox WHERE id > ? ORDER BY id ASC LIMIT 50',
     [sinceId]
   );
-  res.json(rows);
+  const data = await Promise.all(
+    rows.map(async (r) => ({
+      id: r.id,
+      event_type: r.event_type,
+      title: r.title,
+      body: r.body,
+      created_at: r.created_at,
+      image_base64: await inlineImage(r.image_path),
+    }))
+  );
+  res.json(data);
 }));
 
 // ---- Personal notification history (any logged-in employee, not admin-only) ----

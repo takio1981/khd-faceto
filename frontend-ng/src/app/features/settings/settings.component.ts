@@ -256,6 +256,7 @@ export class SettingsComponent implements OnInit, AfterViewInit {
       late: this.fb.group({ employee: [true], admin: [true], supervisor: [false] }),
       absent: this.fb.group({ employee: [false], admin: [true], supervisor: [false] }),
       success: this.fb.group({ employee: [true], admin: [false], supervisor: [false] }),
+      unknownFace: this.fb.group({ admin: [true] }),
     }),
   });
   notifSaving = false;
@@ -889,6 +890,7 @@ export class SettingsComponent implements OnInit, AfterViewInit {
         late: { employee: !!v.events.late.employee, admin: !!v.events.late.admin, supervisor: !!v.events.late.supervisor },
         absent: { employee: !!v.events.absent.employee, admin: !!v.events.absent.admin, supervisor: !!v.events.absent.supervisor },
         success: { employee: !!v.events.success.employee, admin: !!v.events.success.admin, supervisor: !!v.events.success.supervisor },
+        unknownFace: { admin: !!v.events.unknownFace.admin },
       },
     };
   }

@@ -796,7 +796,16 @@ export class CheckinComponent implements AfterViewInit, OnDestroy {
     const previews: { det: FaceDetectionResult; r: ScanResult | null }[] = await Promise.all(
       dets.map(async (det) => {
         try {
-          const r = await firstValueFrom(this.attendanceService.preview(det.descriptor));
+          const r = await firstValueFrom(this.attendanceService.preview(det.descriptor, this.getScanLocationId()));
+          if (!r?.matched && r?.unknownFaceAlert) {
+            // Server-debounced (~once/5min/location): fire-and-forget a
+            // follow-up image capture so admin can review the unrecognized
+            // face, without uploading an image on every preview tick.
+            try {
+              const imageBase64 = this.facePipeline.captureFaceJpeg(this.videoRef.nativeElement, det.box, 0.8);
+              this.attendanceService.reportUnknownFace(imageBase64, this.getScanLocationId()).subscribe();
+            } catch { /* best-effort, never block the preview loop */ }
+          }
           return { det, r };
         } catch {
           return { det, r: null };
