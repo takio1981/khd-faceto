@@ -919,7 +919,7 @@ export class CheckinComponent implements AfterViewInit, OnDestroy {
         return;
       }
       const script = document.createElement('script');
-      script.src = '/lib/face-api.min.js';
+      script.src = 'lib/face-api.min.js'; // relative — resolves against <base href>, see index.html
       script.setAttribute('data-face-api', '1');
       script.onload = () => resolve();
       script.onerror = () => reject(new Error('โหลด face-api.js ไม่สำเร็จ'));
