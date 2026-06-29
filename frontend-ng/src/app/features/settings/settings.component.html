@@ -626,26 +626,31 @@
         <div class="events-row events-head">
           <div class="events-label">เหตุการณ์</div>
           <div class="events-cell">แจ้งพนักงาน</div>
+          <div class="events-cell">แจ้งผู้บังคับบัญชา</div>
           <div class="events-cell">แจ้งผู้ดูแลระบบ</div>
         </div>
         <div class="events-row" formGroupName="late">
           <div class="events-label">มาสาย (late)</div>
           <div class="events-cell"><mat-checkbox formControlName="employee"></mat-checkbox></div>
+          <div class="events-cell"><mat-checkbox formControlName="supervisor"></mat-checkbox></div>
           <div class="events-cell"><mat-checkbox formControlName="admin"></mat-checkbox></div>
         </div>
         <div class="events-row" formGroupName="absent">
           <div class="events-label">ขาดงาน (absent)</div>
           <div class="events-cell"><mat-checkbox formControlName="employee"></mat-checkbox></div>
+          <div class="events-cell"><mat-checkbox formControlName="supervisor"></mat-checkbox></div>
           <div class="events-cell"><mat-checkbox formControlName="admin"></mat-checkbox></div>
         </div>
         <div class="events-row" formGroupName="success">
           <div class="events-label">ลงเวลาสำเร็จ (success)</div>
           <div class="events-cell"><mat-checkbox formControlName="employee"></mat-checkbox></div>
+          <div class="events-cell"><mat-checkbox formControlName="supervisor"></mat-checkbox></div>
           <div class="events-cell"><mat-checkbox formControlName="admin"></mat-checkbox></div>
         </div>
       </div>
       <p class="muted small">
-        หมายเหตุ: การแจ้งพนักงานต้องตั้งค่า Email/LINE User ID/Telegram Chat ID และเปิด "รับการแจ้งเตือน" ของพนักงานแต่ละคนในหน้าจัดการพนักงานด้วย
+        หมายเหตุ: การแจ้งพนักงานต้องตั้งค่า Email/LINE User ID/Telegram Chat ID และเปิด "รับการแจ้งเตือน" ของพนักงานแต่ละคนในหน้าจัดการพนักงานด้วย —
+        การแจ้งผู้บังคับบัญชาจะส่งไปยังหัวหน้างานที่ตั้งไว้ในช่อง "ผู้บังคับบัญชา" ของพนักงานคนนั้น (ต้องตั้งค่าการแจ้งเตือนของหัวหน้างานเองด้วยเช่นกัน)
       </p>
     </div>
 

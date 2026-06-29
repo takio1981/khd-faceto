@@ -162,7 +162,7 @@ mat-divider {
 
 .events-row {
   display: grid;
-  grid-template-columns: 1fr 110px 130px;
+  grid-template-columns: 1fr 110px 130px 130px;
   align-items: center;
   padding: 8px 0;
   border-bottom: 1px solid var(--border);
@@ -185,7 +185,7 @@ mat-divider {
   }
 
   .events-row {
-    grid-template-columns: 1fr 80px 90px;
+    grid-template-columns: 1fr 80px 90px 90px;
   }
 }
 

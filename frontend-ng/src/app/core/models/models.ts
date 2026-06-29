@@ -176,6 +176,7 @@ export interface SettingsResponse {
 export interface NotificationEventRule {
   employee: boolean;
   admin: boolean;
+  supervisor: boolean;
 }
 
 export interface NotificationSettings {

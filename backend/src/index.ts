@@ -46,11 +46,20 @@ async function main() {
   app.use(cors({ origin: false }));
   app.use(express.json({ limit: '5mb' })); // descriptor + base64 JPEG snapshot
 
+  // Everything (API + the Angular build + the SPA fallback) is served under
+  // /khd-faceto instead of the domain/port root — lets this app share a host
+  // with other apps behind a reverse proxy without colliding at "/". The
+  // Angular build's <base href="/khd-faceto/"> (see frontend-ng/src/index.html)
+  // and its apiBaseUrl ('api', relative) are the matching frontend half of
+  // this — both resolve against that base href regardless of route depth.
+  const BASE_PATH = '/khd-faceto';
+  const base = express.Router();
+
   // Rate limit the API. The live check-in camera loop polls /attendance/preview
   // and /attendance/scan many times a minute by design (every ~400ms, once per
   // detected face) — that path has its own much higher limit set directly on
   // the route in attendance.routes.ts, so it's excluded here.
-  app.use('/api/', rateLimit({
+  base.use('/api/', rateLimit({
     windowMs: 60_000,
     max: 300,
     standardHeaders: true,
@@ -59,27 +68,27 @@ async function main() {
   }));
 
   // Expose branding to the frontend without auth
-  app.get('/api/config', (_req, res) => {
+  base.get('/api/config', (_req, res) => {
     res.json({ companyName: config.companyName, appName: config.appName });
   });
 
   // API routes
-  app.use('/api/auth', authRoutes);
-  app.use('/api/employees', employeeRoutes);
-  app.use('/api/shifts', shiftRoutes);
-  app.use('/api/attendance', attendanceRoutes);
-  app.use('/api/dashboard', dashboardRoutes);
-  app.use('/api/reports', reportRoutes);
-  app.use('/api/settings', settingsRoutes);
-  app.use('/api/scan-locations', scanLocationRoutes);
-  app.use('/api/notifications', notificationRoutes);
-  app.use('/api/holidays', holidayRoutes);
-  app.use('/api/audit-log', auditRoutes);
-  app.use('/api/org', orgStructureRoutes);
-  app.use('/api/correction-requests', correctionRequestRoutes);
-  app.use('/api/users', userRoutes);
+  base.use('/api/auth', authRoutes);
+  base.use('/api/employees', employeeRoutes);
+  base.use('/api/shifts', shiftRoutes);
+  base.use('/api/attendance', attendanceRoutes);
+  base.use('/api/dashboard', dashboardRoutes);
+  base.use('/api/reports', reportRoutes);
+  base.use('/api/settings', settingsRoutes);
+  base.use('/api/scan-locations', scanLocationRoutes);
+  base.use('/api/notifications', notificationRoutes);
+  base.use('/api/holidays', holidayRoutes);
+  base.use('/api/audit-log', auditRoutes);
+  base.use('/api/org', orgStructureRoutes);
+  base.use('/api/correction-requests', correctionRequestRoutes);
+  base.use('/api/users', userRoutes);
 
-  app.get('/api/health', (_req, res) => res.json({ ok: true, time: new Date().toISOString() }));
+  base.get('/api/health', (_req, res) => res.json({ ok: true, time: new Date().toISOString() }));
 
   // Static frontend (Angular build). In Docker the public dir sits at /app/public
   // (next to dist); in local dev it's the Angular CLI's build output directory —
@@ -87,17 +96,22 @@ async function main() {
   const dockerPublic = path.resolve(__dirname, '../public');
   const devPublic = path.resolve(__dirname, '../../frontend-ng/dist/frontend-ng/browser');
   const publicDir = fs.existsSync(dockerPublic) ? dockerPublic : devPublic;
-  app.use(express.static(publicDir));
+  base.use(express.static(publicDir));
 
   // SPA-style fallback to login for unknown non-API GET routes
-  app.get(/^(?!\/api).*/, (_req, res) => {
+  base.get(/^(?!\/api).*/, (_req, res) => {
     res.sendFile(path.join(publicDir, 'index.html'));
   });
+
+  app.use(BASE_PATH, base);
+
+  // Convenience redirect so hitting the bare host/port still lands somewhere useful.
+  app.get('/', (_req, res) => res.redirect(`${BASE_PATH}/`));
 
   app.use(errorHandler);
 
   app.listen(config.port, () => {
-    console.log(`[server] http listening on http://localhost:${config.port}`);
+    console.log(`[server] http listening on http://localhost:${config.port}${BASE_PATH}/`);
   });
 
   // HTTPS listener for LAN devices (phones/tablets): getUserMedia (camera)
@@ -108,7 +122,7 @@ async function main() {
   try {
     const { cert, key } = await ensureSelfSignedCert();
     https.createServer({ cert, key }, app).listen(config.https.port, () => {
-      console.log(`[server] https listening on https://localhost:${config.https.port} (and any LAN IP in the cert)`);
+      console.log(`[server] https listening on https://localhost:${config.https.port}${BASE_PATH}/ (and any LAN IP in the cert)`);
     });
   } catch (err) {
     console.error('[server] failed to start HTTPS listener — LAN camera access will not work', err);

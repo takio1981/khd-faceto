@@ -33,9 +33,9 @@ export interface NotificationSettings {
     telegramChatId: string;
   };
   events: {
-    late: { employee: boolean; admin: boolean };
-    absent: { employee: boolean; admin: boolean };
-    success: { employee: boolean; admin: boolean };
+    late: { employee: boolean; admin: boolean; supervisor: boolean };
+    absent: { employee: boolean; admin: boolean; supervisor: boolean };
+    success: { employee: boolean; admin: boolean; supervisor: boolean };
   };
 }
 
@@ -46,9 +46,9 @@ const DEFAULT_SETTINGS: NotificationSettings = {
   local: { enabled: false },
   admin: { emails: '', lineUserId: '', telegramChatId: '' },
   events: {
-    late: { employee: true, admin: true },
-    absent: { employee: false, admin: true },
-    success: { employee: true, admin: false },
+    late: { employee: true, admin: true, supervisor: false },
+    absent: { employee: false, admin: true, supervisor: false },
+    success: { employee: true, admin: false, supervisor: false },
   },
 };
 
@@ -171,6 +171,7 @@ interface NotifyEmployee {
   notify_line_user_id: string | null;
   notify_telegram_chat_id: string | null;
   notify_enabled: number;
+  supervisor_id: number | null;
 }
 
 const EVENT_LABEL: Record<NotifyEventType, string> = {
@@ -199,6 +200,17 @@ async function dispatch(eventType: NotifyEventType, employee: NotifyEmployee, me
     if (settings.admin.lineUserId) jobs.push(sendLine(settings, settings.admin.lineUserId, body));
     if (settings.admin.telegramChatId) jobs.push(sendTelegram(settings, settings.admin.telegramChatId, body));
   }
+  if (evt.supervisor && employee.supervisor_id) {
+    const supervisor = await loadNotifyEmployee(employee.supervisor_id);
+    if (supervisor && supervisor.notify_enabled) {
+      const supTitle = `[${EVENT_LABEL[eventType]}] ทีมงาน: ${employee.full_name}`;
+      const supBody = `แจ้งเตือนสำหรับหัวหน้างาน — ${body}`;
+      if (supervisor.notify_email) jobs.push(sendEmail(settings, supervisor.notify_email, supTitle, supBody));
+      if (supervisor.notify_line_user_id) jobs.push(sendLine(settings, supervisor.notify_line_user_id, supBody));
+      if (supervisor.notify_telegram_chat_id) jobs.push(sendTelegram(settings, supervisor.notify_telegram_chat_id, supBody));
+      jobs.push(pushLocal(settings, supTitle, supBody, eventType, supervisor.id));
+    }
+  }
   if (evt.employee || evt.admin) jobs.push(pushLocal(settings, title, body, eventType, employee.id));
 
   const results = await Promise.allSettled(jobs);
@@ -209,7 +221,7 @@ async function dispatch(eventType: NotifyEventType, employee: NotifyEmployee, me
 
 async function loadNotifyEmployee(employeeId: number): Promise<NotifyEmployee | null> {
   const [rows] = await pool.query<RowDataPacket[]>(
-    `SELECT id, employee_code, full_name, notify_email, notify_line_user_id, notify_telegram_chat_id, notify_enabled
+    `SELECT id, employee_code, full_name, notify_email, notify_line_user_id, notify_telegram_chat_id, notify_enabled, supervisor_id
        FROM employees WHERE id = ? LIMIT 1`,
     [employeeId]
   );
@@ -253,7 +265,7 @@ async function runAbsentCheck(): Promise<void> {
 
     const [absentees] = await pool.query<RowDataPacket[]>(
       `SELECT e.id, e.employee_code, e.full_name, e.notify_email, e.notify_line_user_id,
-              e.notify_telegram_chat_id, e.notify_enabled
+              e.notify_telegram_chat_id, e.notify_enabled, e.supervisor_id
          FROM employees e
         WHERE e.shift_id = ? AND e.is_active = 1
           AND NOT EXISTS (

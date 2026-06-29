@@ -253,9 +253,9 @@ export class SettingsComponent implements OnInit, AfterViewInit {
       telegramChatId: [''],
     }),
     events: this.fb.group({
-      late: this.fb.group({ employee: [true], admin: [true] }),
-      absent: this.fb.group({ employee: [false], admin: [true] }),
-      success: this.fb.group({ employee: [true], admin: [false] }),
+      late: this.fb.group({ employee: [true], admin: [true], supervisor: [false] }),
+      absent: this.fb.group({ employee: [false], admin: [true], supervisor: [false] }),
+      success: this.fb.group({ employee: [true], admin: [false], supervisor: [false] }),
     }),
   });
   notifSaving = false;
@@ -886,9 +886,9 @@ export class SettingsComponent implements OnInit, AfterViewInit {
         telegramChatId: (v.admin.telegramChatId || '').trim(),
       },
       events: {
-        late: { employee: !!v.events.late.employee, admin: !!v.events.late.admin },
-        absent: { employee: !!v.events.absent.employee, admin: !!v.events.absent.admin },
-        success: { employee: !!v.events.success.employee, admin: !!v.events.success.admin },
+        late: { employee: !!v.events.late.employee, admin: !!v.events.late.admin, supervisor: !!v.events.late.supervisor },
+        absent: { employee: !!v.events.absent.employee, admin: !!v.events.absent.admin, supervisor: !!v.events.absent.supervisor },
+        success: { employee: !!v.events.success.employee, admin: !!v.events.success.admin, supervisor: !!v.events.success.supervisor },
       },
     };
   }

@@ -88,7 +88,7 @@ export class FacePipelineService {
         return;
       }
       const script = document.createElement('script');
-      script.src = '/lib/face-api.min.js';
+      script.src = 'lib/face-api.min.js'; // relative — resolves against <base href>, see index.html
       script.setAttribute('data-face-api', '1');
       script.onload = () => resolve();
       script.onerror = () => reject(new Error('โหลด face-api.js ไม่สำเร็จ'));
@@ -103,9 +103,9 @@ export class FacePipelineService {
       throw new Error('face-api.js ยังไม่ถูกโหลด');
     }
     await Promise.all([
-      faceapi.nets.tinyFaceDetector.loadFromUri('/models'),
-      faceapi.nets.faceLandmark68Net.loadFromUri('/models'),
-      faceapi.nets.faceRecognitionNet.loadFromUri('/models'),
+      faceapi.nets.tinyFaceDetector.loadFromUri('models'),
+      faceapi.nets.faceLandmark68Net.loadFromUri('models'),
+      faceapi.nets.faceRecognitionNet.loadFromUri('models'),
     ]);
     this.modelsLoaded = true;
   }
