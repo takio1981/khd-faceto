@@ -28,7 +28,25 @@ type BannerType = '' | 'scanning' | 'success' | 'warn' | 'error';
 // slightly down/up — which is what materially improves match success for
 // those poses (a confidence-threshold tweak alone only helps find a face
 // box; it can't make recognition match an angle nobody enrolled).
-export const ENROLL_POSE_LABELS = ['หน้าตรง', 'หันหน้าซ้ายเล็กน้อย', 'หันหน้าขวาเล็กน้อย', 'ก้มหน้าลงเล็กน้อย', 'เงยหน้าขึ้นเล็กน้อย'];
+//
+// IMPORTANT: "turned slightly" must stay slight. Checking real enrolled
+// photos (employee 001) showed admins capturing near-profile turns with
+// eyes looking away from the camera instead of a partial turn — that's a
+// much weaker descriptor (the recognition net loses one eye and most
+// frontal features), and is the opposite of what helps. The label text
+// below explicitly calls out "ตา/ใบหน้ายังมองเข้ากล้อง" (eyes/face still
+// looking at the camera) to head off that mistake.
+export const ENROLL_POSE_LABELS = [
+  'หน้าตรง',
+  'หันหน้าซ้ายเล็กน้อย (ตาและใบหน้ายังมองเข้ากล้อง)',
+  'หันหน้าขวาเล็กน้อย (ตาและใบหน้ายังมองเข้ากล้อง)',
+  'ก้มหน้าลงเล็กน้อย (ตายังมองเข้ากล้อง)',
+  'เงยหน้าขึ้นเล็กน้อย (ตายังมองเข้ากล้อง)',
+];
+// Short versions for the cramped thumbnail-slot labels — the full
+// "ตา/ใบหน้ายังมองเข้ากล้อง" reminder lives in the capture button, status
+// text, and the warning banner above instead, where there's room for it.
+export const ENROLL_POSE_SHORT_LABELS = ['ตรง', 'ซ้ายเล็กน้อย', 'ขวาเล็กน้อย', 'ก้มเล็กน้อย', 'เงยเล็กน้อย'];
 export const ENROLL_SHOT_COUNT = ENROLL_POSE_LABELS.length;
 
 @Component({
@@ -59,6 +77,7 @@ export class FaceEnrollDialogComponent implements AfterViewInit, OnDestroy {
   readonly statusText = signal('กดปุ่ม "เริ่มกล้อง" เพื่อเริ่มถ่ายภาพ');
   readonly statusType = signal<BannerType>('');
   readonly poseLabels = ENROLL_POSE_LABELS;
+  readonly poseShortLabels = ENROLL_POSE_SHORT_LABELS;
   readonly totalShots = ENROLL_SHOT_COUNT;
   readonly shots = signal<(CapturedShot | null)[]>(new Array(ENROLL_SHOT_COUNT).fill(null));
   readonly consentChecked = signal(false);
