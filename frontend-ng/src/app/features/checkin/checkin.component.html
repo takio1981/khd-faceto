@@ -121,6 +121,18 @@
               แนะนำเริ่มที่ 8%-90%
             </p>
           </div>
+
+          <div class="cam-select">
+            <label>🧭 ความไวในการตรวจจับใบหน้า (ก้ม/เงย/หันซ้าย-ขวา/ใส่แมส) — {{ scoreThreshold | number:'1.2-2' }}</label>
+            <mat-slider [min]="minScoreThreshold" [max]="maxScoreThreshold" [step]="0.05" discrete>
+              <input matSliderThumb [(ngModel)]="scoreThreshold" (ngModelChange)="onScoreThresholdChange($event)" />
+            </mat-slider>
+            <p class="cam-setting-hint">
+              ลากไปทาง "ไว" (ค่าน้อย) เพื่อให้ตรวจจับใบหน้าที่ก้ม/เงย/หันข้าง หรือใส่แมสปิดจมูก-ปากได้ง่ายขึ้น
+              แต่อาจมีการตรวจจับผิดพลาด (เช่น เห็นเป็นใบหน้าทั้งที่ไม่ใช่) มากขึ้นเล็กน้อย —
+              ลากไปทาง "เข้ม" (ค่ามาก) ถ้าต้องการให้ตรวจจับเฉพาะใบหน้าที่หันตรงเข้ากล้องชัดเจนเท่านั้น แนะนำเริ่มที่ 0.35
+            </p>
+          </div>
         </div>
       </div>
 

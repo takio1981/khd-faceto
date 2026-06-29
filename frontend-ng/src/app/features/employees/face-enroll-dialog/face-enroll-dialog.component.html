@@ -1,10 +1,17 @@
-<h2 mat-dialog-title>ลงทะเบียนใบหน้า (3 ภาพ): {{ data.employeeName }}</h2>
+<h2 mat-dialog-title>ลงทะเบียนใบหน้า ({{ totalShots }} ภาพ): {{ data.employeeName }}</h2>
 
 <mat-dialog-content>
-  <p class="muted">ถ่ายภาพใบหน้า 3 มุม (ตรง / เอียงซ้ายเล็กน้อย / เอียงขวาเล็กน้อย) เพื่อความแม่นยำ</p>
   <p class="muted">
-    👓 ถ้าพนักงานใส่แว่นสายตาเป็นประจำ ให้ <b>ใส่แว่นไว้ตอนถ่ายภาพลงทะเบียนทั้ง 3 ภาพ</b> เช่นกัน เพื่อให้ระบบจดจำใบหน้าตรงกับตอนสแกนจริง
+    ถ่ายภาพใบหน้า {{ totalShots }} มุมตามลำดับ: {{ poseLabels.join(' / ') }} —
+    ยิ่งมีมุมหลากหลาย ระบบจะจำใบหน้าได้แม่นยำขึ้นตอนสแกนจริงแม้ก้ม/เงย/หันหน้าเล็กน้อย
+  </p>
+  <p class="muted">
+    👓 ถ้าพนักงานใส่แว่นสายตาเป็นประจำ ให้ <b>ใส่แว่นไว้ตอนถ่ายภาพลงทะเบียนทุกภาพ</b> เช่นกัน เพื่อให้ระบบจดจำใบหน้าตรงกับตอนสแกนจริง
     (ไม่ต้องถอดแว่น ยกเว้นแว่นกันแดด/แว่นเลนส์เข้ม)
+  </p>
+  <p class="muted">
+    😷 <b>ไม่ควรใส่แมส/ผ้าปิดจมูก-ปากตอนลงทะเบียน</b> แม้ระบบจะปรับให้ตรวจจับใบหน้าที่ใส่แมสได้ดีขึ้นตอนสแกนจริงแล้วก็ตาม
+    เพราะข้อมูลใบหน้าตั้งต้นที่สมบูรณ์ (ไม่มีสิ่งบัง) จะช่วยให้จับคู่ได้แม่นยำกว่าเสมอ
   </p>
 
   <div class="consent-box">
@@ -54,9 +61,9 @@
       <div class="enroll-slot" [class.done]="!!shot">
         <div class="slot-circle">{{ shot ? '✓' : $index + 1 }}</div>
         @if (shot) {
-          <img class="slot-thumb" [src]="shot.thumbnail" [alt]="'ภาพ ' + ($index + 1)" />
+          <img class="slot-thumb" [src]="shot.thumbnail" [alt]="poseLabels[$index]" />
         }
-        <div class="slot-label">ภาพที่ {{ $index + 1 }}</div>
+        <div class="slot-label">{{ poseLabels[$index] }}</div>
       </div>
     }
   </div>
@@ -68,13 +75,13 @@
 
   @if (!cameraStarted()) {
     <button mat-flat-button color="primary" type="button" [disabled]="!consentChecked()" (click)="startCamera()">เริ่มกล้อง</button>
-  } @else if (capturedCount < 3) {
+  } @else if (capturedCount < totalShots) {
     <button mat-flat-button color="primary" type="button" [disabled]="capturing()" (click)="capture()">
-      📷 ถ่ายภาพที่ {{ capturedCount + 1 }}
+      📷 ถ่ายภาพที่ {{ capturedCount + 1 }}: {{ poseLabels[capturedCount] }}
     </button>
   } @else {
     <button mat-flat-button color="primary" type="button" [disabled]="saving()" (click)="saveAll()">
-      💾 บันทึก ({{ capturedCount }}/3)
+      💾 บันทึก ({{ capturedCount }}/{{ totalShots }})
     </button>
   }
 </mat-dialog-actions>

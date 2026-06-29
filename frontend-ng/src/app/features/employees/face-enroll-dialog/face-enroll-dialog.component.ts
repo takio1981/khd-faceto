@@ -22,6 +22,15 @@ interface CapturedShot {
 
 type BannerType = '' | 'scanning' | 'success' | 'warn' | 'error';
 
+// Capturing a few off-angle poses (not just straight-on) means the enrolled
+// descriptors actually cover the head positions a real check-in scan sees
+// day to day — straight ahead, turned slightly left/right, and tilted
+// slightly down/up — which is what materially improves match success for
+// those poses (a confidence-threshold tweak alone only helps find a face
+// box; it can't make recognition match an angle nobody enrolled).
+export const ENROLL_POSE_LABELS = ['หน้าตรง', 'หันหน้าซ้ายเล็กน้อย', 'หันหน้าขวาเล็กน้อย', 'ก้มหน้าลงเล็กน้อย', 'เงยหน้าขึ้นเล็กน้อย'];
+export const ENROLL_SHOT_COUNT = ENROLL_POSE_LABELS.length;
+
 @Component({
   selector: 'app-face-enroll-dialog',
   standalone: true,
@@ -49,7 +58,9 @@ export class FaceEnrollDialogComponent implements AfterViewInit, OnDestroy {
   readonly saving = signal(false);
   readonly statusText = signal('กดปุ่ม "เริ่มกล้อง" เพื่อเริ่มถ่ายภาพ');
   readonly statusType = signal<BannerType>('');
-  readonly shots = signal<(CapturedShot | null)[]>([null, null, null]);
+  readonly poseLabels = ENROLL_POSE_LABELS;
+  readonly totalShots = ENROLL_SHOT_COUNT;
+  readonly shots = signal<(CapturedShot | null)[]>(new Array(ENROLL_SHOT_COUNT).fill(null));
   readonly consentChecked = signal(false);
 
   private stream: MediaStream | null = null;
@@ -124,7 +135,7 @@ export class FaceEnrollDialogComponent implements AfterViewInit, OnDestroy {
       await this.facePipeline.loadModels();
       this.stream = await this.facePipeline.startCamera(this.videoRef!.nativeElement, this.selectedCamera() || undefined, this.facingMode());
       await this.refreshCameras();
-      this.setStatus('พร้อมแล้ว — จัดใบหน้าให้อยู่กลางจอ แล้วกดถ่ายภาพที่ 1', 'scanning');
+      this.setStatus(`พร้อมแล้ว — ภาพที่ 1: ${this.poseLabels[0]} แล้วกดถ่ายภาพ`, 'scanning');
       this.cameraStarted.set(true);
     } catch (e: any) {
       this.setStatus('ผิดพลาด: ' + (e?.message || e), 'error');
@@ -145,9 +156,9 @@ export class FaceEnrollDialogComponent implements AfterViewInit, OnDestroy {
 
   async capture(): Promise<void> {
     const idx = this.capturedCount;
-    if (idx >= 3 || this.capturing()) return;
+    if (idx >= this.totalShots || this.capturing()) return;
     this.capturing.set(true);
-    this.setStatus(`กำลังถ่ายภาพที่ ${idx + 1}...`, 'scanning');
+    this.setStatus(`กำลังถ่ายภาพที่ ${idx + 1} (${this.poseLabels[idx]})...`, 'scanning');
     try {
       const det = await this.facePipeline.getDescriptor(this.videoRef!.nativeElement);
       if (!det) {
@@ -159,7 +170,12 @@ export class FaceEnrollDialogComponent implements AfterViewInit, OnDestroy {
       const shots = [...this.shots()];
       shots[idx] = { descriptor: det.descriptor, thumbnail: jpeg };
       this.shots.set(shots);
-      this.setStatus(`✓ ถ่ายภาพที่ ${idx + 1} สำเร็จ (${idx + 1}/3)`, 'success');
+      const next = idx + 1;
+      if (next < this.totalShots) {
+        this.setStatus(`✓ ถ่ายภาพที่ ${next} สำเร็จ (${next}/${this.totalShots}) — ต่อไปภาพที่ ${next + 1}: ${this.poseLabels[next]}`, 'success');
+      } else {
+        this.setStatus(`✓ ถ่ายภาพที่ ${next} สำเร็จ (${next}/${this.totalShots}) — ครบแล้ว กดบันทึกได้เลย`, 'success');
+      }
     } catch (e: any) {
       this.setStatus('ผิดพลาด: ' + (e?.message || e), 'error');
     } finally {
@@ -168,8 +184,8 @@ export class FaceEnrollDialogComponent implements AfterViewInit, OnDestroy {
   }
 
   resetShots(): void {
-    this.shots.set([null, null, null]);
-    this.setStatus('เริ่มถ่ายใหม่ — จัดใบหน้าให้อยู่กลางจอ', 'scanning');
+    this.shots.set(new Array(this.totalShots).fill(null));
+    this.setStatus(`เริ่มถ่ายใหม่ — ภาพที่ 1: ${this.poseLabels[0]}`, 'scanning');
   }
 
   skip(): void {
@@ -178,9 +194,9 @@ export class FaceEnrollDialogComponent implements AfterViewInit, OnDestroy {
 
   async saveAll(): Promise<void> {
     const shots = this.shots().filter((s): s is CapturedShot => !!s);
-    if (shots.length < 3) return;
+    if (shots.length < this.totalShots) return;
     this.saving.set(true);
-    this.setStatus('กำลังบันทึกใบหน้า 3 ภาพ...', 'scanning');
+    this.setStatus(`กำลังบันทึกใบหน้า ${this.totalShots} ภาพ...`, 'scanning');
     try {
       // Record consent every time enrollment is saved — a fresh, timestamped
       // confirmation rather than relying solely on a possibly-stale earlier
@@ -199,8 +215,8 @@ export class FaceEnrollDialogComponent implements AfterViewInit, OnDestroy {
           });
         });
       }
-      this.setStatus('✓ บันทึกใบหน้าเรียบร้อย (3 ภาพ)', 'success');
-      this.notify.toast('ลงทะเบียนใบหน้า 3 ภาพเรียบร้อย', 'success');
+      this.setStatus(`✓ บันทึกใบหน้าเรียบร้อย (${this.totalShots} ภาพ)`, 'success');
+      this.notify.toast(`ลงทะเบียนใบหน้า ${this.totalShots} ภาพเรียบร้อย`, 'success');
       setTimeout(() => this.dialogRef.close(true), 800);
     } catch (e: any) {
       this.setStatus('ผิดพลาด: ' + (e?.error?.error || e?.message || e), 'error');

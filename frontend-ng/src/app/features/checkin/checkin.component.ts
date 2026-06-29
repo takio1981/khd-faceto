@@ -149,6 +149,16 @@ export class CheckinComponent implements AfterViewInit, OnDestroy {
   readonly faceSizePctFloor = FACE_SIZE_PCT_FLOOR;
   readonly faceSizePctCeil = FACE_SIZE_PCT_CEIL;
 
+  // Detector confidence threshold — lower = catches more tilted/turned/
+  // masked faces (at the cost of more false-positive detections), higher =
+  // stricter, frontal-only detection. Real value comes from FacePipelineService
+  // in the constructor body below (class field initializers run before
+  // constructor-parameter-property assignment, so `this.facePipeline` isn't
+  // available yet up here).
+  scoreThreshold = 0.35;
+  minScoreThreshold = 0.2;
+  maxScoreThreshold = 0.7;
+
   isFullscreen = false;
 
   statusText = 'กดปุ่ม "เริ่มสแกน" เพื่อเริ่มต้น';
@@ -235,6 +245,9 @@ export class CheckinComponent implements AfterViewInit, OnDestroy {
       MIN_BOX_SMOOTHING,
       MAX_BOX_SMOOTHING
     );
+    this.minScoreThreshold = this.facePipeline.minScoreThreshold;
+    this.maxScoreThreshold = this.facePipeline.maxScoreThreshold;
+    this.scoreThreshold = this.facePipeline.getScoreThreshold();
     this.minFaceSizePct = this.clampNumber(
       Number(localStorage.getItem(MIN_FACE_SIZE_KEY)) || DEFAULT_MIN_FACE_SIZE_PCT,
       FACE_SIZE_PCT_FLOOR,
@@ -482,6 +495,11 @@ export class CheckinComponent implements AfterViewInit, OnDestroy {
   onMaxFaceSizeChange(value: number): void {
     this.maxFaceSizePct = this.clampNumber(value, this.minFaceSizePct, FACE_SIZE_PCT_CEIL);
     localStorage.setItem(MAX_FACE_SIZE_KEY, String(this.maxFaceSizePct));
+  }
+
+  onScoreThresholdChange(value: number): void {
+    this.facePipeline.setScoreThreshold(value);
+    this.scoreThreshold = this.facePipeline.getScoreThreshold();
   }
 
   // ===== Collapsible panels =====

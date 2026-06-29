@@ -30,6 +30,18 @@ const QUALITY_PRESETS: Record<QualityKey, QualityPreset> = {
 };
 const DEFAULT_QUALITY: QualityKey = 'high';
 
+// TinyFaceDetector's confidence score drops for non-frontal poses (head
+// tilted down/up, turned left/right) and partial occlusion (mask over
+// nose/mouth) since it's trained mostly on near-frontal faces — those are
+// exactly the cases that used to get silently dropped by the old fixed 0.5
+// threshold. Lowering the default trades a little more sensitivity to
+// false positives (filtered out anyway by the checkin page's multi-frame
+// confirmation) for catching more of these off-angle/occluded detections.
+const DEFAULT_SCORE_THRESHOLD = 0.35;
+const MIN_SCORE_THRESHOLD = 0.2;
+const MAX_SCORE_THRESHOLD = 0.7;
+const SCORE_THRESHOLD_KEY = 'faceScoreThreshold';
+
 @Injectable({ providedIn: 'root' })
 export class FacePipelineService {
   modelsLoaded = false;
@@ -46,6 +58,20 @@ export class FacePipelineService {
 
   getQualityPreset(): QualityPreset {
     return QUALITY_PRESETS[this.getQualityKey()];
+  }
+
+  readonly minScoreThreshold = MIN_SCORE_THRESHOLD;
+  readonly maxScoreThreshold = MAX_SCORE_THRESHOLD;
+
+  getScoreThreshold(): number {
+    const raw = Number(localStorage.getItem(SCORE_THRESHOLD_KEY));
+    if (!raw || raw < MIN_SCORE_THRESHOLD || raw > MAX_SCORE_THRESHOLD) return DEFAULT_SCORE_THRESHOLD;
+    return raw;
+  }
+
+  setScoreThreshold(value: number): void {
+    const clamped = Math.min(MAX_SCORE_THRESHOLD, Math.max(MIN_SCORE_THRESHOLD, value));
+    localStorage.setItem(SCORE_THRESHOLD_KEY, String(clamped));
   }
 
   // face-api.js (~1.4MB) is intentionally NOT bundled into the global script
@@ -88,7 +114,10 @@ export class FacePipelineService {
   // (runs every frame in the detection loop). inputSize comes from the
   // selected quality preset so it always matches the camera resolution.
   detectorOptions(): any {
-    return new faceapi.TinyFaceDetectorOptions({ inputSize: this.getQualityPreset().inputSize, scoreThreshold: 0.5 });
+    return new faceapi.TinyFaceDetectorOptions({
+      inputSize: this.getQualityPreset().inputSize,
+      scoreThreshold: this.getScoreThreshold(),
+    });
   }
 
   // ===== Device / camera management =====
