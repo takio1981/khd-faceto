@@ -61,6 +61,7 @@ services:
       FACE_IMAGE_DIR: ${FACE_IMAGE_DIR}
       COMPANY_NAME: ${COMPANY_NAME}
       APP_NAME: ${APP_NAME}
+      PUBLIC_BASE_URL: ${PUBLIC_BASE_URL}
       HTTPS_PORT: ${HTTPS_PORT}
       SERVER_LAN_IP: ${SERVER_LAN_IP}
       CERT_DIR: /data/certs

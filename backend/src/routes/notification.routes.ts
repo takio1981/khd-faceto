@@ -1,6 +1,8 @@
 import { Router } from 'express';
+import path from 'path';
 import { RowDataPacket } from 'mysql2';
 import { pool } from '../db';
+import { config } from '../config';
 import { asyncHandler } from '../middleware/errorHandler';
 import { verifyJWT, requireRole } from '../middleware/auth';
 import {
@@ -8,9 +10,34 @@ import {
   listMyNotifications, setNotificationRead, setAllNotificationsRead, deleteMyNotification,
   inlineImage,
 } from '../services/notification.service';
+import { verifyImageToken } from '../utils/imageToken';
 import { logAudit } from '../services/audit.service';
 
 const router = Router();
+
+// GET /api/notifications/image/:token  - public, deliberately unauthenticated.
+// Exists only so LINE's Messaging API (which fetches image URLs itself, with
+// no support for auth headers) can display a scan photo — see
+// backend/src/utils/imageToken.ts. The token is a short-lived (~15 min),
+// HMAC-signed, single-purpose URL bound to one image path; it is NOT a
+// general-purpose public image gallery. Every other place this app exposes
+// face images (attendance records, notification history, admin feed) stays
+// behind verifyJWT as before.
+router.get('/image/:token', asyncHandler(async (req, res) => {
+  const imagePath = verifyImageToken(req.params.token);
+  if (!imagePath) {
+    res.status(404).end();
+    return;
+  }
+  const abs = path.join(config.face.imageDir, imagePath);
+  if (!abs.startsWith(path.resolve(config.face.imageDir))) {
+    res.status(404).end();
+    return;
+  }
+  res.sendFile(abs, (err) => {
+    if (err && !res.headersSent) res.status(404).end();
+  });
+}));
 
 router.get('/', verifyJWT, requireRole('admin'), asyncHandler(async (_req, res) => {
   res.json(await getNotificationSettings());

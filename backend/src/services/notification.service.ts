@@ -6,6 +6,7 @@ import { RowDataPacket, ResultSetHeader } from 'mysql2';
 import { config } from '../config';
 import { ictDateKey, ictSecondsSinceMidnight, isWeekendDateKey } from '../utils/ict';
 import { isHoliday } from './holidays.service';
+import { signImageToken } from '../utils/imageToken';
 
 export type NotifyEventType = 'late' | 'absent' | 'success' | 'unknown_face';
 
@@ -121,22 +122,40 @@ async function sendEmail(
   await transporter.sendMail({ from: settings.email.from || settings.email.user, to, subject, text, attachments });
 }
 
-// Text-only, deliberately: LINE's image message type requires
-// originalContentUrl/previewImageUrl to be publicly fetchable HTTPS URLs
-// (LINE's own servers fetch them, no auth header support) — exposing face
-// photos at an unauthenticated URL just so LINE can read them would undercut
-// every other PDPA-conscious access control this app has for biometric
-// images. Email/Telegram below support attaching the image directly
-// (upload, not a fetched URL), so they're the channels that actually carry it.
-async function sendLine(settings: NotificationSettings, userId: string, text: string): Promise<void> {
+// LINE's image message type requires originalContentUrl/previewImageUrl to
+// be publicly fetchable HTTPS URLs — LINE's own servers fetch them directly
+// and don't support auth headers, so unlike Email/Telegram below (which
+// upload the file directly, no URL needed) this can't attach the image the
+// same way. Instead, when config.publicBaseUrl is set, we mint a short-lived
+// (~15 min), HMAC-signed single-use-path token URL via imageToken.ts and let
+// LINE fetch *that* — never a permanently-public path. If publicBaseUrl
+// isn't configured (e.g. LAN-only deployment with no real public domain —
+// LINE cannot reach a private IP or accept the self-signed LAN cert), the
+// image is silently skipped and only the text message is sent.
+async function sendLine(
+  settings: NotificationSettings,
+  userId: string,
+  text: string,
+  imagePath?: string | null
+): Promise<void> {
   if (!settings.line.enabled || !userId || !settings.line.channelAccessToken) return;
+  const messages: any[] = [{ type: 'text', text }];
+  if (imagePath) {
+    if (config.publicBaseUrl) {
+      const token = signImageToken(imagePath);
+      const url = `${config.publicBaseUrl}/api/notifications/image/${token}`;
+      messages.push({ type: 'image', originalContentUrl: url, previewImageUrl: url });
+    } else {
+      console.warn('[notification] LINE image skipped: PUBLIC_BASE_URL is not configured');
+    }
+  }
   const res = await fetch('https://api.line.me/v2/bot/message/push', {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
       Authorization: `Bearer ${settings.line.channelAccessToken}`,
     },
-    body: JSON.stringify({ to: userId, messages: [{ type: 'text', text }] }),
+    body: JSON.stringify({ to: userId, messages }),
   });
   if (!res.ok) throw new Error(`LINE API error: ${res.status} ${await res.text()}`);
 }
@@ -269,14 +288,14 @@ async function dispatch(
 
   if (evt.employee && employee.notify_enabled) {
     if (employee.notify_email) jobs.push(sendEmail(settings, employee.notify_email, title, body, imagePath));
-    if (employee.notify_line_user_id) jobs.push(sendLine(settings, employee.notify_line_user_id, body));
+    if (employee.notify_line_user_id) jobs.push(sendLine(settings, employee.notify_line_user_id, body, imagePath));
     if (employee.notify_telegram_chat_id) jobs.push(sendTelegram(settings, employee.notify_telegram_chat_id, body, imagePath));
   }
   if (evt.admin) {
     for (const email of settings.admin.emails.split(',').map((s) => s.trim()).filter(Boolean)) {
       jobs.push(sendEmail(settings, email, title, body, imagePath));
     }
-    if (settings.admin.lineUserId) jobs.push(sendLine(settings, settings.admin.lineUserId, body));
+    if (settings.admin.lineUserId) jobs.push(sendLine(settings, settings.admin.lineUserId, body, imagePath));
     if (settings.admin.telegramChatId) jobs.push(sendTelegram(settings, settings.admin.telegramChatId, body, imagePath));
   }
   if (evt.supervisor && employee.supervisor_id) {
@@ -285,7 +304,7 @@ async function dispatch(
       const supTitle = `[${EVENT_LABEL[eventType]}] ทีมงาน: ${employee.full_name}`;
       const supBody = `แจ้งเตือนสำหรับหัวหน้างาน — ${body}`;
       if (supervisor.notify_email) jobs.push(sendEmail(settings, supervisor.notify_email, supTitle, supBody, imagePath));
-      if (supervisor.notify_line_user_id) jobs.push(sendLine(settings, supervisor.notify_line_user_id, supBody));
+      if (supervisor.notify_line_user_id) jobs.push(sendLine(settings, supervisor.notify_line_user_id, supBody, imagePath));
       if (supervisor.notify_telegram_chat_id) jobs.push(sendTelegram(settings, supervisor.notify_telegram_chat_id, supBody, imagePath));
       jobs.push(pushLocal(settings, supTitle, supBody, eventType, supervisor.id, imagePath));
     }
@@ -309,7 +328,7 @@ async function dispatchAdminOnly(eventType: NotifyEventType, title: string, body
   for (const email of settings.admin.emails.split(',').map((s) => s.trim()).filter(Boolean)) {
     jobs.push(sendEmail(settings, email, title, body, imagePath));
   }
-  if (settings.admin.lineUserId) jobs.push(sendLine(settings, settings.admin.lineUserId, body));
+  if (settings.admin.lineUserId) jobs.push(sendLine(settings, settings.admin.lineUserId, body, imagePath));
   if (settings.admin.telegramChatId) jobs.push(sendTelegram(settings, settings.admin.telegramChatId, body, imagePath));
   jobs.push(pushLocal(settings, title, body, eventType, null, imagePath));
 

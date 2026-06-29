@@ -1,5 +1,6 @@
 import path from 'path';
 import fs from 'fs/promises';
+import sharp from 'sharp';
 import { pool } from '../db';
 import { RowDataPacket, ResultSetHeader } from 'mysql2';
 import { config } from '../config';
@@ -28,6 +29,13 @@ const dateKey = ictDateKey;
 
 // ---- Face image storage ----------------------------------------------------
 
+// Capped so every saved face image stays small on disk regardless of the
+// capturing device's camera resolution or browser JPEG quality setting —
+// these are face-recognition audit thumbnails, not photos that need to be
+// sharp at full resolution.
+const FACE_IMAGE_MAX_DIM = 480;
+const FACE_IMAGE_JPEG_QUALITY = 72;
+
 // Save a base64 data-URL JPEG to disk under FACE_IMAGE_DIR/<YYYY-MM-DD>/<code>_<ts>.jpg
 // Returns the relative path stored in the DB, or null on failure / no image.
 // `codeOrLabel` is the employee_code for a matched scan, or a fixed label
@@ -38,13 +46,19 @@ export async function saveFaceImage(imageBase64: string | null | undefined, code
   const match = /^data:image\/\w+;base64,(.+)$/.exec(imageBase64);
   const data = match ? match[1] : imageBase64;
   try {
+    const resized = await sharp(Buffer.from(data, 'base64'))
+      .rotate() // honor any EXIF orientation before resizing
+      .resize({ width: FACE_IMAGE_MAX_DIM, height: FACE_IMAGE_MAX_DIM, fit: 'inside', withoutEnlargement: true })
+      .jpeg({ quality: FACE_IMAGE_JPEG_QUALITY })
+      .toBuffer();
+
     const day = ictDateKey(now);
     const ts = ictTimeStamp(now);
     const dir = path.join(config.face.imageDir, day);
     await fs.mkdir(dir, { recursive: true });
     const filename = `${codeOrLabel}_${ts}_${Date.now() % 1000}.jpg`;
     const relPath = path.join(day, filename);
-    await fs.writeFile(path.join(config.face.imageDir, relPath), Buffer.from(data, 'base64'));
+    await fs.writeFile(path.join(config.face.imageDir, relPath), resized);
     return relPath.split(path.sep).join('/');
   } catch (err) {
     console.error('[shift] failed to save face image', err);

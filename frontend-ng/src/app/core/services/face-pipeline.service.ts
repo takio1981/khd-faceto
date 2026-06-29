@@ -256,6 +256,11 @@ export class FacePipelineService {
     return canvas.toDataURL('image/jpeg', quality);
   }
 
+  // The server re-compresses/resizes every saved image anyway (see
+  // saveFaceImage in shift.service.ts), but capping the capture here too
+  // keeps the upload itself small — relevant on slower/cellular kiosk links.
+  private static readonly CAPTURE_MAX_DIM = 480;
+
   captureFaceJpeg(videoEl: HTMLVideoElement, box: { x: number; y: number; width: number; height: number }, quality = 0.8): string {
     const pad = 0.25;
     const vw = videoEl.videoWidth || 640;
@@ -264,10 +269,16 @@ export class FacePipelineService {
     const y = Math.max(0, box.y - box.height * pad);
     const w = Math.min(vw - x, box.width * (1 + 2 * pad));
     const h = Math.min(vh - y, box.height * (1 + 2 * pad));
+
+    const maxDim = FacePipelineService.CAPTURE_MAX_DIM;
+    const scale = Math.min(1, maxDim / Math.max(w, h));
+    const outW = Math.max(1, Math.round(w * scale));
+    const outH = Math.max(1, Math.round(h * scale));
+
     const canvas = document.createElement('canvas');
-    canvas.width = w;
-    canvas.height = h;
-    canvas.getContext('2d')!.drawImage(videoEl, x, y, w, h, 0, 0, w, h);
+    canvas.width = outW;
+    canvas.height = outH;
+    canvas.getContext('2d')!.drawImage(videoEl, x, y, w, h, 0, 0, outW, outH);
     return canvas.toDataURL('image/jpeg', quality);
   }
 

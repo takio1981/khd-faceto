@@ -55,4 +55,13 @@ export const config = {
 
   companyName: required('COMPANY_NAME', 'COMPANY'),
   appName: required('APP_NAME', 'KHD-FaceTo'),
+
+  // Externally-reachable HTTPS origin (incl. the /khd-faceto base path),
+  // e.g. https://attendance.example.go.th/khd-faceto — needed ONLY so LINE's
+  // image message type can fetch a temporary signed image URL (LINE's
+  // servers fetch the URL directly over the public internet; they will NOT
+  // accept the self-signed LAN cert used for camera access, and obviously
+  // can't reach a private LAN IP). Leave blank to keep LINE notifications
+  // text-only (no error — sendLine just skips the image and logs why).
+  publicBaseUrl: (process.env.PUBLIC_BASE_URL || '').replace(/\/+$/, ''),
 };

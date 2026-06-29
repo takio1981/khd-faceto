@@ -546,6 +546,11 @@
         <input matInput formControlName="channelAccessToken" />
       </mat-form-field>
 
+      <p class="muted small">
+        ส่งภาพที่สแกนได้แนบไปด้วยอัตโนมัติ ถ้าตั้งค่า <code>PUBLIC_BASE_URL</code> ใน <code>.env</code> ของเซิร์ฟเวอร์ไว้ (ต้องเป็นโดเมนสาธารณะจริงที่มี HTTPS ใบรับรองถูกต้อง ไม่ใช่ IP ในเครือข่าย LAN หรือใบรับรองที่ออกเองสำหรับกล้อง) —
+        ถ้าไม่ได้ตั้งค่าไว้ ระบบจะส่งแจ้งเตือนแบบข้อความอย่างเดียวโดยไม่มีภาพแนบ (ไม่ error)
+      </p>
+
       <div class="test-row">
         <mat-form-field appearance="outline" class="test-input">
           <mat-label>LINE User ID ปลายทางสำหรับทดสอบ</mat-label>
