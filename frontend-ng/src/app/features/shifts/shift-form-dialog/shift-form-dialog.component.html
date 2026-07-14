@@ -8,40 +8,13 @@
     </mat-form-field>
 
     <div class="form-grid">
-      <mat-form-field appearance="outline">
-        <mat-label>เริ่มเข้างาน</mat-label>
-        <input matInput type="time" formControlName="checkin_start" />
-      </mat-form-field>
-
-      <mat-form-field appearance="outline">
-        <mat-label>ตรงเวลาถึง</mat-label>
-        <input matInput type="time" formControlName="checkin_end" />
-      </mat-form-field>
-
-      <mat-form-field appearance="outline">
-        <mat-label>สายได้ถึง</mat-label>
-        <input matInput type="time" formControlName="late_cutoff" />
-      </mat-form-field>
-
-      <mat-form-field appearance="outline">
-        <mat-label>เริ่มออกงาน</mat-label>
-        <input matInput type="time" formControlName="checkout_start" />
-      </mat-form-field>
-
-      <mat-form-field appearance="outline">
-        <mat-label>สิ้นสุดออกงาน</mat-label>
-        <input matInput type="time" formControlName="checkout_end" />
-      </mat-form-field>
-
-      <mat-form-field appearance="outline">
-        <mat-label>เริ่ม OT</mat-label>
-        <input matInput type="time" formControlName="ot_start" />
-      </mat-form-field>
-
-      <mat-form-field appearance="outline">
-        <mat-label>สิ้นสุด OT</mat-label>
-        <input matInput type="time" formControlName="ot_end" />
-      </mat-form-field>
+      <app-time-picker label="เริ่มเข้างาน" formControlName="checkin_start"></app-time-picker>
+      <app-time-picker label="ตรงเวลาถึง" formControlName="checkin_end"></app-time-picker>
+      <app-time-picker label="สายได้ถึง" formControlName="late_cutoff"></app-time-picker>
+      <app-time-picker label="เริ่มออกงาน" formControlName="checkout_start"></app-time-picker>
+      <app-time-picker label="สิ้นสุดออกงาน" formControlName="checkout_end"></app-time-picker>
+      <app-time-picker label="เริ่ม OT" formControlName="ot_start"></app-time-picker>
+      <app-time-picker label="สิ้นสุด OT" formControlName="ot_end"></app-time-picker>
     </div>
 
     <p class="hint">

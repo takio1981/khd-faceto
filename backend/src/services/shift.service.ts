@@ -145,18 +145,11 @@ interface Classification {
 }
 
 // Classify a scan based on shift windows and today's scan history (ICT timezone).
-// Time windows (local ICT = Asia/Bangkok, UTC+7):
-//   checkin_start .. checkin_end    → เข้างาน ตรงเวลา
-//   checkin_end+1 .. late_cutoff    → เข้างาน สาย
-//   late_cutoff+1 .. checkout_end-1 → เข้างาน สายมาก (first scan of the day, however late)
-//   checkout_start .. (no upper bound) → ออกงาน ตรงเวลา (the scan after check-in)
-//   ot_start .. (no upper bound)    → OT-เข้า, then the next scan → OT-ออก
-//     (only once check-in AND check-out both exist)
-// Returns null when the scan falls outside every valid window for the
-// employee's current state — no attendance record is written for those
-// (e.g. a duplicate scan moments after check-in, or a scan before OT starts
-// on a day that's already complete). The caller treats null as "outside
-// scan window", not as a database write.
+// Valid windows (all bounds inclusive):
+//   checkin_start .. late_cutoff    → เข้างาน (ตรงเวลา if ≤ checkin_end, สาย otherwise)
+//   checkout_start .. checkout_end  → ออกงาน (requires prior check-in)
+//   ot_start .. ot_end              → OT-เข้า / OT-ออก (requires prior check-in+check-out)
+// Scans that fall outside every applicable window return null → no record written.
 function classify(shift: Shift, now: Date, today: TodayScans): Classification | null {
   const sec = dateToSeconds(now);
 
@@ -166,58 +159,35 @@ function classify(shift: Shift, now: Date, today: TodayScans): Classification | 
   const checkoutStart = timeToSeconds(shift.checkout_start);
   const checkoutEnd   = timeToSeconds(shift.checkout_end);
   const otStart       = timeToSeconds(shift.ot_start);
+  const otEnd         = timeToSeconds(shift.ot_end);
 
   // ---- Day already complete (has both check-in and check-out) ----
-  // Only a scan within (or after) the OT window creates a new record:
-  // first an OT-เข้า, then the next scan after that is OT-ออก.
   if (today.hasCheckIn && today.hasCheckOut) {
     if (today.hasOtIn && !today.hasOtOut) {
       return { scanType: 'ot_out', status: 'ot', message: 'บันทึกเวลา OT-ออก' };
     }
-    if (!today.hasOtIn && sec >= otStart) {
+    if (!today.hasOtIn && sec >= otStart && sec <= otEnd) {
       return { scanType: 'ot_in', status: 'ot', message: 'บันทึกเวลา OT-เข้า' };
     }
-    return null; // already checked in/out today, OT hasn't started or is fully done
+    return null;
   }
 
   // ---- Has check-in, awaiting check-out ----
   if (today.hasCheckIn && !today.hasCheckOut) {
-    if (sec >= checkoutStart) {
+    if (sec >= checkoutStart && sec <= checkoutEnd) {
       return { scanType: 'check_out', status: 'on_time', message: 'ลงเวลาออกงานสำเร็จ' };
     }
-    if (sec > lateCutoff && sec < checkoutStart) {
-      return { scanType: 'check_out', status: 'on_time', message: 'ลงเวลาออกงาน (ก่อนช่วงเวลา)' };
-    }
-    // Still within/before the check-in window: ignore as a duplicate scan
-    // rather than inserting a second check-in record for the same person.
     return null;
   }
 
-  // ---- No check-in yet today: this scan is the check-in ----
-  if (sec >= checkinStart && sec <= checkinEnd) {
+  // ---- No check-in yet: only record within check-in window (checkin_start → late_cutoff) ----
+  if (sec < checkinStart || sec > lateCutoff) {
+    return null;
+  }
+  if (sec <= checkinEnd) {
     return { scanType: 'check_in', status: 'on_time', message: 'ลงเวลาเข้างานสำเร็จ (ตรงเวลา)' };
   }
-  if (sec < checkinStart) {
-    return { scanType: 'check_in', status: 'on_time', message: 'ลงเวลาเข้างาน (ก่อนเวลาเริ่ม)' };
-  }
-  if (sec > checkinEnd && sec <= lateCutoff) {
-    return { scanType: 'check_in', status: 'late', message: 'ลงเวลาเข้างานสำเร็จ (สาย)' };
-  }
-  if (sec > lateCutoff && sec < checkoutEnd) {
-    return { scanType: 'check_in', status: 'late', message: 'ลงเวลาเข้างานสำเร็จ (สายมาก)' };
-  }
-  // No check-in at all by the end of the checkout window → the employee
-  // missed the regular shift, but still let a late arrival clock OT.
-  // status stays 'ot' (matching the scan_type) — the missed regular
-  // check-in is reflected by the absence of a check_in row that day, not by
-  // mislabeling this OT record's own status as "ขาด" (absent).
-  if (!today.hasOtIn) {
-    return { scanType: 'ot_in', status: 'ot', message: 'บันทึกเวลา OT-เข้า (ไม่พบการเข้างานวันนี้)' };
-  }
-  if (!today.hasOtOut) {
-    return { scanType: 'ot_out', status: 'ot', message: 'บันทึกเวลา OT-ออก (ไม่พบการเข้างานวันนี้)' };
-  }
-  return null;
+  return { scanType: 'check_in', status: 'late', message: 'ลงเวลาเข้างานสำเร็จ (สาย)' };
 }
 
 // ---- Public API: process one scan ----------------------------------------

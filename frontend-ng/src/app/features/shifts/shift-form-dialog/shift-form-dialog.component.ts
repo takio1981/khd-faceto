@@ -8,6 +8,7 @@ import { MatProgressSpinnerModule } from '@angular/material/progress-spinner';
 import { Shift } from '../../../core/models/models';
 import { NotifyService } from '../../../core/services/notify.service';
 import { ShiftService } from '../../../core/services/shift.service';
+import { TimePickerComponent } from '../../../shared/components/time-picker/time-picker.component';
 
 export interface ShiftFormDialogData {
   shift: Shift | null;
@@ -53,6 +54,7 @@ function hhmm(t?: string | null): string {
     MatInputModule,
     MatButtonModule,
     MatProgressSpinnerModule,
+    TimePickerComponent,
   ],
   templateUrl: './shift-form-dialog.component.html',
   styleUrl: './shift-form-dialog.component.scss',
