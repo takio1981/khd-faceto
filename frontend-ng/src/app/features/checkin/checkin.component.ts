@@ -88,6 +88,19 @@ const FACE_SIZE_PCT_CEIL = 100;
 const MIN_FACE_SIZE_KEY = 'camMinFaceSizePct';
 const MAX_FACE_SIZE_KEY = 'camMaxFaceSizePct';
 
+// Distance estimation from face-box percentage.
+// Average human face height ≈ 22 cm. Using the pinhole-camera similar-triangle
+// model: distance_m = faceHeight_m / (2 * tan(vFov/2) * facePct/100).
+// The vertical FOV varies by camera: typical laptop/USB webcam ~55-65°,
+// wide-angle (phone front cam) ~80-90°, telephoto (zoom lens) ~30-40°.
+// Users calibrate this once with the FOV slider so the metre readout matches
+// their real setup.
+const FACE_HEIGHT_M = 0.22;
+const DEFAULT_VFOV_DEG = 60;
+const MIN_VFOV_DEG = 20;
+const MAX_VFOV_DEG = 120;
+const VFOV_KEY = 'camVFovDeg';
+
 @Component({
   selector: 'app-checkin',
   standalone: true,
@@ -148,6 +161,9 @@ export class CheckinComponent implements AfterViewInit, OnDestroy {
   maxFaceSizePct = DEFAULT_MAX_FACE_SIZE_PCT;
   readonly faceSizePctFloor = FACE_SIZE_PCT_FLOOR;
   readonly faceSizePctCeil = FACE_SIZE_PCT_CEIL;
+  cameraVFovDeg = DEFAULT_VFOV_DEG;
+  readonly minVFovDeg = MIN_VFOV_DEG;
+  readonly maxVFovDeg = MAX_VFOV_DEG;
 
   // Detector confidence threshold — lower = catches more tilted/turned/
   // masked faces (at the cost of more false-positive detections), higher =
@@ -257,6 +273,11 @@ export class CheckinComponent implements AfterViewInit, OnDestroy {
       Number(localStorage.getItem(MAX_FACE_SIZE_KEY)) || DEFAULT_MAX_FACE_SIZE_PCT,
       FACE_SIZE_PCT_FLOOR,
       FACE_SIZE_PCT_CEIL
+    );
+    this.cameraVFovDeg = this.clampNumber(
+      Number(localStorage.getItem(VFOV_KEY)) || DEFAULT_VFOV_DEG,
+      MIN_VFOV_DEG,
+      MAX_VFOV_DEG
     );
     this.selectedLocationId = localStorage.getItem(LOCATION_STORAGE_KEY) || '';
   }
@@ -500,6 +521,23 @@ export class CheckinComponent implements AfterViewInit, OnDestroy {
   onScoreThresholdChange(value: number): void {
     this.facePipeline.setScoreThreshold(value);
     this.scoreThreshold = this.facePipeline.getScoreThreshold();
+  }
+
+  onVFovChange(value: number): void {
+    this.cameraVFovDeg = this.clampNumber(value, MIN_VFOV_DEG, MAX_VFOV_DEG);
+    localStorage.setItem(VFOV_KEY, String(this.cameraVFovDeg));
+  }
+
+  // Converts face-box-height percentage to an estimated real-world distance
+  // using the pinhole camera model (similar triangles):
+  //   distance = faceHeight_m / (2 * tan(vFov/2) * pct/100)
+  // Returns a Thai-unit string ("~85 ซม." or "~2.4 ม.").
+  pctToDistText(pct: number): string {
+    if (pct <= 0) return '∞';
+    const radHalf = (this.cameraVFovDeg * Math.PI) / 360;
+    const dist = FACE_HEIGHT_M / (2 * Math.tan(radHalf) * (pct / 100));
+    if (dist < 1) return `~${Math.round(dist * 100)} ซม.`;
+    return `~${dist.toFixed(1)} ม.`;
   }
 
   // ===== Collapsible panels =====

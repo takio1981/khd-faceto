@@ -109,16 +109,31 @@
           </div>
 
           <div class="cam-select">
-            <label>📏 ระยะห่างในการตรวจจับใบหน้า — {{ minFaceSizePct }}% – {{ maxFaceSizePct }}%</label>
+            <label>
+              📏 ระยะตรวจจับใบหน้า —
+              ไกลสุด {{ pctToDistText(minFaceSizePct) }} ({{ minFaceSizePct }}%)
+              &ndash;
+              ใกล้สุด {{ pctToDistText(maxFaceSizePct) }} ({{ maxFaceSizePct }}%)
+            </label>
             <mat-slider [min]="faceSizePctFloor" [max]="faceSizePctCeil" [step]="1" discrete>
               <input matSliderStartThumb [(ngModel)]="minFaceSizePct" (ngModelChange)="onMinFaceSizeChange($event)" />
               <input matSliderEndThumb [(ngModel)]="maxFaceSizePct" (ngModelChange)="onMaxFaceSizeChange($event)" />
             </mat-slider>
             <p class="cam-setting-hint">
-              ค่าเป็น % ของขนาดใบหน้าเทียบกับความสูงของภาพจากกล้อง (ยิ่งใบหน้าอยู่ใกล้กล้อง ใบหน้าจะมีขนาด % สูงขึ้น) —
-              ค่าต่ำสุด ({{ minFaceSizePct }}%) คือ "ระยะไกลสุด" ที่ยังตรวจจับได้ ลดค่านี้เพื่อให้ตรวจจับคนที่ยืนไกลจากกล้องได้
-              ค่าสูงสุด ({{ maxFaceSizePct }}%) คือ "ระยะใกล้สุด" ที่ยังตรวจจับได้ ลดค่านี้เพื่อกันใบหน้า/วัตถุที่จ่อเลนส์ใกล้เกินไป
-              แนะนำเริ่มที่ 8%-90%
+              ลากจุดซ้าย = "ไกลสุด" ที่รับได้ | ลากจุดขวา = "ใกล้สุด" ที่รับได้
+              ค่าเมตร/ซม. ที่แสดงประมาณจากมุมมองกล้อง (FOV) ด้านล่าง — ปรับ FOV ให้ตรงกับกล้องของคุณก่อน แล้วค่าระยะจะแม่นยำขึ้น
+            </p>
+          </div>
+
+          <div class="cam-select cam-select-sub">
+            <label>🎥 มุมมองแนวตั้งของกล้อง (Vertical FOV) — {{ cameraVFovDeg }}°</label>
+            <mat-slider [min]="minVFovDeg" [max]="maxVFovDeg" [step]="5" discrete>
+              <input matSliderThumb [(ngModel)]="cameraVFovDeg" (ngModelChange)="onVFovChange($event)" />
+            </mat-slider>
+            <p class="cam-setting-hint">
+              ใช้สำหรับแปลงระยะ % → เมตร/ซม. เท่านั้น (ไม่กระทบการตรวจจับจริง) —
+              กล้อง USB/เว็บแคมทั่วไป: ~55–65° | กล้องโน้ตบุ๊ก: ~55° | กล้องโทรศัพท์ (กล้องหน้า): ~70–80° | กล้อง wide-angle: ~90°+
+              ปรับจนค่าเมตรด้านบนตรงกับระยะที่คุณยืนจริงหน้ากล้อง
             </p>
           </div>
 

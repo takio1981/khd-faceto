@@ -170,6 +170,15 @@
   }
 }
 
+.cam-select-sub {
+  margin-top: -4px;
+  padding: 8px 12px;
+  background: #f5f8f7;
+  border-left: 3px solid #b2d4c8;
+  border-radius: 0 6px 6px 0;
+  label { color: #5a7068; }
+}
+
 .cam-select-row {
   display: flex;
   gap: 8px;
