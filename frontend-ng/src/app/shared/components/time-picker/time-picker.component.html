@@ -1,0 +1,35 @@
+<div class="tp-wrap" [class.tp-disabled]="disabled">
+  <p class="tp-label">{{ label }}</p>
+  <div class="tp-clock">
+
+    <!-- HOUR column -->
+    <div class="tp-col" (wheel)="onHourWheel($event)">
+      <button mat-icon-button class="tp-arrow" (click)="stepHour(1)" [disabled]="disabled" tabindex="-1" type="button">
+        <mat-icon>keyboard_arrow_up</mat-icon>
+      </button>
+      <input class="tp-digit" type="number" [value]="h" min="0" max="23"
+             (change)="onHourEdit($event)" (focus)="$any($event.target).select()"
+             [disabled]="disabled" aria-label="ชั่วโมง" />
+      <button mat-icon-button class="tp-arrow" (click)="stepHour(-1)" [disabled]="disabled" tabindex="-1" type="button">
+        <mat-icon>keyboard_arrow_down</mat-icon>
+      </button>
+    </div>
+
+    <span class="tp-sep">:</span>
+
+    <!-- MINUTE column -->
+    <div class="tp-col" (wheel)="onMinuteWheel($event)">
+      <button mat-icon-button class="tp-arrow" (click)="stepMinute(1)" [disabled]="disabled" tabindex="-1" type="button">
+        <mat-icon>keyboard_arrow_up</mat-icon>
+      </button>
+      <input class="tp-digit" type="number" [value]="m" min="0" max="59"
+             (change)="onMinuteEdit($event)" (focus)="$any($event.target).select()"
+             [disabled]="disabled" aria-label="นาที" />
+      <button mat-icon-button class="tp-arrow" (click)="stepMinute(-1)" [disabled]="disabled" tabindex="-1" type="button">
+        <mat-icon>keyboard_arrow_down</mat-icon>
+      </button>
+    </div>
+
+    <span class="tp-unit">น.</span>
+  </div>
+</div>

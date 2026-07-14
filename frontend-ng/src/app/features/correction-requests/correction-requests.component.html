@@ -26,10 +26,12 @@
               <mat-datepicker #picker></mat-datepicker>
             </mat-form-field>
 
-            <mat-form-field appearance="outline">
-              <mat-label>เวลาที่มาทำงานจริง (ประมาณ)</mat-label>
-              <input matInput type="time" formControlName="requestedTime" />
-            </mat-form-field>
+            <div class="time-picker-field">
+              <app-time-picker
+                label="เวลาที่มาทำงานจริง (ประมาณ)"
+                formControlName="requestedTime">
+              </app-time-picker>
+            </div>
 
             <mat-form-field appearance="outline">
               <mat-label>สถานะที่ขอให้บันทึก</mat-label>

@@ -11,6 +11,7 @@ import { MatIconModule } from '@angular/material/icon';
 import { MatInputModule } from '@angular/material/input';
 import { MatPaginatorModule, PageEvent } from '@angular/material/paginator';
 import { MatSelectModule } from '@angular/material/select';
+import { MatRadioModule } from '@angular/material/radio';
 import { MatSlideToggleModule } from '@angular/material/slide-toggle';
 import { MatTabsModule } from '@angular/material/tabs';
 import { MatTooltipModule } from '@angular/material/tooltip';
@@ -18,6 +19,7 @@ import { MatTooltipModule } from '@angular/material/tooltip';
 import { NotificationService } from '../../core/services/notification.service';
 import { NotifyService } from '../../core/services/notify.service';
 import { ScanLocationService } from '../../core/services/scan-location.service';
+import { TimezoneService, TzMode } from '../../core/services/timezone.service';
 import { HolidayService } from '../../core/services/holiday.service';
 import { AuditLogService } from '../../core/services/audit-log.service';
 import { OrgStructureService } from '../../core/services/org-structure.service';
@@ -51,6 +53,7 @@ const GMAIL_PORT = 465;
     MatDividerModule,
     MatTabsModule,
     MatPaginatorModule,
+    MatRadioModule,
     MatTooltipModule,
     ResponsiveTableComponent,
   ],
@@ -69,6 +72,27 @@ export class SettingsComponent implements OnInit, AfterViewInit {
   private employeeService = inject(EmployeeService);
   private notificationService = inject(NotificationService);
   private notify = inject(NotifyService);
+  readonly tzService = inject(TimezoneService);
+
+  // ===== 0. Timezone =====
+  tzMode: TzMode = this.tzService.getMode();
+  tzManual: string = this.tzService.getManualTimezone();
+  tzFilter = '';
+  tzSaved = false;
+
+  get tzFilteredList(): string[] {
+    const f = this.tzFilter.toLowerCase();
+    return f
+      ? this.tzService.allTimezones.filter((tz) => tz.toLowerCase().includes(f))
+      : this.tzService.allTimezones;
+  }
+
+  saveTz(): void {
+    this.tzService.save(this.tzMode, this.tzManual);
+    this.tzSaved = true;
+    this.notify.toast('บันทึกการตั้งค่าเขตเวลาเรียบร้อย', 'success');
+    setTimeout(() => (this.tzSaved = false), 2000);
+  }
 
   // ===== 1. Login security =====
   readonly loginForm = this.fb.group({

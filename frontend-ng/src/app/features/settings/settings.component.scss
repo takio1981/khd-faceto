@@ -193,6 +193,45 @@ mat-divider {
   text-align: left;
 }
 
+.tz-section {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  margin-bottom: 8px;
+}
+
+.tz-radio-group {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.tz-radio-label {
+  font-weight: 500;
+}
+
+.tz-radio-hint {
+  margin-left: 8px;
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.tz-manual-block {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  align-items: flex-start;
+  padding-left: 28px;
+}
+
+.tz-filter-field {
+  flex: 0 0 260px;
+}
+
+.tz-select-field {
+  flex: 1 1 300px;
+}
+
 @media (max-width: 720px) {
   .form-grid.two-col,
   .form-grid.three-col {

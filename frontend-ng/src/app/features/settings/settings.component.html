@@ -466,6 +466,53 @@
       </mat-card>
     </mat-tab>
 
+    <!-- 0. Timezone -->
+    <mat-tab label="🌐 เขตเวลา">
+      <mat-card class="section-card">
+        <h2 class="section-title">ตั้งค่าเขตเวลา (Timezone)</h2>
+        <p class="muted">
+          ระบบใช้เขตเวลาของเบราว์เซอร์โดยอัตโนมัติ หากต้องการกำหนดค่าเองให้เลือก "กำหนดเอง" แล้วเลือก IANA timezone ที่ต้องการ
+        </p>
+
+        <div class="tz-section">
+          <mat-radio-group [(ngModel)]="tzMode" class="tz-radio-group">
+            <mat-radio-button value="auto">
+              <span class="tz-radio-label">อัตโนมัติ (ตามเบราว์เซอร์)</span>
+              <span class="tz-radio-hint">{{ tzService.getBrowserTimezone() }}</span>
+            </mat-radio-button>
+            <mat-radio-button value="manual">
+              <span class="tz-radio-label">กำหนดเอง</span>
+            </mat-radio-button>
+          </mat-radio-group>
+
+          @if (tzMode === 'manual') {
+            <div class="tz-manual-block">
+              <mat-form-field appearance="outline" class="tz-filter-field">
+                <mat-label>ค้นหาเขตเวลา</mat-label>
+                <input matInput [(ngModel)]="tzFilter" placeholder="เช่น Bangkok, Asia, UTC" />
+                <mat-icon matSuffix>search</mat-icon>
+              </mat-form-field>
+
+              <mat-form-field appearance="outline" class="tz-select-field">
+                <mat-label>เขตเวลา</mat-label>
+                <mat-select [(ngModel)]="tzManual">
+                  @for (tz of tzFilteredList; track tz) {
+                    <mat-option [value]="tz">{{ tz }}</mat-option>
+                  }
+                </mat-select>
+              </mat-form-field>
+            </div>
+          }
+        </div>
+
+        <div class="actions-row">
+          <button mat-flat-button color="primary" (click)="saveTz()">
+            {{ tzSaved ? '✓ บันทึกแล้ว' : 'บันทึก' }}
+          </button>
+        </div>
+      </mat-card>
+    </mat-tab>
+
     <!-- 3. Notifications -->
     <mat-tab label="🔔 การแจ้งเตือน">
       <mat-card class="section-card" [formGroup]="notifForm">

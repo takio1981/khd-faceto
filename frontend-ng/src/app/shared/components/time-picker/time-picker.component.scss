@@ -1,0 +1,81 @@
+.tp-wrap {
+  display: inline-flex;
+  flex-direction: column;
+  gap: 2px;
+
+  &.tp-disabled { opacity: 0.5; pointer-events: none; }
+}
+
+.tp-label {
+  font-size: 12px;
+  font-weight: 600;
+  color: rgba(0, 0, 0, 0.6);
+  margin: 0 0 2px 2px;
+}
+
+.tp-clock {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  border: 1.5px solid rgba(0, 0, 0, 0.23);
+  border-radius: 10px;
+  padding: 8px 16px;
+  background: #fff;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.06);
+
+  &:focus-within {
+    border-color: var(--mdc-theme-primary, #0f8a4f);
+    border-width: 2px;
+    box-shadow: 0 0 0 3px rgba(15, 138, 79, 0.12);
+  }
+}
+
+.tp-col {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+}
+
+.tp-arrow {
+  width: 32px !important;
+  height: 32px !important;
+  line-height: 32px !important;
+  color: #0b4f3c;
+}
+
+.tp-digit {
+  width: 60px;
+  height: 54px;
+  font-size: 36px;
+  font-weight: 800;
+  text-align: center;
+  border: none;
+  outline: none;
+  background: transparent;
+  color: #0b1f17;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 1px;
+
+  /* hide native spin buttons */
+  -moz-appearance: textfield;
+  &::-webkit-outer-spin-button,
+  &::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
+}
+
+.tp-sep {
+  font-size: 40px;
+  font-weight: 800;
+  color: #0b4f3c;
+  line-height: 1;
+  margin-bottom: 4px;
+  user-select: none;
+}
+
+.tp-unit {
+  font-size: 14px;
+  font-weight: 600;
+  color: #6b7a76;
+  align-self: flex-end;
+  margin-bottom: 12px;
+}

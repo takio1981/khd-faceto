@@ -15,6 +15,7 @@ import { CorrectionRequestService } from '../../core/services/correction-request
 import { NotifyService } from '../../core/services/notify.service';
 import { AttendanceStatus, CorrectionRequest, CorrectionRequestType } from '../../core/models/models';
 import { ResponsiveTableComponent, TableColumn } from '../../shared/components/responsive-table/responsive-table.component';
+import { TimePickerComponent } from '../../shared/components/time-picker/time-picker.component';
 
 const STATUS_TH: Record<string, string> = {
   on_time: 'ตรงเวลา',
@@ -51,6 +52,7 @@ const REQUEST_TYPE_TH: Record<string, string> = {
     MatSelectModule,
     MatTabsModule,
     ResponsiveTableComponent,
+    TimePickerComponent,
   ],
   providers: [provideNativeDateAdapter()],
   templateUrl: './correction-requests.component.html',
