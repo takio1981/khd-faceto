@@ -920,7 +920,10 @@ export class CheckinComponent implements AfterViewInit, OnDestroy {
   // inference call is stuck. Racing each call against a timeout, and
   // forcing a full reload after several hangs in a row, is the only
   // reliable way to recover (we can't actually cancel a stuck TF.js op).
-  private static readonly DETECTION_TIMEOUT_MS = 6000;
+  // WebGL shader compilation on first use can take 8-15 s on many GPUs.
+  // Keep the timeout generous enough that a cold-start doesn't trigger the
+  // page-reload recovery (3 consecutive timeouts × this value = hard limit).
+  private static readonly DETECTION_TIMEOUT_MS = 15000;
   private static readonly MAX_CONSECUTIVE_TIMEOUTS = 3;
   private detectionAttemptId = 0;
   private consecutiveDetectionTimeouts = 0;
@@ -1191,10 +1194,12 @@ export class CheckinComponent implements AfterViewInit, OnDestroy {
       this.loop();
       this.startWatchdog();
       if (this.objectDetectorEnabled) {
-        // COCO-SSD runs in a Web Worker — completely isolated from the main
-        // thread's face-api.js.  No WebGL / TF.js conflict, so we can start
-        // immediately without any delay.
-        this.initObjectDetector();
+        // Give face-api.js a 6-second head-start so its WebGL backend
+        // compiles shaders before the Worker starts downloading TF.js chunks.
+        // Even though the Worker runs in an isolated realm, spawning it at the
+        // same instant adds CPU/network load that can slow down the first
+        // WebGL inference and trigger the detection timeout.
+        setTimeout(() => { if (!this.destroyed && this.running) this.initObjectDetector(); }, 6000);
       }
     } catch (e: any) {
       this.modelsLoading = false;
