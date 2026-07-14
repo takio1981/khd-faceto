@@ -161,6 +161,20 @@
           </div>
 
           <div class="cam-select">
+            <div class="cam-select-row cam-zoom-toggle-row">
+              <label>🧠 แยกแยะมนุษย์ / สัตว์ / วัตถุ (AI Object Detector)</label>
+              <mat-slide-toggle [(ngModel)]="objectDetectorEnabled" (ngModelChange)="onObjectDetectorToggle()"></mat-slide-toggle>
+            </div>
+            @if (objectDetectorEnabled) {
+              <p class="cam-setting-hint obj-detector-hint">
+                @if (objectDetectorLoading) { ⏳ กำลังโหลดโมเดล COCO-SSD (~3 MB)... }
+                @else if (objectDetectorReady) { ✅ พร้อมแล้ว — ตรวจจับได้ 80 ประเภท เช่น สุนัข แมว เก้าอี้ โต๊ะ นาฬิกา ฯลฯ }
+                @else { ❌ โหลดโมเดลไม่สำเร็จ — ตรวจสอบการเชื่อมต่ออินเทอร์เน็ต (ต้องการโหลดน้ำหนักโมเดลจาก Google CDN ครั้งแรก) }
+              </p>
+            }
+          </div>
+
+          <div class="cam-select">
             <label>🧭 ความไวในการตรวจจับใบหน้า (ก้ม/เงย/หันซ้าย-ขวา/ใส่แมส) — {{ scoreThreshold | number:'1.2-2' }}</label>
             <mat-slider [min]="minScoreThreshold" [max]="maxScoreThreshold" [step]="0.05" discrete>
               <input matSliderThumb [(ngModel)]="scoreThreshold" (ngModelChange)="onScoreThresholdChange($event)" />
@@ -181,6 +195,13 @@
             <canvas #overlay class="overlay"></canvas>
             <div class="cam-guide"><span class="tl"></span><span class="tr"></span><span class="bl"></span><span class="br"></span></div>
             <div class="zoom-badge" *ngIf="autoZoomEnabled && isZoomActive">🔍 {{ currentZoomDisplay }}</div>
+            <div class="obj-detect-chips" *ngIf="objectDetectorEnabled && objectDetectorReady && lastObjectDetections.length">
+              @for (d of lastObjectDetections.slice(0, 6); track d.class + d.score) {
+                <span class="obj-chip" [class.obj-chip-human]="d.isHuman" [class.obj-chip-warn]="!d.isHuman">
+                  {{ d.emoji }} {{ d.classTh }} {{ (d.score * 100).toFixed(0) }}%
+                </span>
+              }
+            </div>
 
             <div class="modal-loading" *ngIf="modelsLoading">
               <mat-spinner diameter="48"></mat-spinner>

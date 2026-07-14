@@ -2,6 +2,96 @@ import { Injectable } from '@angular/core';
 
 declare const faceapi: any;
 
+// ===== Object detection (COCO-SSD via TensorFlow.js) =====
+// Thai name + emoji for every COCO class (80 classes).
+// Unknown classes fall back to the English name + 🔍.
+const OBJ_META: Record<string, [string, string]> = {
+  person: ['มนุษย์', '👤'],
+  bicycle: ['จักรยาน', '🚲'],
+  car: ['รถยนต์', '🚗'],
+  motorcycle: ['มอเตอร์ไซค์', '🏍️'],
+  airplane: ['เครื่องบิน', '✈️'],
+  bus: ['รถบัส', '🚌'],
+  train: ['รถไฟ', '🚂'],
+  truck: ['รถบรรทุก', '🚛'],
+  boat: ['เรือ', '⛵'],
+  'traffic light': ['สัญญาณไฟ', '🚦'],
+  bench: ['ม้านั่ง', '🪑'],
+  bird: ['นก', '🐦'],
+  cat: ['แมว', '🐈'],
+  dog: ['สุนัข', '🐕'],
+  horse: ['ม้า', '🐎'],
+  sheep: ['แกะ', '🐑'],
+  cow: ['วัว', '🐄'],
+  elephant: ['ช้าง', '🐘'],
+  bear: ['หมี', '🐻'],
+  zebra: ['ม้าลาย', '🦓'],
+  giraffe: ['ยีราฟ', '🦒'],
+  backpack: ['กระเป๋าเป้', '🎒'],
+  umbrella: ['ร่ม', '☂️'],
+  handbag: ['กระเป๋าถือ', '👜'],
+  tie: ['เนคไท', '👔'],
+  suitcase: ['กระเป๋าเดินทาง', '🧳'],
+  frisbee: ['จานร่อน', '🥏'],
+  skis: ['สกี', '⛷️'],
+  snowboard: ['สโนว์บอร์ด', '🏂'],
+  'sports ball': ['ลูกบอล', '⚽'],
+  kite: ['ว่าว', '🪁'],
+  'baseball bat': ['ไม้เบสบอล', '⚾'],
+  skateboard: ['สเก็ตบอร์ด', '🛹'],
+  surfboard: ['เซิร์ฟบอร์ด', '🏄'],
+  bottle: ['ขวด', '🍶'],
+  'wine glass': ['แก้วไวน์', '🍷'],
+  cup: ['แก้ว/ถ้วย', '☕'],
+  fork: ['ส้อม', '🍴'],
+  knife: ['มีด', '🔪'],
+  spoon: ['ช้อน', '🥄'],
+  bowl: ['ชาม', '🥣'],
+  banana: ['กล้วย', '🍌'],
+  apple: ['แอปเปิ้ล', '🍎'],
+  sandwich: ['แซนวิช', '🥪'],
+  orange: ['ส้ม', '🍊'],
+  broccoli: ['บร็อคโคลี', '🥦'],
+  carrot: ['แครอท', '🥕'],
+  'hot dog': ['ฮอทด็อก', '🌭'],
+  pizza: ['พิซซ่า', '🍕'],
+  donut: ['โดนัท', '🍩'],
+  cake: ['เค้ก', '🎂'],
+  chair: ['เก้าอี้', '🪑'],
+  couch: ['โซฟา', '🛋️'],
+  'potted plant': ['ต้นไม้กระถาง', '🪴'],
+  bed: ['เตียง', '🛏️'],
+  'dining table': ['โต๊ะ', '🍽️'],
+  toilet: ['ชักโครก', '🚽'],
+  tv: ['โทรทัศน์', '📺'],
+  laptop: ['แล็ปท็อป', '💻'],
+  mouse: ['เมาส์', '🖱️'],
+  remote: ['รีโมท', '📺'],
+  keyboard: ['คีย์บอร์ด', '⌨️'],
+  'cell phone': ['โทรศัพท์มือถือ', '📱'],
+  microwave: ['ไมโครเวฟ', '📦'],
+  oven: ['เตาอบ', '🍳'],
+  toaster: ['เครื่องปิ้งขนมปัง', '🍞'],
+  sink: ['อ่างล้างจาน', '🚿'],
+  refrigerator: ['ตู้เย็น', '🧊'],
+  book: ['หนังสือ', '📚'],
+  clock: ['นาฬิกา', '🕐'],
+  vase: ['แจกัน', '🏺'],
+  scissors: ['กรรไกร', '✂️'],
+  'teddy bear': ['ตุ๊กตาหมี', '🧸'],
+  'hair drier': ['ไดร์เป่าผม', '💇'],
+  toothbrush: ['แปรงสีฟัน', '🪥'],
+};
+
+export interface ObjectDetection {
+  class: string;
+  classTh: string;
+  emoji: string;
+  score: number;
+  bbox: [number, number, number, number]; // [x, y, width, height] in video pixels
+  isHuman: boolean;
+}
+
 export interface QualityPreset {
   label: string;
   width: number;
@@ -46,6 +136,58 @@ const SCORE_THRESHOLD_KEY = 'faceScoreThreshold';
 export class FacePipelineService {
   modelsLoaded = false;
   readonly QUALITY_PRESETS = QUALITY_PRESETS;
+
+  // ===== Object detector (COCO-SSD) =====
+  // Shared across all instances; loaded lazily only when enabled.
+  private static _objModel: any = null;
+  private static _objModelLoading = false;
+  objectDetectorReady = false;
+
+  private static getObjMeta(cls: string): [string, string] {
+    return OBJ_META[cls] ?? [cls, '🔍'];
+  }
+
+  // Dynamic import keeps TF.js (~1.5 MB) out of the initial bundle and loads
+  // it only when this feature is explicitly enabled by the operator.
+  // Model weights (~3 MB lite_mobilenet_v2) are fetched from Google CDN on
+  // first use and cached by the browser thereafter.
+  async loadObjectDetector(): Promise<void> {
+    if (FacePipelineService._objModel) {
+      this.objectDetectorReady = true;
+      return;
+    }
+    if (FacePipelineService._objModelLoading) {
+      while (FacePipelineService._objModelLoading) {
+        await new Promise((r) => setTimeout(r, 200));
+      }
+      this.objectDetectorReady = !!FacePipelineService._objModel;
+      return;
+    }
+    FacePipelineService._objModelLoading = true;
+    try {
+      const [, cocoMod] = await Promise.all([
+        import('@tensorflow/tfjs'),
+        import('@tensorflow-models/coco-ssd'),
+      ]);
+      FacePipelineService._objModel = await (cocoMod as any).load({ base: 'lite_mobilenet_v2' });
+      this.objectDetectorReady = true;
+    } catch (e) {
+      console.warn('[FacePipeline] object detector failed to load:', e);
+      this.objectDetectorReady = false;
+    } finally {
+      FacePipelineService._objModelLoading = false;
+    }
+  }
+
+  async detectObjects(video: HTMLVideoElement): Promise<ObjectDetection[]> {
+    if (!FacePipelineService._objModel) return [];
+    const raw: { class: string; score: number; bbox: [number, number, number, number] }[] =
+      await FacePipelineService._objModel.detect(video);
+    return raw.map((d) => {
+      const [classTh, emoji] = FacePipelineService.getObjMeta(d.class);
+      return { class: d.class, classTh, emoji, score: d.score, bbox: d.bbox, isHuman: d.class === 'person' };
+    });
+  }
 
   getQualityKey(): QualityKey {
     const key = localStorage.getItem('faceQuality') as QualityKey | null;

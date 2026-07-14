@@ -200,6 +200,43 @@
   letter-spacing: 0.5px;
 }
 
+// Object detection result chips overlaid at the bottom of the camera frame
+.obj-detect-chips {
+  position: absolute;
+  bottom: 8px;
+  left: 8px;
+  right: 8px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  pointer-events: none;
+  z-index: 20;
+}
+
+.obj-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  padding: 2px 8px;
+  border-radius: 12px;
+  font-size: 11.5px;
+  font-weight: 700;
+  backdrop-filter: blur(4px);
+  &.obj-chip-human {
+    background: rgba(15, 138, 79, 0.85);
+    color: #fff;
+  }
+  &.obj-chip-warn {
+    background: rgba(200, 60, 20, 0.85);
+    color: #fff;
+  }
+}
+
+.obj-detector-hint {
+  margin-top: 6px;
+  font-style: italic;
+}
+
 .cam-select-row {
   display: flex;
   gap: 8px;

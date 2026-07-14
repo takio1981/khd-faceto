@@ -20,6 +20,7 @@ import { firstValueFrom } from 'rxjs';
 import {
   FaceDetectionResult,
   FacePipelineService,
+  ObjectDetection,
   QualityKey,
 } from '../../core/services/face-pipeline.service';
 import { AttendanceService } from '../../core/services/attendance.service';
@@ -101,6 +102,10 @@ const DEFAULT_VFOV_DEG = 60;
 const MIN_VFOV_DEG = 20;
 const MAX_VFOV_DEG = 120;
 const VFOV_KEY = 'camVFovDeg';
+
+const OBJ_DETECTOR_KEY = 'camObjectDetector';
+const OBJ_DETECT_INTERVAL_MS = 1000;
+const OBJ_MIN_SCORE = 0.50; // discard low-confidence detections
 
 // Auto-zoom: when a face is detected the cam-frame div is CSS-scaled toward
 // the face centre so the kiosk display zooms in automatically.
@@ -202,6 +207,18 @@ export class CheckinComponent implements AfterViewInit, OnDestroy {
   get currentZoomDisplay(): string { return this._zoomFactor.toFixed(1) + 'x'; }
   get isZoomActive(): boolean { return this._zoomFactor > 1.02; }
 
+  // ===== Object detector (COCO-SSD) =====
+  objectDetectorEnabled = false;
+  objectDetectorReady = false;
+  objectDetectorLoading = false;
+  lastObjectDetections: ObjectDetection[] = [];
+  private objDetectTimer: ReturnType<typeof setInterval> | null = null;
+
+  // Non-human detections with score >= OBJ_MIN_SCORE visible in the frame
+  get visibleNonHuman(): ObjectDetection[] {
+    return this.lastObjectDetections.filter((d) => !d.isHuman && d.score >= OBJ_MIN_SCORE).slice(0, 5);
+  }
+
   // Detector confidence threshold — lower = catches more tilted/turned/
   // masked faces (at the cost of more false-positive detections), higher =
   // stricter, frontal-only detection. Real value comes from FacePipelineService
@@ -239,6 +256,7 @@ export class CheckinComponent implements AfterViewInit, OnDestroy {
   private detectionTimer: ReturnType<typeof setTimeout> | null = null;
   private clockTimer: ReturnType<typeof setInterval> | null = null;
   private feedPollTimer: ReturnType<typeof setInterval> | null = null;
+  private _objDetectTimer: ReturnType<typeof setInterval> | null = null;
   private resultBannerTimer: ReturnType<typeof setTimeout> | null = null;
   private countdownToken = 0;
   private destroyed = false;
@@ -316,6 +334,7 @@ export class CheckinComponent implements AfterViewInit, OnDestroy {
       MIN_VFOV_DEG,
       MAX_VFOV_DEG
     );
+    this.objectDetectorEnabled = localStorage.getItem(OBJ_DETECTOR_KEY) === '1';
     this.autoZoomEnabled = localStorage.getItem(AUTO_ZOOM_KEY) === '1';
     this.autoZoomMaxLevel = this.clampNumber(
       Number(localStorage.getItem(AUTO_ZOOM_LEVEL_KEY)) || DEFAULT_AUTO_ZOOM_LEVEL,
@@ -348,6 +367,7 @@ export class CheckinComponent implements AfterViewInit, OnDestroy {
     if (this.clockTimer) clearInterval(this.clockTimer);
     if (this.feedPollTimer) clearInterval(this.feedPollTimer);
     if (this.resultBannerTimer) clearTimeout(this.resultBannerTimer);
+    this.stopObjDetectLoop();
     this.stopWatchdog();
     this.facePipeline.stopCamera(this.stream);
   }
@@ -589,6 +609,56 @@ export class CheckinComponent implements AfterViewInit, OnDestroy {
   onAutoZoomSpeedChange(value: number): void {
     this.autoZoomSpeed = this.clampNumber(value, MIN_AUTO_ZOOM_SPEED, MAX_AUTO_ZOOM_SPEED);
     localStorage.setItem(AUTO_ZOOM_SPEED_KEY, String(this.autoZoomSpeed));
+  }
+
+  // ===== Object detector handlers =====
+  onObjectDetectorToggle(): void {
+    localStorage.setItem(OBJ_DETECTOR_KEY, this.objectDetectorEnabled ? '1' : '0');
+    if (this.objectDetectorEnabled && this.running) {
+      this.initObjectDetector();
+    } else {
+      this.stopObjDetectLoop();
+      this.lastObjectDetections = [];
+    }
+  }
+
+  private initObjectDetector(): void {
+    this.objectDetectorLoading = true;
+    this.facePipeline.loadObjectDetector().then(() => {
+      this.objectDetectorReady = this.facePipeline.objectDetectorReady;
+      this.objectDetectorLoading = false;
+      if (this.objectDetectorReady) this.startObjDetectLoop();
+    });
+  }
+
+  private startObjDetectLoop(): void {
+    this.stopObjDetectLoop();
+    this._objDetectTimer = setInterval(async () => {
+      if (!this.running || !this.objectDetectorReady) return;
+      try {
+        this.lastObjectDetections = await this.facePipeline.detectObjects(this.videoRef.nativeElement);
+      } catch { /* best-effort, never block main loop */ }
+    }, OBJ_DETECT_INTERVAL_MS);
+  }
+
+  private stopObjDetectLoop(): void {
+    if (this._objDetectTimer) { clearInterval(this._objDetectTimer); this._objDetectTimer = null; }
+  }
+
+  // Cross-validate: does this face box centre sit inside any COCO "person" bbox?
+  // Returns true (pass) when: detector not ready, no detections at all, or
+  // a person bbox overlaps the face. Returns false only when detections are
+  // present AND none of them is a person overlapping this face.
+  private faceIsHuman(faceBox: { x: number; y: number; width: number; height: number }): boolean {
+    if (!this.objectDetectorEnabled || !this.objectDetectorReady) return true;
+    if (!this.lastObjectDetections.length) return true;
+    const persons = this.lastObjectDetections.filter((d) => d.isHuman && d.score >= OBJ_MIN_SCORE);
+    if (!persons.length) return false;
+    const fx = faceBox.x + faceBox.width / 2;
+    const fy = faceBox.y + faceBox.height / 2;
+    return persons.some(({ bbox: [bx, by, bw, bh] }) =>
+      fx >= bx && fx <= bx + bw && fy >= by && fy <= by + bh,
+    );
   }
 
   // Converts face-box-height percentage to an estimated real-world distance
@@ -923,8 +993,8 @@ export class CheckinComponent implements AfterViewInit, OnDestroy {
       return;
     }
 
-    const { kept: dets, hadOutOfRange } = this.filterByFaceSize(rawDets);
-    if (!dets.length) {
+    const { kept: sizeDets, hadOutOfRange } = this.filterByFaceSize(rawDets);
+    if (!sizeDets.length) {
       this.drawAll([]);
       this.setStatus(
         hadOutOfRange
@@ -932,6 +1002,23 @@ export class CheckinComponent implements AfterViewInit, OnDestroy {
           : 'กำลังค้นหาใบหน้า... กรุณาหันหน้าเข้ากล้อง',
         'scanning'
       );
+      return;
+    }
+
+    // Object-detector gate: filter out any detection where COCO-SSD says the
+    // overlapping region is NOT a person (e.g. a dog, a photo on a screen).
+    const dets = sizeDets.filter((d) => this.faceIsHuman(d.box));
+    const hadNonHuman = dets.length < sizeDets.length;
+    if (!dets.length) {
+      this.drawAll([]);
+      const nonHuman = this.visibleNonHuman;
+      const label =
+        nonHuman.length > 0
+          ? `ตรวจพบ ${nonHuman.map((o) => o.emoji + ' ' + o.classTh).join(', ')} — ไม่ใช่มนุษย์ ระบบไม่บันทึกการเข้า-ออก`
+          : hadNonHuman
+            ? 'ตรวจพบวัตถุ/สัตว์ ไม่ใช่มนุษย์ — กรุณาใช้ใบหน้ามนุษย์เท่านั้น'
+            : 'กำลังค้นหาใบหน้า... กรุณาหันหน้าเข้ากล้อง';
+      this.setStatus(label, hadNonHuman ? 'warn' : 'scanning');
       return;
     }
 
@@ -1103,6 +1190,7 @@ export class CheckinComponent implements AfterViewInit, OnDestroy {
       this.setStatus('พร้อมสแกน — รองรับหลายคนพร้อมกัน', 'scanning');
       this.loop();
       this.startWatchdog();
+      if (this.objectDetectorEnabled) this.initObjectDetector();
     } catch (e: any) {
       this.modelsLoading = false;
       this.loadError = e?.message || String(e);
