@@ -165,11 +165,16 @@ export class FacePipelineService {
     }
     FacePipelineService._objModelLoading = true;
     try {
-      const [, cocoMod] = await Promise.all([
-        import('@tensorflow/tfjs'),
-        import('@tensorflow-models/coco-ssd'),
-      ]);
-      FacePipelineService._objModel = await (cocoMod as any).load({ base: 'lite_mobilenet_v2' });
+      // Import COCO-SSD only — it brings its own TF.js peer deps.
+      // Importing @tensorflow/tfjs separately would register TF.js kernels
+      // a second time (face-api.js already loaded TF.js) causing WebGL
+      // "already registered" warnings and potential backend conflicts.
+      const cocoMod = await import('@tensorflow-models/coco-ssd');
+      // esbuild wraps CJS modules: the actual exports land on .default in the
+      // ESM namespace; fall back to the raw module object if .default is absent.
+      const cocoSsd: { load: (cfg?: object) => Promise<any> } =
+        (cocoMod as any).default ?? (cocoMod as any);
+      FacePipelineService._objModel = await cocoSsd.load({ base: 'lite_mobilenet_v2' });
       this.objectDetectorReady = true;
     } catch (e) {
       console.warn('[FacePipeline] object detector failed to load:', e);
