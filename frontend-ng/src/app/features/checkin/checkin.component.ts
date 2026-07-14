@@ -1191,11 +1191,10 @@ export class CheckinComponent implements AfterViewInit, OnDestroy {
       this.loop();
       this.startWatchdog();
       if (this.objectDetectorEnabled) {
-        // Delay so face-api.js WebGL backend is fully warmed up before
-        // COCO-SSD initialises its own TF.js instance.  Loading both at the
-        // same time causes a "Platform browser already set" platform overwrite
-        // that can disrupt face-api.js's WebGL context and time out detections.
-        setTimeout(() => { if (!this.destroyed && this.running) this.initObjectDetector(); }, 6000);
+        // COCO-SSD runs in a Web Worker — completely isolated from the main
+        // thread's face-api.js.  No WebGL / TF.js conflict, so we can start
+        // immediately without any delay.
+        this.initObjectDetector();
       }
     } catch (e: any) {
       this.modelsLoading = false;

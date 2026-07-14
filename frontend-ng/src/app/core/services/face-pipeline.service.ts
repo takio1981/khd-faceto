@@ -137,66 +137,132 @@ export class FacePipelineService {
   modelsLoaded = false;
   readonly QUALITY_PRESETS = QUALITY_PRESETS;
 
-  // ===== Object detector (COCO-SSD) =====
-  // Shared across all instances; loaded lazily only when enabled.
-  private static _objModel: any = null;
-  private static _objModelLoading = false;
+  // ===== Object detector (COCO-SSD via Web Worker) =====
+  // Runs COCO-SSD + its own TF.js copy inside a Web Worker so that it is
+  // completely isolated from the main thread's face-api.js bundle (which
+  // carries its own bundled TF.js).  The two TF.js instances never share
+  // globalThis kernel registries, eliminating "kernel already registered" spam.
+  private static _objWorker: Worker | null = null;
+  private static _objWorkerReady = false;
+  private static _objWorkerLoading = false;
+  private static _pendingDetects = new Map<number, (dets: ObjectDetection[]) => void>();
+  private static _detectIdCounter = 0;
   objectDetectorReady = false;
 
   private static getObjMeta(cls: string): [string, string] {
     return OBJ_META[cls] ?? [cls, '🔍'];
   }
 
-  // Dynamic import keeps TF.js (~1.5 MB) out of the initial bundle and loads
-  // it only when this feature is explicitly enabled by the operator.
-  // Model weights (~3 MB lite_mobilenet_v2) are fetched from Google CDN on
-  // first use and cached by the browser thereafter.
-  async loadObjectDetector(): Promise<void> {
-    if (FacePipelineService._objModel) {
-      this.objectDetectorReady = true;
-      return;
-    }
-    if (FacePipelineService._objModelLoading) {
-      while (FacePipelineService._objModelLoading) {
-        await new Promise((r) => setTimeout(r, 200));
-      }
-      this.objectDetectorReady = !!FacePipelineService._objModel;
-      return;
-    }
-    FacePipelineService._objModelLoading = true;
-    try {
-      // Force the CPU backend BEFORE loading COCO-SSD so it never touches
-      // the WebGL context.  face-api.js already owns the WebGL context via
-      // its own bundled TF.js; if COCO-SSD's TF.js also tries to use WebGL
-      // it steals the context and causes face detection to time out.
-      // CPU inference (~500-1500 ms per frame) is acceptable here because we
-      // only run object detection once per second as a background gate.
-      const tfCore = await import('@tensorflow/tfjs-core');
-      await import('@tensorflow/tfjs-backend-cpu');
-      await (tfCore as any).setBackend('cpu');
-      await (tfCore as any).ready();
-
-      const cocoMod = await import('@tensorflow-models/coco-ssd');
-      // esbuild wraps CJS modules: exports land on .default in ESM namespace.
-      const cocoSsd: { load: (cfg?: object) => Promise<any> } =
-        (cocoMod as any).default ?? (cocoMod as any);
-      FacePipelineService._objModel = await cocoSsd.load({ base: 'lite_mobilenet_v2' });
-      this.objectDetectorReady = true;
-    } catch (e) {
-      console.warn('[FacePipeline] object detector failed to load:', e);
-      this.objectDetectorReady = false;
-    } finally {
-      FacePipelineService._objModelLoading = false;
-    }
-  }
-
-  async detectObjects(video: HTMLVideoElement): Promise<ObjectDetection[]> {
-    if (!FacePipelineService._objModel) return [];
-    const raw: { class: string; score: number; bbox: [number, number, number, number] }[] =
-      await FacePipelineService._objModel.detect(video);
-    return raw.map((d) => {
+  private mapPredictions(predictions: any[]): ObjectDetection[] {
+    return (predictions ?? []).map((d: any) => {
       const [classTh, emoji] = FacePipelineService.getObjMeta(d.class);
       return { class: d.class, classTh, emoji, score: d.score, bbox: d.bbox, isHuman: d.class === 'person' };
+    });
+  }
+
+  // Spawns the object-detector Web Worker and waits for the model to load.
+  // Safe to call multiple times — only one Worker is ever created.
+  async loadObjectDetector(): Promise<void> {
+    if (FacePipelineService._objWorkerReady) {
+      this.objectDetectorReady = true;
+      return;
+    }
+    if (FacePipelineService._objWorkerLoading) {
+      while (FacePipelineService._objWorkerLoading) {
+        await new Promise((r) => setTimeout(r, 200));
+      }
+      this.objectDetectorReady = FacePipelineService._objWorkerReady;
+      return;
+    }
+    FacePipelineService._objWorkerLoading = true;
+    return new Promise<void>((resolve) => {
+      try {
+        const worker = new Worker(
+          new URL('../workers/object-detector.worker', import.meta.url),
+          { type: 'module' },
+        );
+
+        worker.onmessage = ({ data }) => {
+          if (data.type === 'ready') {
+            FacePipelineService._objWorker = worker;
+            FacePipelineService._objWorkerReady = true;
+            FacePipelineService._objWorkerLoading = false;
+            this.objectDetectorReady = true;
+            resolve();
+          } else if (data.type === 'error') {
+            console.warn('[FacePipeline] object detector worker failed:', data.message);
+            FacePipelineService._objWorkerLoading = false;
+            this.objectDetectorReady = false;
+            worker.terminate();
+            resolve();
+          } else if (data.type === 'detections') {
+            const cb = FacePipelineService._pendingDetects.get(data.id);
+            if (cb) {
+              FacePipelineService._pendingDetects.delete(data.id);
+              cb(this.mapPredictions(data.predictions));
+            }
+          }
+        };
+
+        worker.onerror = (e) => {
+          console.warn('[FacePipeline] object detector worker error:', e);
+          FacePipelineService._objWorkerLoading = false;
+          this.objectDetectorReady = false;
+          resolve();
+        };
+
+        worker.postMessage({ type: 'init' });
+      } catch (e) {
+        console.warn('[FacePipeline] failed to create object detector worker:', e);
+        FacePipelineService._objWorkerLoading = false;
+        this.objectDetectorReady = false;
+        resolve();
+      }
+    });
+  }
+
+  // Captures a downscaled frame from the video and sends it to the Worker.
+  // Results are in original video pixel coordinates (scaled back up here).
+  async detectObjects(video: HTMLVideoElement): Promise<ObjectDetection[]> {
+    const worker = FacePipelineService._objWorker;
+    if (!worker || !FacePipelineService._objWorkerReady) return [];
+
+    const vw = video.videoWidth || 320;
+    const vh = video.videoHeight || 240;
+    const sw = Math.min(vw, 320); // cap at 320 px for performance
+    const sh = Math.round(sw * (vh / vw));
+
+    const canvas = document.createElement('canvas');
+    canvas.width = sw;
+    canvas.height = sh;
+    canvas.getContext('2d')!.drawImage(video, 0, 0, sw, sh);
+    const imgData = canvas.getContext('2d')!.getImageData(0, 0, sw, sh);
+
+    const id = ++FacePipelineService._detectIdCounter;
+    return new Promise<ObjectDetection[]>((resolve) => {
+      FacePipelineService._pendingDetects.set(id, (dets) => {
+        // Scale bboxes from downscaled-frame space back to full video space.
+        const sx = vw / sw;
+        const sy = vh / sh;
+        resolve(
+          dets.map((d) => ({
+            ...d,
+            bbox: [d.bbox[0] * sx, d.bbox[1] * sy, d.bbox[2] * sx, d.bbox[3] * sy],
+          })),
+        );
+      });
+      // Transfer the pixel buffer (zero-copy) to the worker.
+      worker.postMessage(
+        { type: 'detect', id, buffer: imgData.data.buffer, width: sw, height: sh },
+        [imgData.data.buffer],
+      );
+      // Safety timeout — if the worker hangs, don't block the detection loop.
+      setTimeout(() => {
+        if (FacePipelineService._pendingDetects.has(id)) {
+          FacePipelineService._pendingDetects.delete(id);
+          resolve([]);
+        }
+      }, 8000);
     });
   }
 

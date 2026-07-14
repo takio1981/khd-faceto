@@ -45,6 +45,14 @@
             ],
             "scripts": [
               "node_modules/leaflet/dist/leaflet.js"
+            ],
+            "allowedCommonJsDependencies": [
+              "@tensorflow-models/coco-ssd",
+              "@tensorflow/tfjs-core",
+              "@tensorflow/tfjs-backend-cpu",
+              "node-fetch",
+              "seedrandom",
+              "long"
             ]
           },
           "configurations": {

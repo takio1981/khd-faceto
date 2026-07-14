@@ -1,0 +1,1 @@
+var e=!1;function a(){e||typeof L>"u"||(L.Icon.Default.mergeOptions({iconUrl:"leaflet/images/marker-icon.png",iconRetinaUrl:"leaflet/images/marker-icon-2x.png",shadowUrl:"leaflet/images/marker-shadow.png"}),e=!0)}export{a};

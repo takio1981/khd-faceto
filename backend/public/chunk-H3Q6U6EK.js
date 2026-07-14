@@ -1,0 +1,1 @@
+import{Cc as o,aa as r,fa as e,xc as i}from"./chunk-IUEGI243.js";var n=class t{constructor(p){this.http=p}http;get(){return this.http.get(`${o.apiBaseUrl}/config`)}static \u0275fac=function(a){return new(a||t)(e(i))};static \u0275prov=r({token:t,factory:t.\u0275fac,providedIn:"root"})};export{n as a};
