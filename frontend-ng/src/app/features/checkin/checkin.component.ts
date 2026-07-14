@@ -15,6 +15,7 @@ import { MatIconModule } from '@angular/material/icon';
 import { MatProgressSpinnerModule } from '@angular/material/progress-spinner';
 import { MatSelectModule } from '@angular/material/select';
 import { MatSliderModule } from '@angular/material/slider';
+import { MatSlideToggleModule } from '@angular/material/slide-toggle';
 import { firstValueFrom } from 'rxjs';
 import {
   FaceDetectionResult,
@@ -101,6 +102,21 @@ const MIN_VFOV_DEG = 20;
 const MAX_VFOV_DEG = 120;
 const VFOV_KEY = 'camVFovDeg';
 
+// Auto-zoom: when a face is detected the cam-frame div is CSS-scaled toward
+// the face centre so the kiosk display zooms in automatically.
+// Flip is applied on the <video> element via CSS class; here we invert the
+// detected face-centre coordinates so the zoom origin aligns with the flipped
+// visual display rather than the raw video buffer.
+const AUTO_ZOOM_KEY = 'camAutoZoom';
+const AUTO_ZOOM_LEVEL_KEY = 'camAutoZoomLevel';
+const AUTO_ZOOM_SPEED_KEY = 'camAutoZoomSpeed';
+const DEFAULT_AUTO_ZOOM_LEVEL = 2.0;
+const MIN_AUTO_ZOOM_LEVEL = 1.2;
+const MAX_AUTO_ZOOM_LEVEL = 4.0;
+const DEFAULT_AUTO_ZOOM_SPEED = 0.06;
+const MIN_AUTO_ZOOM_SPEED = 0.02;
+const MAX_AUTO_ZOOM_SPEED = 0.25;
+
 @Component({
   selector: 'app-checkin',
   standalone: true,
@@ -114,6 +130,7 @@ const VFOV_KEY = 'camVFovDeg';
     MatProgressSpinnerModule,
     MatSelectModule,
     MatSliderModule,
+    MatSlideToggleModule,
   ],
   templateUrl: './checkin.component.html',
   styleUrl: './checkin.component.scss',
@@ -122,6 +139,7 @@ export class CheckinComponent implements AfterViewInit, OnDestroy {
   @ViewChild('video') videoRef!: ElementRef<HTMLVideoElement>;
   @ViewChild('overlay') overlayRef!: ElementRef<HTMLCanvasElement>;
   @ViewChild('camWrap') camWrapRef!: ElementRef<HTMLDivElement>;
+  @ViewChild('camFrame') camFrameRef!: ElementRef<HTMLDivElement>;
 
   // ===== State =====
   modelsLoading = true;
@@ -164,6 +182,25 @@ export class CheckinComponent implements AfterViewInit, OnDestroy {
   cameraVFovDeg = DEFAULT_VFOV_DEG;
   readonly minVFovDeg = MIN_VFOV_DEG;
   readonly maxVFovDeg = MAX_VFOV_DEG;
+
+  autoZoomEnabled = false;
+  autoZoomMaxLevel = DEFAULT_AUTO_ZOOM_LEVEL;
+  autoZoomSpeed = DEFAULT_AUTO_ZOOM_SPEED;
+  readonly minAutoZoomLevel = MIN_AUTO_ZOOM_LEVEL;
+  readonly maxAutoZoomLevel = MAX_AUTO_ZOOM_LEVEL;
+  readonly minAutoZoomSpeed = MIN_AUTO_ZOOM_SPEED;
+  readonly maxAutoZoomSpeed = MAX_AUTO_ZOOM_SPEED;
+
+  // Current smoothed zoom state — updated every frame in drawAll()
+  private _zoomFactor = 1.0;
+  private _zoomCx = 0.5; // face centre as fraction [0-1] of cam-frame width
+  private _zoomCy = 0.5;
+  private _zoomTargetFactor = 1.0;
+  private _zoomTargetCx = 0.5;
+  private _zoomTargetCy = 0.5;
+
+  get currentZoomDisplay(): string { return this._zoomFactor.toFixed(1) + 'x'; }
+  get isZoomActive(): boolean { return this._zoomFactor > 1.02; }
 
   // Detector confidence threshold — lower = catches more tilted/turned/
   // masked faces (at the cost of more false-positive detections), higher =
@@ -278,6 +315,15 @@ export class CheckinComponent implements AfterViewInit, OnDestroy {
       Number(localStorage.getItem(VFOV_KEY)) || DEFAULT_VFOV_DEG,
       MIN_VFOV_DEG,
       MAX_VFOV_DEG
+    );
+    this.autoZoomEnabled = localStorage.getItem(AUTO_ZOOM_KEY) === '1';
+    this.autoZoomMaxLevel = this.clampNumber(
+      Number(localStorage.getItem(AUTO_ZOOM_LEVEL_KEY)) || DEFAULT_AUTO_ZOOM_LEVEL,
+      MIN_AUTO_ZOOM_LEVEL, MAX_AUTO_ZOOM_LEVEL
+    );
+    this.autoZoomSpeed = this.clampNumber(
+      Number(localStorage.getItem(AUTO_ZOOM_SPEED_KEY)) || DEFAULT_AUTO_ZOOM_SPEED,
+      MIN_AUTO_ZOOM_SPEED, MAX_AUTO_ZOOM_SPEED
     );
     this.selectedLocationId = localStorage.getItem(LOCATION_STORAGE_KEY) || '';
   }
@@ -528,6 +574,23 @@ export class CheckinComponent implements AfterViewInit, OnDestroy {
     localStorage.setItem(VFOV_KEY, String(this.cameraVFovDeg));
   }
 
+  onAutoZoomToggle(): void {
+    localStorage.setItem(AUTO_ZOOM_KEY, this.autoZoomEnabled ? '1' : '0');
+    if (!this.autoZoomEnabled) {
+      this._zoomTargetFactor = 1.0;
+    }
+  }
+
+  onAutoZoomLevelChange(value: number): void {
+    this.autoZoomMaxLevel = this.clampNumber(value, MIN_AUTO_ZOOM_LEVEL, MAX_AUTO_ZOOM_LEVEL);
+    localStorage.setItem(AUTO_ZOOM_LEVEL_KEY, String(this.autoZoomMaxLevel));
+  }
+
+  onAutoZoomSpeedChange(value: number): void {
+    this.autoZoomSpeed = this.clampNumber(value, MIN_AUTO_ZOOM_SPEED, MAX_AUTO_ZOOM_SPEED);
+    localStorage.setItem(AUTO_ZOOM_SPEED_KEY, String(this.autoZoomSpeed));
+  }
+
   // Converts face-box-height percentage to an estimated real-world distance
   // using the pinhole camera model (similar triangles):
   //   distance = faceHeight_m / (2 * tan(vFov/2) * pct/100)
@@ -590,6 +653,48 @@ export class CheckinComponent implements AfterViewInit, OnDestroy {
     }
   }
 
+  // ===== Auto-zoom =====
+  // Applies a CSS scale() transform to the cam-frame div each frame, lerping
+  // the zoom factor and centre toward the detected face position.  The flip
+  // CSS on <video> is unaffected (it's on the child element, not cam-frame).
+  // Face centre coordinates are flipped here to match the visual display so
+  // the zoom origin sits on the actual visible face, not its mirror position.
+  private updateAutoZoom(results: DetWithResult[], vw: number, vh: number): void {
+    if (this.autoZoomEnabled && results.length > 0) {
+      let sumCx = 0, sumCy = 0;
+      for (const { det } of results) {
+        let cx = (det.box.x + det.box.width / 2) / vw;
+        let cy = (det.box.y + det.box.height / 2) / vh;
+        if (this.flipH) cx = 1 - cx;
+        if (this.flipV) cy = 1 - cy;
+        sumCx += cx;
+        sumCy += cy;
+      }
+      this._zoomTargetCx = Math.max(0.1, Math.min(0.9, sumCx / results.length));
+      this._zoomTargetCy = Math.max(0.1, Math.min(0.9, sumCy / results.length));
+      this._zoomTargetFactor = this.autoZoomMaxLevel;
+    } else {
+      this._zoomTargetFactor = 1.0;
+    }
+
+    const spd = this.autoZoomSpeed;
+    this._zoomFactor += (this._zoomTargetFactor - this._zoomFactor) * spd;
+    this._zoomCx += (this._zoomTargetCx - this._zoomCx) * (spd * 0.5);
+    this._zoomCy += (this._zoomTargetCy - this._zoomCy) * (spd * 0.5);
+    if (this._zoomFactor < 1.001) this._zoomFactor = 1.0;
+
+    const frame = this.camFrameRef?.nativeElement;
+    if (frame) {
+      if (this._zoomFactor > 1.001) {
+        frame.style.transform = `scale(${this._zoomFactor.toFixed(4)})`;
+        frame.style.transformOrigin = `${(this._zoomCx * 100).toFixed(2)}% ${(this._zoomCy * 100).toFixed(2)}%`;
+      } else {
+        frame.style.transform = '';
+        frame.style.transformOrigin = '';
+      }
+    }
+  }
+
   // ===== Drawing =====
   private drawAll(results: DetWithResult[]): void {
     const video = this.videoRef.nativeElement;
@@ -602,6 +707,8 @@ export class CheckinComponent implements AfterViewInit, OnDestroy {
     const sx = overlay.width / (video.videoWidth || 640);
     const sy = overlay.height / (video.videoHeight || 480);
     ctx.clearRect(0, 0, overlay.width, overlay.height);
+
+    this.updateAutoZoom(results, overlay.width, overlay.height);
 
     const flipH = this.flipH;
     const flipV = this.flipV;

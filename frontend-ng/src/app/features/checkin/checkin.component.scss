@@ -179,6 +179,27 @@
   label { color: #5a7068; }
 }
 
+.cam-zoom-toggle-row {
+  align-items: center;
+  justify-content: space-between;
+  label { font-size: 13px; font-weight: 600; color: #1b4332; }
+}
+
+.zoom-badge {
+  position: absolute;
+  top: 10px;
+  right: 10px;
+  background: rgba(15, 138, 79, 0.88);
+  color: #fff;
+  font-size: 12px;
+  font-weight: 700;
+  padding: 3px 10px;
+  border-radius: 20px;
+  pointer-events: none;
+  z-index: 20;
+  letter-spacing: 0.5px;
+}
+
 .cam-select-row {
   display: flex;
   gap: 8px;

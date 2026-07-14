@@ -138,6 +138,29 @@
           </div>
 
           <div class="cam-select">
+            <div class="cam-select-row cam-zoom-toggle-row">
+              <label>🔍 Auto Zoom เมื่อพบใบหน้า</label>
+              <mat-slide-toggle [(ngModel)]="autoZoomEnabled" (ngModelChange)="onAutoZoomToggle()"></mat-slide-toggle>
+            </div>
+            @if (autoZoomEnabled) {
+              <div class="cam-select cam-select-sub">
+                <label>📐 ระดับ Zoom สูงสุด — {{ autoZoomMaxLevel | number:'1.1-1' }}x</label>
+                <mat-slider [min]="minAutoZoomLevel" [max]="maxAutoZoomLevel" [step]="0.1" discrete>
+                  <input matSliderThumb [(ngModel)]="autoZoomMaxLevel" (ngModelChange)="onAutoZoomLevelChange($event)" />
+                </mat-slider>
+                <label style="margin-top:6px">🌊 ความลื่น/ความเร็ว Zoom — {{ autoZoomSpeed | number:'1.2-2' }}</label>
+                <mat-slider [min]="minAutoZoomSpeed" [max]="maxAutoZoomSpeed" [step]="0.01" discrete>
+                  <input matSliderThumb [(ngModel)]="autoZoomSpeed" (ngModelChange)="onAutoZoomSpeedChange($event)" />
+                </mat-slider>
+                <p class="cam-setting-hint">
+                  <strong>ระดับ Zoom</strong>: 1.2x–4.0x — เมื่อตรวจพบใบหน้าจะขยายภาพเข้าไปที่ใบหน้าโดยอัตโนมัติ, ซูมออกเมื่อไม่พบใบหน้า<br>
+                  <strong>ความลื่น</strong>: ค่าสูง = ซูมเร็วติดตามไว | ค่าต่ำ = ซูมช้าลื่นนุ่ม (แนะนำ 0.06)
+                </p>
+              </div>
+            }
+          </div>
+
+          <div class="cam-select">
             <label>🧭 ความไวในการตรวจจับใบหน้า (ก้ม/เงย/หันซ้าย-ขวา/ใส่แมส) — {{ scoreThreshold | number:'1.2-2' }}</label>
             <mat-slider [min]="minScoreThreshold" [max]="maxScoreThreshold" [step]="0.05" discrete>
               <input matSliderThumb [(ngModel)]="scoreThreshold" (ngModelChange)="onScoreThresholdChange($event)" />
@@ -153,10 +176,11 @@
 
       <div class="cam-wrap" #camWrap>
         <div class="cam-stage" [class.flip-h]="flipH" [class.flip-v]="flipV">
-          <div class="cam-frame">
+          <div class="cam-frame" #camFrame>
             <video #video autoplay muted playsinline></video>
             <canvas #overlay class="overlay"></canvas>
             <div class="cam-guide"><span class="tl"></span><span class="tr"></span><span class="bl"></span><span class="br"></span></div>
+            <div class="zoom-badge" *ngIf="autoZoomEnabled && isZoomActive">🔍 {{ currentZoomDisplay }}</div>
 
             <div class="modal-loading" *ngIf="modelsLoading">
               <mat-spinner diameter="48"></mat-spinner>
