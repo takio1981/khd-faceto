@@ -1190,7 +1190,13 @@ export class CheckinComponent implements AfterViewInit, OnDestroy {
       this.setStatus('พร้อมสแกน — รองรับหลายคนพร้อมกัน', 'scanning');
       this.loop();
       this.startWatchdog();
-      if (this.objectDetectorEnabled) this.initObjectDetector();
+      if (this.objectDetectorEnabled) {
+        // Delay so face-api.js WebGL backend is fully warmed up before
+        // COCO-SSD initialises its own TF.js instance.  Loading both at the
+        // same time causes a "Platform browser already set" platform overwrite
+        // that can disrupt face-api.js's WebGL context and time out detections.
+        setTimeout(() => { if (!this.destroyed && this.running) this.initObjectDetector(); }, 6000);
+      }
     } catch (e: any) {
       this.modelsLoading = false;
       this.loadError = e?.message || String(e);

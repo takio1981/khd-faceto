@@ -165,13 +165,19 @@ export class FacePipelineService {
     }
     FacePipelineService._objModelLoading = true;
     try {
-      // Import COCO-SSD only — it brings its own TF.js peer deps.
-      // Importing @tensorflow/tfjs separately would register TF.js kernels
-      // a second time (face-api.js already loaded TF.js) causing WebGL
-      // "already registered" warnings and potential backend conflicts.
+      // Force the CPU backend BEFORE loading COCO-SSD so it never touches
+      // the WebGL context.  face-api.js already owns the WebGL context via
+      // its own bundled TF.js; if COCO-SSD's TF.js also tries to use WebGL
+      // it steals the context and causes face detection to time out.
+      // CPU inference (~500-1500 ms per frame) is acceptable here because we
+      // only run object detection once per second as a background gate.
+      const tfCore = await import('@tensorflow/tfjs-core');
+      await import('@tensorflow/tfjs-backend-cpu');
+      await (tfCore as any).setBackend('cpu');
+      await (tfCore as any).ready();
+
       const cocoMod = await import('@tensorflow-models/coco-ssd');
-      // esbuild wraps CJS modules: the actual exports land on .default in the
-      // ESM namespace; fall back to the raw module object if .default is absent.
+      // esbuild wraps CJS modules: exports land on .default in ESM namespace.
       const cocoSsd: { load: (cfg?: object) => Promise<any> } =
         (cocoMod as any).default ?? (cocoMod as any);
       FacePipelineService._objModel = await cocoSsd.load({ base: 'lite_mobilenet_v2' });
