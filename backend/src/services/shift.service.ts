@@ -190,6 +190,23 @@ function classify(shift: Shift, now: Date, today: TodayScans): Classification | 
   return { scanType: 'check_in', status: 'late', message: 'ลงเวลาเข้างานสำเร็จ (สาย)' };
 }
 
+// Returns a contextual "outside window" message: if the person has no check-in
+// yet but the current time falls inside the checkout or OT window, the generic
+// "outside scan window" message is confusing — they need a check-in first.
+function outsideWindowMessage(shift: Shift, now: Date, today: TodayScans): string {
+  if (!today.hasCheckIn) {
+    const sec = dateToSeconds(now);
+    const checkoutStart = timeToSeconds(shift.checkout_start);
+    const checkoutEnd   = timeToSeconds(shift.checkout_end);
+    const otStart       = timeToSeconds(shift.ot_start);
+    const otEnd         = timeToSeconds(shift.ot_end);
+    if ((sec >= checkoutStart && sec <= checkoutEnd) || (sec >= otStart && sec <= otEnd)) {
+      return 'ยังไม่มีบันทึกเข้างาน กรุณาสแกนเข้างานก่อน';
+    }
+  }
+  return 'ไม่อยู่ในช่วงเวลาลงเวลา (Outside scan window)';
+}
+
 // ---- Public API: process one scan ----------------------------------------
 
 export async function processScan(
@@ -244,7 +261,7 @@ export async function processScan(
       matched: true,
       employee: { id: entry.employeeId, employee_code: entry.employeeCode, full_name: entry.fullName },
       confidence,
-      message: 'ไม่อยู่ในช่วงเวลาลงเวลา (Outside scan window)',
+      message: outsideWindowMessage(shift, now, today),
     };
   }
 
@@ -373,7 +390,7 @@ export async function processScanPreview(
       matched: true,
       employee: { id: entry.employeeId, employee_code: entry.employeeCode, full_name: entry.fullName },
       confidence,
-      message: 'ไม่อยู่ในช่วงเวลาลงเวลา (Outside scan window)',
+      message: outsideWindowMessage(shift, now, today),
     };
   }
 

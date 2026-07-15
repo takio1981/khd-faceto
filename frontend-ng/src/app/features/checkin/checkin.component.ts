@@ -1090,6 +1090,7 @@ export class CheckinComponent implements AfterViewInit, OnDestroy {
     let unknown = 0;
     let confirming = 0;
     const names: string[] = [];
+    const backendMessages: string[] = [];
 
     for (const { r } of results) {
       if (!r) continue;
@@ -1114,6 +1115,8 @@ export class CheckinComponent implements AfterViewInit, OnDestroy {
             'success',
           );
         }
+      } else if (r.message) {
+        backendMessages.push(`${r.employee.full_name}: ${r.message}`);
       }
     }
 
@@ -1127,7 +1130,10 @@ export class CheckinComponent implements AfterViewInit, OnDestroy {
     } else if (unknown > 0 && known === 0) {
       this.setStatus(`❌ พบ ${unknown} ใบหน้า — ไม่พบข้อมูลในระบบ`, 'error');
     } else if (known > 0) {
-      this.setStatus(`พบ ${dets.length} คน — บันทึกไปแล้ว/รออยู่ในช่วงคูลดาวน์`, 'warn');
+      this.setStatus(
+        backendMessages.length ? backendMessages.join(' | ') : `พบ ${dets.length} คน — บันทึกไปแล้ว/รออยู่ในช่วงคูลดาวน์`,
+        'warn',
+      );
     }
   }
 
