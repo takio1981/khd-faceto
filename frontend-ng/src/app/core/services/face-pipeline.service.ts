@@ -501,19 +501,58 @@ export class FacePipelineService {
     return canvas.toDataURL('image/jpeg', quality);
   }
 
-  // Eye Aspect Ratio from face-api.js 68-point landmarks (0-indexed).
-  // Left eye: 36-41, right eye: 42-47.
-  // EAR = (||p2-p6|| + ||p3-p5||) / (2 * ||p1-p4||).
-  // Returns null when landmarks are unavailable (< 68 points).
-  // Typical values: ~0.25-0.35 for open eyes, < 0.20 during a blink.
-  calculateEAR(landmarks: any): number | null {
-    const pts = landmarks?.positions;
-    if (!pts || pts.length < 68) return null;
-    const d = (a: { x: number; y: number }, b: { x: number; y: number }) =>
-      Math.sqrt((a.x - b.x) ** 2 + (a.y - b.y) ** 2);
-    const ear = (i: number[]) =>
-      (d(pts[i[1]], pts[i[5]]) + d(pts[i[2]], pts[i[4]])) / (2 * d(pts[i[0]], pts[i[3]]));
-    return (ear([36, 37, 38, 39, 40, 41]) + ear([42, 43, 44, 45, 46, 47])) / 2;
+  // Passive screen-frame detector for anti-spoofing.
+  // Samples 4 narrow strips just outside the face bounding box (left, right,
+  // top, bottom).  A phone/tablet frame is typically a dark, very uniform band
+  // around the displayed content — we flag a strip as "dark+uniform" when its
+  // per-channel standard deviation < 25 AND average brightness < 80/255.
+  // Returns true when 2+ sides trigger (high likelihood of a screen bezel).
+  detectScreenFrame(video: HTMLVideoElement, faceBox: { x: number; y: number; width: number; height: number }): boolean {
+    const vw = video.videoWidth || 640;
+    const vh = video.videoHeight || 480;
+    const sw = Math.min(vw, 320);
+    const sh = Math.round(sw * (vh / vw));
+    const scaleX = sw / vw;
+    const scaleY = sh / vh;
+
+    const canvas = document.createElement('canvas');
+    canvas.width = sw;
+    canvas.height = sh;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return false;
+    ctx.drawImage(video, 0, 0, sw, sh);
+
+    const fx = Math.round(faceBox.x * scaleX);
+    const fy = Math.round(faceBox.y * scaleY);
+    const fw = Math.max(1, Math.round(faceBox.width * scaleX));
+    const fh = Math.max(1, Math.round(faceBox.height * scaleY));
+    const gap = 8;
+    const strip = 12;
+
+    const regions = [
+      { x: fx - gap - strip, y: fy,         w: strip, h: fh },    // left
+      { x: fx + fw + gap,    y: fy,         w: strip, h: fh },    // right
+      { x: fx,               y: fy - gap - strip, w: fw, h: strip }, // top
+      { x: fx,               y: fy + fh + gap,    w: fw, h: strip }, // bottom
+    ];
+
+    let darkCount = 0;
+    for (const s of regions) {
+      if (s.w <= 0 || s.h <= 0 || s.x < 0 || s.y < 0 || s.x + s.w > sw || s.y + s.h > sh) continue;
+      const data = ctx.getImageData(s.x, s.y, s.w, s.h).data;
+      const n = data.length / 4;
+      if (n === 0) continue;
+      let rs = 0, gs = 0, bs = 0, rq = 0, gq = 0, bq = 0;
+      for (let i = 0; i < data.length; i += 4) {
+        rs += data[i]; gs += data[i + 1]; bs += data[i + 2];
+        rq += data[i] * data[i]; gq += data[i + 1] * data[i + 1]; bq += data[i + 2] * data[i + 2];
+      }
+      const rm = rs / n, gm = gs / n, bm = bs / n;
+      const std = Math.sqrt(((rq / n - rm * rm) + (gq / n - gm * gm) + (bq / n - bm * bm)) / 3);
+      const brightness = (rm + gm + bm) / 3;
+      if (std < 25 && brightness < 80) darkCount++;
+    }
+    return darkCount >= 2;
   }
 
   averageDescriptors(list: number[][]): number[] | null {

@@ -2,6 +2,8 @@ import { CommonModule } from '@angular/common';
 import { Component, OnInit, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { MatButtonModule } from '@angular/material/button';
+import { MatNativeDateModule } from '@angular/material/core';
+import { MatDatepickerModule } from '@angular/material/datepicker';
 import { MatDialog, MatDialogModule } from '@angular/material/dialog';
 import { MatFormFieldModule } from '@angular/material/form-field';
 import { MatIconModule } from '@angular/material/icon';
@@ -21,6 +23,8 @@ import { SpoofingAlert, SpoofingAlertListResponse } from '../../core/models/mode
     CommonModule,
     FormsModule,
     MatButtonModule,
+    MatDatepickerModule,
+    MatNativeDateModule,
     MatDialogModule,
     MatFormFieldModule,
     MatInputModule,
@@ -39,8 +43,8 @@ export class SecurityAlertsComponent implements OnInit {
 
   page = 0;
   pageSize = 20;
-  dateFrom = '';
-  dateTo = '';
+  dateFrom: Date | null = null;
+  dateTo: Date | null = null;
 
   previewUrl: string | null = null;
   previewAlt = '';
@@ -57,12 +61,20 @@ export class SecurityAlertsComponent implements OnInit {
     this.load();
   }
 
+  private toDateStr(d: Date | null): string | undefined {
+    if (!d) return undefined;
+    const y = d.getFullYear();
+    const m = String(d.getMonth() + 1).padStart(2, '0');
+    const day = String(d.getDate()).padStart(2, '0');
+    return `${y}-${m}-${day}`;
+  }
+
   load(): void {
     this.loading.set(true);
     this.attendanceService.listSpoofingAlerts(
       this.page + 1, this.pageSize,
-      this.dateFrom || undefined,
-      this.dateTo || undefined,
+      this.toDateStr(this.dateFrom),
+      this.toDateStr(this.dateTo),
     ).subscribe({
       next: (res: SpoofingAlertListResponse) => {
         this.alerts.set(res.data);

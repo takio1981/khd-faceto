@@ -9,14 +9,21 @@
   <div class="filter-bar">
     <mat-form-field appearance="outline" class="date-field">
       <mat-label>จากวันที่</mat-label>
-      <input matInput type="date" [(ngModel)]="dateFrom" />
+      <input matInput [matDatepicker]="pickerFrom" [(ngModel)]="dateFrom" placeholder="วว/ดด/ปปปป" />
+      <mat-datepicker-toggle matIconSuffix [for]="pickerFrom"></mat-datepicker-toggle>
+      <mat-datepicker #pickerFrom></mat-datepicker>
     </mat-form-field>
     <mat-form-field appearance="outline" class="date-field">
       <mat-label>ถึงวันที่</mat-label>
-      <input matInput type="date" [(ngModel)]="dateTo" />
+      <input matInput [matDatepicker]="pickerTo" [(ngModel)]="dateTo" placeholder="วว/ดด/ปปปป" />
+      <mat-datepicker-toggle matIconSuffix [for]="pickerTo"></mat-datepicker-toggle>
+      <mat-datepicker #pickerTo></mat-datepicker>
     </mat-form-field>
     <button mat-raised-button color="primary" (click)="applyFilter()">
       <mat-icon>search</mat-icon> ค้นหา
+    </button>
+    <button mat-stroked-button (click)="dateFrom = null; dateTo = null; applyFilter()">
+      <mat-icon>clear</mat-icon> ล้าง
     </button>
   </div>
 
