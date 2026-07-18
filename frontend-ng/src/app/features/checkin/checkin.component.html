@@ -162,6 +162,21 @@
 
           <div class="cam-select">
             <div class="cam-select-row cam-zoom-toggle-row">
+              <label>🛡️ ป้องกันการปลอมแปลงใบหน้า (Anti-Spoofing)</label>
+              <mat-slide-toggle [(ngModel)]="antiSpoofingEnabled" (ngModelChange)="onAntiSpoofingToggle()"></mat-slide-toggle>
+            </div>
+            <p class="cam-setting-hint">
+              ตรวจจับกรอบหน้าจอโทรศัพท์/แท็บเล็ตรอบใบหน้า, ตรวจจับโทรศัพท์ด้วย COCO-SSD, และวิเคราะห์การเคลื่อนไหวใบหน้า —
+              เปิดไว้เสมอในสภาพแวดล้อมจริง, ปิดได้เฉพาะสำหรับการทดสอบ<br>
+              สถานะ COCO-SSD:
+              @if (objectDetectorLoading) { ⏳ กำลังโหลดโมเดล... }
+              @else if (objectDetectorReady) { ✅ พร้อมแล้ว (ตรวจจับโทรศัพท์ด้วย AI) }
+              @else { ⬜ ยังไม่ได้โหลด (ตรวจจับกรอบหน้าจอ+การเคลื่อนไหวยังทำงานอยู่) }
+            </p>
+          </div>
+
+          <div class="cam-select">
+            <div class="cam-select-row cam-zoom-toggle-row">
               <label>🧠 แยกแยะมนุษย์ / สัตว์ / วัตถุ (AI Object Detector)</label>
               <mat-slide-toggle [(ngModel)]="objectDetectorEnabled" (ngModelChange)="onObjectDetectorToggle()"></mat-slide-toggle>
             </div>

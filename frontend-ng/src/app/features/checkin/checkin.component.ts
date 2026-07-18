@@ -121,6 +121,7 @@ const MAX_VFOV_DEG = 120;
 const VFOV_KEY = 'camVFovDeg';
 
 const OBJ_DETECTOR_KEY = 'camObjectDetector';
+const ANTI_SPOOFING_KEY = 'camAntiSpoofing';
 const OBJ_DETECT_INTERVAL_MS = 1000;
 const OBJ_MIN_SCORE = 0.50; // discard low-confidence detections
 
@@ -233,6 +234,9 @@ export class CheckinComponent implements AfterViewInit, OnDestroy {
   // Global phone-in-frame block: set when COCO-SSD detects a phone; prevents ALL scans.
   private phoneBlockedUntil = 0;
   private phoneBlockReported = false;
+
+  // ===== Anti-spoofing (phone/screen detection) =====
+  antiSpoofingEnabled = true; // on by default; admin can disable for testing
 
   // Non-human detections with score >= OBJ_MIN_SCORE visible in the frame
   get visibleNonHuman(): ObjectDetection[] {
@@ -355,6 +359,7 @@ export class CheckinComponent implements AfterViewInit, OnDestroy {
       MAX_VFOV_DEG
     );
     this.objectDetectorEnabled = localStorage.getItem(OBJ_DETECTOR_KEY) === '1';
+    this.antiSpoofingEnabled = localStorage.getItem(ANTI_SPOOFING_KEY) !== '0'; // default ON
     this.autoZoomEnabled = localStorage.getItem(AUTO_ZOOM_KEY) === '1';
     this.autoZoomMaxLevel = this.clampNumber(
       Number(localStorage.getItem(AUTO_ZOOM_LEVEL_KEY)) || DEFAULT_AUTO_ZOOM_LEVEL,
@@ -634,9 +639,14 @@ export class CheckinComponent implements AfterViewInit, OnDestroy {
   // ===== Object detector handlers =====
   onObjectDetectorToggle(): void {
     localStorage.setItem(OBJ_DETECTOR_KEY, this.objectDetectorEnabled ? '1' : '0');
-    // Object detector always runs for anti-spoofing phone detection.
-    // This toggle only controls display boxes and person-filter behaviour.
     if (this.objectDetectorEnabled && this.running && !this.objectDetectorReady) {
+      this.initObjectDetector();
+    }
+  }
+
+  onAntiSpoofingToggle(): void {
+    localStorage.setItem(ANTI_SPOOFING_KEY, this.antiSpoofingEnabled ? '1' : '0');
+    if (this.antiSpoofingEnabled && this.running && !this.objectDetectorReady) {
       this.initObjectDetector();
     }
   }
@@ -688,6 +698,26 @@ export class CheckinComponent implements AfterViewInit, OnDestroy {
     return persons.some(({ bbox: [bx, by, bw, bh] }) =>
       fx >= bx && fx <= bx + bw && fy >= by && fy <= by + bh,
     );
+  }
+
+  // Returns true if this face box has significant overlap with a detected phone/tablet bbox.
+  // Uses the latest COCO-SSD detections (updated every 1s by startObjDetectLoop).
+  // When true, the face is almost certainly displayed on a phone/tablet screen.
+  private faceIsOnPhoneScreen(faceBox: { x: number; y: number; width: number; height: number }): boolean {
+    if (!this.objectDetectorReady || !this.antiSpoofingEnabled) return false;
+    const phones = this.lastObjectDetections.filter(
+      (d) => ['cell phone', 'remote'].includes(d.class) && d.score >= 0.15,
+    );
+    if (!phones.length) return false;
+    const fl = faceBox.x, ft = faceBox.y;
+    const fr = faceBox.x + faceBox.width, fb = faceBox.y + faceBox.height;
+    return phones.some(({ bbox: [bx, by, bw, bh] }) => {
+      const overlapX = Math.max(0, Math.min(fr, bx + bw) - Math.max(fl, bx));
+      const overlapY = Math.max(0, Math.min(fb, by + bh) - Math.max(ft, by));
+      const overlapArea = overlapX * overlapY;
+      const faceArea = faceBox.width * faceBox.height;
+      return overlapArea > faceArea * 0.25; // >25% face area inside phone bbox
+    });
   }
 
   // Converts face-box-height percentage to an estimated real-world distance
@@ -1037,9 +1067,15 @@ export class CheckinComponent implements AfterViewInit, OnDestroy {
       return;
     }
 
+    // Anti-spoofing gate 1: if COCO-SSD detects this face is ON a phone screen → block it.
+    // faceIsOnPhoneScreen() checks geometric overlap between face bbox and phone bbox.
+    const detsAfterPhoneScreen = this.antiSpoofingEnabled
+      ? sizeDets.filter((d) => !this.faceIsOnPhoneScreen(d.box))
+      : sizeDets;
+
     // Object-detector gate: filter out any detection where COCO-SSD says the
     // overlapping region is NOT a person (e.g. a dog, a photo on a screen).
-    const dets = sizeDets.filter((d) => this.faceIsHuman(d.box));
+    const dets = detsAfterPhoneScreen.filter((d) => this.faceIsHuman(d.box));
     const hadNonHuman = dets.length < sizeDets.length;
     if (!dets.length) {
       this.drawAll([]);
@@ -1135,8 +1171,33 @@ export class CheckinComponent implements AfterViewInit, OnDestroy {
 
         const pm = this.pendingMatch[key];
 
+        // Anti-spoofing: screen-frame detection (runs every 2 frames from Phase 1).
+        // Checks for dark uniform bezels around the face box — characteristic of a phone screen.
+        // Works immediately in Phase 1 so phone faces are caught before the liveness window opens.
+        if (this.antiSpoofingEnabled && pm.count % 2 === 0) {
+          if (this.facePipeline.detectScreenFrame(this.videoRef.nativeElement, det.box)) {
+            pm.screenFrameFailCount++;
+            // Phase 1 early fail: 2 consecutive screen-frame detections → spoofing.
+            if (!pm.livenessPhase && pm.screenFrameFailCount >= 2 && !pm.livenessFailReported) {
+              pm.livenessFailReported = true;
+              pm.livenessStartedAt = now; // used for reset timing
+              const alertImage = this.facePipeline.captureFaceJpeg(this.videoRef.nativeElement, det.box, 0.85);
+              this.attendanceService.reportLivenessFail(r.employee, alertImage, this.getScanLocationId()).subscribe();
+              this.showResult(
+                `⚠️ ตรวจพบกรอบหน้าจอโทรศัพท์/แท็บเล็ต (${r.employee.full_name}) — ระบบบันทึกเหตุการณ์ไว้แล้ว`,
+                'error',
+              );
+            }
+          }
+        }
+
         // Phase 1: count confirmation frames before starting liveness.
         if (!pm.livenessPhase) {
+          if (pm.livenessFailReported) {
+            // Already flagged as spoofing in Phase 1 screen-frame check.
+            if (now - pm.livenessStartedAt > LIVENESS_RESET_DELAY_MS) delete this.pendingMatch[key];
+            return { det, r: { ...r, scan_type: undefined, message: 'ตรวจพบกรอบหน้าจอ กรุณาสแกนด้วยใบหน้าจริง' } };
+          }
           if (pm.count < CONFIRM_COUNT) {
             return { det, r: { ...r, scan_type: undefined, pendingConfirm: true } };
           }
@@ -1154,13 +1215,6 @@ export class CheckinComponent implements AfterViewInit, OnDestroy {
           pm.livenessPositions.push({ x: lx / 68, y: ly / 68 });
         }
 
-        // 2b. Screen-frame check every ~5 frames (canvas pixel sampling is expensive).
-        if (pm.livenessPositions.length > 0 && pm.livenessPositions.length % 5 === 0) {
-          if (this.facePipeline.detectScreenFrame(this.videoRef.nativeElement, det.box)) {
-            pm.screenFrameFailCount++;
-          }
-        }
-
         // Still collecting data — wait for window to close.
         if (now - pm.livenessStartedAt <= LIVENESS_WINDOW_MS) {
           return { det, r: { ...r, scan_type: undefined, pendingLiveness: true } as any };
@@ -1172,22 +1226,24 @@ export class CheckinComponent implements AfterViewInit, OnDestroy {
           let spoofing = false;
           let reason = '';
 
-          if (positions.length >= 8) {
-            let sx = 0, sy = 0;
-            for (const p of positions) { sx += p.x; sy += p.y; }
-            const mx = sx / positions.length, my = sy / positions.length;
-            let vx = 0, vy = 0;
-            for (const p of positions) { vx += (p.x - mx) ** 2; vy += (p.y - my) ** 2; }
-            const variance = (vx + vy) / (2 * positions.length);
-            if (variance < MOTION_VARIANCE_THRESHOLD) {
-              spoofing = true;
-              reason = 'ใบหน้าไม่มีการเคลื่อนไหวตามธรรมชาติ';
+          if (this.antiSpoofingEnabled) {
+            if (positions.length >= 8) {
+              let sx = 0, sy = 0;
+              for (const p of positions) { sx += p.x; sy += p.y; }
+              const mx = sx / positions.length, my = sy / positions.length;
+              let vx = 0, vy = 0;
+              for (const p of positions) { vx += (p.x - mx) ** 2; vy += (p.y - my) ** 2; }
+              const variance = (vx + vy) / (2 * positions.length);
+              if (variance < MOTION_VARIANCE_THRESHOLD) {
+                spoofing = true;
+                reason = 'ใบหน้าไม่มีการเคลื่อนไหวตามธรรมชาติ';
+              }
             }
-          }
 
-          if (!spoofing && pm.screenFrameFailCount >= 2) {
-            spoofing = true;
-            reason = 'ตรวจพบกรอบหน้าจอรอบใบหน้า';
+            if (!spoofing && pm.screenFrameFailCount >= 2) {
+              spoofing = true;
+              reason = 'ตรวจพบกรอบหน้าจอรอบใบหน้า';
+            }
           }
 
           if (spoofing) {
