@@ -8,8 +8,8 @@ import { pool } from '../db';
 import { config } from '../config';
 import { asyncHandler } from '../middleware/errorHandler';
 import { verifyJWT, requireRole } from '../middleware/auth';
-import { processScan, processScanPreview, saveUnknownFaceAndNotify } from '../services/shift.service';
-import { ictDateKey } from '../utils/ict';
+import { processScan, processScanPreview, saveUnknownFaceAndNotify, saveFaceImage } from '../services/shift.service';
+import { ictDateKey, ictMysqlDateTime } from '../utils/ict';
 import { logAudit } from '../services/audit.service';
 
 const router = Router();
@@ -48,8 +48,64 @@ router.post('/unknown-face', scanLimiter, asyncHandler(async (req, res) => {
   res.json({ ok: true });
 }));
 
-// GET /api/attendance  - list with filters
-// Query: dateFrom, dateTo, employeeId, status, page, pageSize
+// POST /api/attendance/liveness-fail  - public (same kiosk context as /scan).
+// Called when liveness check times out without detecting a blink — indicates
+// a static photo may have been used. Records the captured face image and
+// matched employee info for admin review.
+router.post('/liveness-fail', scanLimiter, asyncHandler(async (req, res) => {
+  const { employeeId, employeeCode, fullName, imageBase64, scanLocationId } = req.body ?? {};
+  const locId = scanLocationId != null && !Number.isNaN(Number(scanLocationId)) ? Number(scanLocationId) : null;
+  const now = new Date();
+  const faceImagePath = await saveFaceImage(imageBase64 || null, `spoof_${employeeCode || 'unknown'}`, now);
+  await pool.query<ResultSetHeader>(
+    `INSERT INTO spoofing_alerts (employee_id, employee_code, full_name, scan_location_id, detected_at, face_image_path, alert_type)
+     VALUES (?, ?, ?, ?, ?, ?, 'liveness_fail')`,
+    [employeeId || null, employeeCode || null, fullName || null, locId, ictMysqlDateTime(now), faceImagePath]
+  );
+  res.json({ ok: true });
+}));
+
+// GET /api/attendance/liveness-alerts  - admin only
+router.get('/liveness-alerts', verifyJWT, requireRole('admin'), asyncHandler(async (req, res) => {
+  const page = Math.max(1, parseInt(String(req.query.page || '1'), 10));
+  const pageSize = Math.min(100, Math.max(1, parseInt(String(req.query.pageSize || '30'), 10)));
+  const offset = (page - 1) * pageSize;
+  const dateFrom = req.query.dateFrom as string | undefined;
+  const dateTo   = req.query.dateTo   as string | undefined;
+
+  const where: string[] = [];
+  const params: any[] = [];
+  if (dateFrom) { where.push('DATE(sa.detected_at) >= ?'); params.push(dateFrom); }
+  if (dateTo)   { where.push('DATE(sa.detected_at) <= ?'); params.push(dateTo); }
+  const whereClause = where.length ? 'WHERE ' + where.join(' AND ') : '';
+
+  const [[{ total }]] = await pool.query<RowDataPacket[]>(
+    `SELECT COUNT(*) AS total FROM spoofing_alerts sa ${whereClause}`, params
+  );
+  const [rows] = await pool.query<RowDataPacket[]>(
+    `SELECT sa.*, sl.name AS scan_location_name
+       FROM spoofing_alerts sa
+       LEFT JOIN scan_locations sl ON sl.id = sa.scan_location_id
+       ${whereClause}
+       ORDER BY sa.detected_at DESC
+       LIMIT ? OFFSET ?`,
+    [...params, pageSize, offset]
+  );
+  res.json({ data: rows, total, page, pageSize, totalPages: Math.ceil(total / pageSize) });
+}));
+
+// GET /api/attendance/liveness-alerts/:id/image  - admin only: serve the face image
+router.get('/liveness-alerts/:id/image', verifyJWT, requireRole('admin'), asyncHandler(async (req, res) => {
+  const [rows] = await pool.query<RowDataPacket[]>('SELECT face_image_path FROM spoofing_alerts WHERE id = ?', [req.params.id]);
+  const row = rows[0];
+  if (!row?.face_image_path) { res.status(404).json({ error: 'ไม่พบภาพ' }); return; }
+  const abs = path.join(config.face.imageDir, row.face_image_path);
+  try { await fs.access(abs); } catch { res.status(404).json({ error: 'ไม่พบไฟล์ภาพ' }); return; }
+  res.setHeader('Content-Type', 'image/jpeg');
+  res.setHeader('Cache-Control', 'private, max-age=86400');
+  createReadStream(abs).pipe(res);
+}));
+
 // GET /api/attendance  - list with filters
 // Query: dateFrom, dateTo, employeeId, department, scanType, status, search, page, pageSize
 router.get('/', verifyJWT, asyncHandler(async (req, res) => {

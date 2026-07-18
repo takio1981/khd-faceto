@@ -63,6 +63,12 @@ export const routes: Routes = [
         canActivate: [adminGuard],
         loadComponent: () => import('./features/settings/settings.component').then((m) => m.SettingsComponent),
       },
+      {
+        path: 'security-alerts',
+        canActivate: [adminGuard],
+        loadComponent: () =>
+          import('./features/security-alerts/security-alerts.component').then((m) => m.SecurityAlertsComponent),
+      },
     ],
   },
   { path: '**', redirectTo: 'login' },

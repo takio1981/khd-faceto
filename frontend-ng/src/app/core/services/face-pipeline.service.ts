@@ -501,6 +501,21 @@ export class FacePipelineService {
     return canvas.toDataURL('image/jpeg', quality);
   }
 
+  // Eye Aspect Ratio from face-api.js 68-point landmarks (0-indexed).
+  // Left eye: 36-41, right eye: 42-47.
+  // EAR = (||p2-p6|| + ||p3-p5||) / (2 * ||p1-p4||).
+  // Returns null when landmarks are unavailable (< 68 points).
+  // Typical values: ~0.25-0.35 for open eyes, < 0.20 during a blink.
+  calculateEAR(landmarks: any): number | null {
+    const pts = landmarks?.positions;
+    if (!pts || pts.length < 68) return null;
+    const d = (a: { x: number; y: number }, b: { x: number; y: number }) =>
+      Math.sqrt((a.x - b.x) ** 2 + (a.y - b.y) ** 2);
+    const ear = (i: number[]) =>
+      (d(pts[i[1]], pts[i[5]]) + d(pts[i[2]], pts[i[4]])) / (2 * d(pts[i[0]], pts[i[3]]));
+    return (ear([36, 37, 38, 39, 40, 41]) + ear([42, 43, 44, 45, 46, 47])) / 2;
+  }
+
   averageDescriptors(list: number[][]): number[] | null {
     if (!list.length) return null;
     const len = list[0].length;

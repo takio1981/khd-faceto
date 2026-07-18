@@ -255,6 +255,27 @@ export interface ReportRow {
   [key: string]: any;
 }
 
+export interface SpoofingAlert {
+  id: number;
+  employee_id: number | null;
+  employee_code: string | null;
+  full_name: string | null;
+  scan_location_id: number | null;
+  scan_location_name: string | null;
+  detected_at: string;
+  face_image_path: string | null;
+  alert_type: string;
+  created_at: string;
+}
+
+export interface SpoofingAlertListResponse {
+  data: SpoofingAlert[];
+  total: number;
+  page: number;
+  pageSize: number;
+  totalPages: number;
+}
+
 export interface AuditLogEntry {
   id: number;
   user_id: number | null;

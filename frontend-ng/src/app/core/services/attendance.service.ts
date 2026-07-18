@@ -2,7 +2,7 @@ import { HttpClient } from '@angular/common/http';
 import { Injectable } from '@angular/core';
 import { Observable } from 'rxjs';
 import { environment } from '../../../environments/environment';
-import { AttendanceListResponse, AttendanceRecord, AttendanceStatus, RecentScanItem, ScanResult, ScanType } from '../models/models';
+import { AttendanceListResponse, AttendanceRecord, AttendanceStatus, RecentScanItem, ScanResult, ScanType, SpoofingAlertListResponse } from '../models/models';
 
 const base = `${environment.apiBaseUrl}/attendance`;
 
@@ -66,5 +66,30 @@ export class AttendanceService {
     const params: Record<string, string> = { limit: String(limit) };
     if (scanLocationId) params['scanLocationId'] = String(scanLocationId);
     return this.http.get<RecentScanItem[]>(`${base}/recent`, { params });
+  }
+
+  reportLivenessFail(
+    employee: { id: number; employee_code: string; full_name: string },
+    imageBase64: string | undefined,
+    scanLocationId: number | null,
+  ): Observable<{ ok: boolean }> {
+    return this.http.post<{ ok: boolean }>(`${base}/liveness-fail`, {
+      employeeId: employee.id,
+      employeeCode: employee.employee_code,
+      fullName: employee.full_name,
+      imageBase64,
+      scanLocationId,
+    });
+  }
+
+  listSpoofingAlerts(page: number, pageSize: number, dateFrom?: string, dateTo?: string): Observable<SpoofingAlertListResponse> {
+    const params: Record<string, string> = { page: String(page), pageSize: String(pageSize) };
+    if (dateFrom) params['dateFrom'] = dateFrom;
+    if (dateTo) params['dateTo'] = dateTo;
+    return this.http.get<SpoofingAlertListResponse>(`${base}/liveness-alerts`, { params });
+  }
+
+  getSpoofingAlertImageUrl(alertId: number): string {
+    return `${base}/liveness-alerts/${alertId}/image`;
   }
 }

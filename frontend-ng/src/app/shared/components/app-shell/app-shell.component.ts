@@ -29,6 +29,7 @@ const NAV_LINKS: NavLink[] = [
   { path: '/employees', label: 'พนักงาน', icon: 'badge', adminOnly: true },
   { path: '/users', label: 'จัดการผู้ใช้งาน', icon: 'manage_accounts', adminOnly: true },
   { path: '/shifts', label: 'กะการทำงาน', icon: 'schedule', adminOnly: true },
+  { path: '/security-alerts', label: 'แจ้งเตือนปลอมแปลงใบหน้า', icon: 'gpp_bad', adminOnly: true },
   { path: '/settings', label: 'ตั้งค่า', icon: 'settings', adminOnly: true },
 ];
 

@@ -55,6 +55,11 @@ interface PendingMatch {
   count: number;
   scanType: string;
   lastTime: number;
+  // Liveness check fields (populated after CONFIRM_COUNT frames)
+  livenessPhase: boolean;
+  livenessStartedAt: number;
+  blinkDetected: boolean;
+  livenessFailReported: boolean;
 }
 
 const LOCATION_STORAGE_KEY = 'khd_checkin_location_id';
@@ -73,6 +78,15 @@ const DEFAULT_BOX_SMOOTHING = 0.45;
 const MIN_BOX_SMOOTHING = 0.1;
 const MAX_BOX_SMOOTHING = 0.9;
 const COUNTDOWN_SECONDS = 5;
+// EAR below this value means eyes are closed (blink). Typical open-eye EAR
+// is 0.25-0.35; during a blink it drops to ≤0.20. Using 0.22 gives a small
+// margin so partial squints also count — real faces blink naturally, photos don't.
+const EAR_BLINK_THRESHOLD = 0.22;
+// How long to wait for a blink after identity is confirmed (ms).
+// 4 s is enough for any natural blink rate without being disruptive.
+const LIVENESS_WINDOW_MS = 4000;
+// Extra time after reporting the fail before resetting (so the alert message stays visible)
+const LIVENESS_RESET_DELAY_MS = 2000;
 const DETECTION_INTERVAL_KEY = 'camDetectionIntervalMs';
 const BOX_SMOOTHING_KEY = 'camBoxSmoothing';
 
@@ -1048,7 +1062,8 @@ export class CheckinComponent implements AfterViewInit, OnDestroy {
       }),
     );
 
-    // Step 2: confirm + save only after CONFIRM_COUNT consecutive matching frames.
+    // Step 2: confirm identity (CONFIRM_COUNT frames), then liveness check (blink).
+    // Only commit the scan after BOTH identity and liveness pass.
     const results: DetWithResult[] = await Promise.all(
       previews.map(async ({ det, r }) => {
         if (!r || !r.matched || (r as any).ignored || !r.scan_type || !r.employee) {
@@ -1056,29 +1071,75 @@ export class CheckinComponent implements AfterViewInit, OnDestroy {
         }
 
         const key = r.employee.id;
-        const pending = this.pendingMatch[key];
-        if (pending && pending.scanType === r.scan_type && now - pending.lastTime <= PENDING_TIMEOUT_MS) {
-          pending.count += 1;
-          pending.lastTime = now;
+        const existing = this.pendingMatch[key];
+
+        // Update or create pendingMatch. Once in liveness phase, don't reset on
+        // short frame gaps — just keep accumulating EAR readings.
+        if (existing?.livenessPhase) {
+          existing.lastTime = now;
+        } else if (existing && existing.scanType === r.scan_type && now - existing.lastTime <= PENDING_TIMEOUT_MS) {
+          existing.count += 1;
+          existing.lastTime = now;
         } else {
-          this.pendingMatch[key] = { count: 1, scanType: r.scan_type, lastTime: now };
+          this.pendingMatch[key] = {
+            count: 1, scanType: r.scan_type, lastTime: now,
+            livenessPhase: false, livenessStartedAt: 0,
+            blinkDetected: false, livenessFailReported: false,
+          };
         }
 
-        if (this.pendingMatch[key].count < CONFIRM_COUNT) {
-          return { det, r: { ...r, scan_type: undefined, pendingConfirm: true } };
+        const pm = this.pendingMatch[key];
+
+        // Phase 1: count confirmation frames before starting liveness.
+        if (!pm.livenessPhase) {
+          if (pm.count < CONFIRM_COUNT) {
+            return { det, r: { ...r, scan_type: undefined, pendingConfirm: true } };
+          }
+          pm.livenessPhase = true;
+          pm.livenessStartedAt = now;
         }
 
-        // Confirmed: capture image now and commit the real scan.
-        delete this.pendingMatch[key];
-        const imageBase64 = this.facePipeline.captureFaceJpeg(this.videoRef.nativeElement, det.box, 0.8);
-        try {
-          const saved = await firstValueFrom(
-            this.attendanceService.scan(det.descriptor, imageBase64, this.getScanLocationId()),
-          );
-          return { det, r: saved, imageBase64 };
-        } catch {
-          return { det, r };
+        // Phase 2: liveness — measure EAR; flag blink when EAR drops below threshold.
+        if (det.landmarks) {
+          const ear = this.facePipeline.calculateEAR(det.landmarks);
+          if (ear !== null && ear < EAR_BLINK_THRESHOLD) {
+            pm.blinkDetected = true;
+          }
         }
+
+        // Blink confirmed → liveness PASS → commit scan.
+        if (pm.blinkDetected) {
+          delete this.pendingMatch[key];
+          const imageBase64 = this.facePipeline.captureFaceJpeg(this.videoRef.nativeElement, det.box, 0.8);
+          try {
+            const saved = await firstValueFrom(
+              this.attendanceService.scan(det.descriptor, imageBase64, this.getScanLocationId()),
+            );
+            return { det, r: saved, imageBase64 };
+          } catch {
+            return { det, r };
+          }
+        }
+
+        // Liveness timeout → FAIL: report alert, reset after extra display delay.
+        if (now - pm.livenessStartedAt > LIVENESS_WINDOW_MS) {
+          if (!pm.livenessFailReported) {
+            pm.livenessFailReported = true;
+            const alertImage = this.facePipeline.captureFaceJpeg(this.videoRef.nativeElement, det.box, 0.85);
+            this.attendanceService.reportLivenessFail(r.employee, alertImage, this.getScanLocationId()).subscribe();
+            this.showResult(
+              `⚠️ ตรวจพบการนำภาพมาสแกน (${r.employee.full_name}) — ระบบบันทึกเหตุการณ์ไว้แล้ว`,
+              'error',
+            );
+          }
+          if (now - pm.livenessStartedAt > LIVENESS_WINDOW_MS + LIVENESS_RESET_DELAY_MS) {
+            delete this.pendingMatch[key];
+          }
+          return { det, r: { ...r, scan_type: undefined, message: 'ตรวจพบการใช้ภาพแทนการสแกนจริง กรุณาสแกนด้วยใบหน้าจริง' } };
+        }
+
+        // Still in liveness window, waiting for blink.
+        return { det, r: { ...r, scan_type: undefined, pendingBlink: true } as any };
       }),
     );
 
@@ -1089,6 +1150,7 @@ export class CheckinComponent implements AfterViewInit, OnDestroy {
     let known = 0;
     let unknown = 0;
     let confirming = 0;
+    let livenessChecking = 0;
     const names: string[] = [];
     const backendMessages: string[] = [];
 
@@ -1099,6 +1161,10 @@ export class CheckinComponent implements AfterViewInit, OnDestroy {
         continue;
       }
       known++;
+      if ((r as any).pendingBlink) {
+        livenessChecking++;
+        continue;
+      }
       if ((r as any).pendingConfirm) {
         confirming++;
         continue;
@@ -1125,6 +1191,8 @@ export class CheckinComponent implements AfterViewInit, OnDestroy {
       this.loadFeed();
       this.setStatus(`✓ บันทึก ${recorded} คน: ${names.join(', ')}`, 'success');
       this.showResult(`✓ บันทึกสำเร็จ ${recorded} คน — ${names.join(', ')}`, 'success');
+    } else if (livenessChecking > 0) {
+      this.setStatus(`👁 กรุณากะพริบตา 1 ครั้ง เพื่อยืนยันตัวตน (${livenessChecking} คน)`, 'warn');
     } else if (confirming > 0) {
       this.setStatus(`กำลังยืนยันใบหน้า ${confirming} คน...`, 'scanning');
     } else if (unknown > 0 && known === 0) {

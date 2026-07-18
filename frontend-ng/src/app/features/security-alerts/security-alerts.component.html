@@ -1,0 +1,99 @@
+<div class="page-container">
+  <h1 class="page-title">ตรวจสอบการปลอมแปลงใบหน้า</h1>
+  <p class="muted">
+    รายการเหตุการณ์ที่ระบบตรวจพบว่ามีการนำภาพมาสแกนแทนใบหน้าจริง (liveness check ไม่ผ่าน) —
+    คอลัมน์ "ใบหน้าที่จับได้" คือภาพผู้ที่ถือภาพนิ่งไว้หน้ากล้อง
+  </p>
+
+  <!-- Filter bar -->
+  <div class="filter-bar">
+    <mat-form-field appearance="outline" class="date-field">
+      <mat-label>จากวันที่</mat-label>
+      <input matInput type="date" [(ngModel)]="dateFrom" />
+    </mat-form-field>
+    <mat-form-field appearance="outline" class="date-field">
+      <mat-label>ถึงวันที่</mat-label>
+      <input matInput type="date" [(ngModel)]="dateTo" />
+    </mat-form-field>
+    <button mat-raised-button color="primary" (click)="applyFilter()">
+      <mat-icon>search</mat-icon> ค้นหา
+    </button>
+  </div>
+
+  <!-- Loading -->
+  @if (loading()) {
+    <p class="muted">กำลังโหลด...</p>
+  }
+
+  <!-- No data -->
+  @if (!loading() && alerts().length === 0) {
+    <div class="empty-state">
+      <mat-icon class="empty-icon">verified_user</mat-icon>
+      <p>ไม่พบเหตุการณ์ปลอมแปลงใบหน้า</p>
+    </div>
+  }
+
+  <!-- Alert table -->
+  @if (alerts().length > 0) {
+    <div class="table-wrap">
+      <table class="alert-table">
+        <thead>
+          <tr>
+            <th>#</th>
+            <th>วันที่ / เวลา</th>
+            <th>พนักงานที่ถูกปลอมแปลง</th>
+            <th>สถานที่สแกน</th>
+            <th>ใบหน้าที่จับได้</th>
+          </tr>
+        </thead>
+        <tbody>
+          @for (a of alerts(); track a.id) {
+            <tr>
+              <td class="id-cell">{{ a.id }}</td>
+              <td class="dt-cell">{{ formatDt(a.detected_at) }}</td>
+              <td>
+                @if (a.employee_code || a.full_name) {
+                  <strong>{{ a.full_name }}</strong>
+                  <div class="muted small">{{ a.employee_code }}</div>
+                } @else {
+                  <span class="muted">ไม่ทราบ</span>
+                }
+              </td>
+              <td>{{ a.scan_location_name || '—' }}</td>
+              <td class="img-cell">
+                @if (a.face_image_path) {
+                  <button mat-stroked-button class="img-btn" (click)="openImage(a)" matTooltip="ดูภาพใบหน้า">
+                    <mat-icon>photo_camera</mat-icon> ดูภาพ
+                  </button>
+                } @else {
+                  <span class="muted">ไม่มีภาพ</span>
+                }
+              </td>
+            </tr>
+          }
+        </tbody>
+      </table>
+    </div>
+
+    <mat-paginator
+      [length]="total()"
+      [pageSize]="pageSize"
+      [pageIndex]="page"
+      [pageSizeOptions]="[10, 20, 50]"
+      (page)="onPage($event)">
+    </mat-paginator>
+  }
+</div>
+
+<!-- Image preview overlay -->
+@if (previewUrl) {
+  <div class="preview-overlay" (click)="closePreview()">
+    <div class="preview-box" (click)="$event.stopPropagation()">
+      <button mat-icon-button class="preview-close" (click)="closePreview()">
+        <mat-icon>close</mat-icon>
+      </button>
+      <p class="preview-caption">{{ previewAlt }}</p>
+      <img [src]="previewUrl" [alt]="previewAlt" class="preview-img" />
+    </div>
+  </div>
+}
