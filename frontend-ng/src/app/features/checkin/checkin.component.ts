@@ -116,14 +116,21 @@ const OBJ_MIN_SCORE = 0.50; // discard low-confidence detections
 // Adjustable so a project with unusual lighting can tune without recompiling.
 // Brightness grid: a cell is "screen-like" when mean luminance > BRIGHT and within-cell
 // variance < UNIFORM (phone backlight produces high, spatially smooth luminance).
-const SCREEN_CELL_BRIGHT = 150;  // 0-255 luminance, lower = more sensitive
-const SCREEN_CELL_UNIFORM = 800; // variance threshold, higher = more permissive
-const SCREEN_COVERAGE_RATIO = 0.15; // fraction of grid cells that must qualify (lowered: phone at any distance)
-const SCREEN_AVG_LUMA_ALT = 165;    // secondary trigger: very bright overall frame
-const SCREEN_ALT_COVERAGE = 0.10;   // alt coverage needed when avg luma is high
-// Texture (gradient) signal on the face patch: screens show JPEG-smoothed faces,
-// real skin has fine micro-texture → higher average gradient magnitude.
-const SCREEN_FACE_GRAD_MAX = 10.0;  // avg gradient below this = too smooth = screen
+// Signal A (brightness grid) is only reliable in dark/dim environments.
+// In a normally lit office, too many cells qualify as "bright+uniform" regardless
+// of whether a phone screen is present → constant false positives.
+// Keep the threshold very high so it only catches extremely bright phone screens
+// (e.g. phone in a dark room or phone pressed right against the lens).
+const SCREEN_CELL_BRIGHT = 210;  // very high: must be brighter than typical office ambient
+const SCREEN_CELL_UNIFORM = 600; // tighter variance: more certain it's a screen
+const SCREEN_COVERAGE_RATIO = 0.55; // 55% of frame must be this extremely bright
+const SCREEN_AVG_LUMA_ALT = 255;   // effectively disabled (255 is the max)
+const SCREEN_ALT_COVERAGE = 0.99;  // effectively disabled
+// Signal B (face-patch gradient) is the PRIMARY detector.
+// Real skin at close range has fine micro-texture → higher avg gradient magnitude.
+// JPEG-compressed face photo on a phone screen is smoother → lower gradient.
+// Threshold tuned: real face ~12-25 px/cell, screen face ~4-9 px/cell.
+const SCREEN_FACE_GRAD_MAX = 8.5;  // avg gradient below this = too smooth = likely screen
 
 interface ScreenDetectResult {
   detected: boolean;
@@ -1220,10 +1227,11 @@ export class CheckinComponent implements AfterViewInit, OnDestroy {
 
     const now = Date.now();
 
-    // Frame-wide brightness/uniformity screen detection (runs once per frame, no faceBox yet).
-    // Per-face texture (gradient) analysis runs later inside the pending-match loop where
-    // we have the face box. Both results feed the combined anti-spoofing decision.
+    // Frame-wide brightness check (Signal A only, very conservative threshold).
+    // Used for chip display and as a supplementary block; the main detection
+    // is Signal B (face-patch gradient) which runs per-face in the loop below.
     const frameScreen = this.antiSpoofingEnabled ? this.detectScreenByBrightness() : null;
+    // Chip shows frame-wide confidence; gets updated to face-texture result when a face is present.
     this.screenBrightnessDetected = frameScreen?.detected ?? false;
     this.screenBrightnessConfidence = frameScreen?.confidence ?? 0;
 
@@ -1268,14 +1276,19 @@ export class CheckinComponent implements AfterViewInit, OnDestroy {
           const isPhoneBlocked = now < this.phoneBlockedUntil;
           // Check B — face centre inside a detected screen bbox
           const isOnScreen = this.objectDetectorReady && this.faceIsOnScreen(det.box);
-          // Check C — brightness uniformity (frame-wide, computed above)
+          // Check C — brightness uniformity (frame-wide, very conservative threshold)
           const isFrameScreen = frameScreen?.detected ?? false;
-          // Check D — face-patch gradient (per-face texture; only computed if needed)
-          const facePatchResult =
-            !isPhoneBlocked && !isOnScreen && !isFrameScreen
-              ? this.detectScreenByBrightness(det.box)
-              : null;
-          const isFlatFace = facePatchResult?.detected ?? false;
+          // Check D — face-patch gradient texture (PRIMARY detector, runs always).
+          // detectScreenByBrightness with faceBox runs Signal B (gradient) independently
+          // of Signal A; Signal A inside it also has a very high threshold so it won't
+          // false-positive in normal office lighting.
+          const facePatchResult = this.detectScreenByBrightness(det.box);
+          const isFlatFace = facePatchResult.detected;
+          // Update chip to reflect the face-texture confidence (more meaningful than frame brightness)
+          if (facePatchResult.confidence > this.screenBrightnessConfidence) {
+            this.screenBrightnessDetected = isFlatFace;
+            this.screenBrightnessConfidence = facePatchResult.confidence;
+          }
 
           if (isPhoneBlocked || isOnScreen || isFrameScreen || isFlatFace) {
             const pmKey = r.employee.id;
