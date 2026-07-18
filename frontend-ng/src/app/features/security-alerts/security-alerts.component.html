@@ -86,14 +86,19 @@
 </div>
 
 <!-- Image preview overlay -->
-@if (previewUrl) {
+@if (previewUrl || previewLoading) {
   <div class="preview-overlay" (click)="closePreview()">
     <div class="preview-box" (click)="$event.stopPropagation()">
       <button mat-icon-button class="preview-close" (click)="closePreview()">
         <mat-icon>close</mat-icon>
       </button>
       <p class="preview-caption">{{ previewAlt }}</p>
-      <img [src]="previewUrl" [alt]="previewAlt" class="preview-img" />
+      @if (previewLoading) {
+        <mat-spinner diameter="48"></mat-spinner>
+      }
+      @if (previewUrl) {
+        <img [src]="previewUrl" [alt]="previewAlt" class="preview-img" />
+      }
     </div>
   </div>
 }

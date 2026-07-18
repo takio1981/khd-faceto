@@ -89,7 +89,7 @@ export class AttendanceService {
     return this.http.get<SpoofingAlertListResponse>(`${base}/liveness-alerts`, { params });
   }
 
-  getSpoofingAlertImageUrl(alertId: number): string {
-    return `${base}/liveness-alerts/${alertId}/image`;
+  getSpoofingAlertImageBlob(alertId: number): Observable<Blob> {
+    return this.http.get(`${base}/liveness-alerts/${alertId}/image`, { responseType: 'blob' });
   }
 }

@@ -7,6 +7,7 @@ import { MatFormFieldModule } from '@angular/material/form-field';
 import { MatIconModule } from '@angular/material/icon';
 import { MatInputModule } from '@angular/material/input';
 import { MatPaginatorModule, PageEvent } from '@angular/material/paginator';
+import { MatProgressSpinnerModule } from '@angular/material/progress-spinner';
 import { MatTooltipModule } from '@angular/material/tooltip';
 import { AttendanceService } from '../../core/services/attendance.service';
 import { AuthService } from '../../core/services/auth.service';
@@ -25,6 +26,7 @@ import { SpoofingAlert, SpoofingAlertListResponse } from '../../core/models/mode
     MatInputModule,
     MatIconModule,
     MatPaginatorModule,
+    MatProgressSpinnerModule,
     MatTooltipModule,
   ],
   templateUrl: './security-alerts.component.html',
@@ -42,6 +44,7 @@ export class SecurityAlertsComponent implements OnInit {
 
   previewUrl: string | null = null;
   previewAlt = '';
+  previewLoading = false;
 
   constructor(
     private attendanceService: AttendanceService,
@@ -86,12 +89,26 @@ export class SecurityAlertsComponent implements OnInit {
 
   openImage(alert: SpoofingAlert): void {
     if (!alert.face_image_path) return;
-    this.previewUrl = this.attendanceService.getSpoofingAlertImageUrl(alert.id);
     this.previewAlt = `ใบหน้าที่ตรวจพบ — ${alert.full_name ?? 'ไม่ทราบ'} — ${this.formatDt(alert.detected_at)}`;
+    this.previewUrl = null;
+    this.previewLoading = true;
+    this.attendanceService.getSpoofingAlertImageBlob(alert.id).subscribe({
+      next: (blob) => {
+        if (this.previewUrl) URL.revokeObjectURL(this.previewUrl);
+        this.previewUrl = URL.createObjectURL(blob);
+        this.previewLoading = false;
+      },
+      error: () => {
+        this.previewLoading = false;
+        this.notify.toast('โหลดภาพไม่สำเร็จ', 'error');
+      },
+    });
   }
 
   closePreview(): void {
+    if (this.previewUrl) URL.revokeObjectURL(this.previewUrl);
     this.previewUrl = null;
+    this.previewLoading = false;
   }
 
   formatDt(dt: string): string {
