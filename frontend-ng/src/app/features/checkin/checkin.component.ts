@@ -116,14 +116,14 @@ const OBJ_MIN_SCORE = 0.50; // discard low-confidence detections
 // Adjustable so a project with unusual lighting can tune without recompiling.
 // Brightness grid: a cell is "screen-like" when mean luminance > BRIGHT and within-cell
 // variance < UNIFORM (phone backlight produces high, spatially smooth luminance).
-const SCREEN_CELL_BRIGHT = 155;  // 0-255 luminance, lower = more sensitive
-const SCREEN_CELL_UNIFORM = 700; // variance threshold, higher = more permissive
-const SCREEN_COVERAGE_RATIO = 0.35; // fraction of grid cells that must qualify
-const SCREEN_AVG_LUMA_ALT = 175;    // secondary trigger: very bright overall frame
-const SCREEN_ALT_COVERAGE = 0.20;   // alt coverage needed when avg luma is high
+const SCREEN_CELL_BRIGHT = 150;  // 0-255 luminance, lower = more sensitive
+const SCREEN_CELL_UNIFORM = 800; // variance threshold, higher = more permissive
+const SCREEN_COVERAGE_RATIO = 0.15; // fraction of grid cells that must qualify (lowered: phone at any distance)
+const SCREEN_AVG_LUMA_ALT = 165;    // secondary trigger: very bright overall frame
+const SCREEN_ALT_COVERAGE = 0.10;   // alt coverage needed when avg luma is high
 // Texture (gradient) signal on the face patch: screens show JPEG-smoothed faces,
 // real skin has fine micro-texture → higher average gradient magnitude.
-const SCREEN_FACE_GRAD_MAX = 9.0;   // avg gradient below this = too smooth = screen
+const SCREEN_FACE_GRAD_MAX = 10.0;  // avg gradient below this = too smooth = screen
 
 interface ScreenDetectResult {
   detected: boolean;

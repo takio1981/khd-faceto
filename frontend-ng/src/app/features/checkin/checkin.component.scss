@@ -188,7 +188,7 @@
 .zoom-badge {
   position: absolute;
   top: 10px;
-  right: 10px;
+  left: 10px;
   background: rgba(15, 138, 79, 0.88);
   color: #fff;
   font-size: 12px;
@@ -200,14 +200,15 @@
   letter-spacing: 0.5px;
 }
 
-// Object detection result chips overlaid at the bottom of the camera frame
+// Object detection result chips — top-right to avoid overlap with the
+// bottom status bar and the top-left scan-result toast.
 .obj-detect-chips {
   position: absolute;
-  bottom: 8px;
-  left: 8px;
+  top: 8px;
   right: 8px;
   display: flex;
-  flex-wrap: wrap;
+  flex-direction: column;
+  align-items: flex-end;
   gap: 4px;
   pointer-events: none;
   z-index: 20;
