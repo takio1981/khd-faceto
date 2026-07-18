@@ -16,6 +16,32 @@ export interface CachedDescriptor {
 let cache: CachedDescriptor[] = [];
 let loaded = false;
 
+// Compute one mean (centroid) descriptor per employee from their individual
+// enrolled poses. The centroid improves matching for head angles that fall
+// between the explicitly enrolled poses — e.g. the 10° left pose that lies
+// between the enrolled straight (0°) and slightly-left (15°) shots.
+// Employees with only one descriptor get no centroid (it would be identical).
+function computeMeanDescriptors(entries: CachedDescriptor[]): CachedDescriptor[] {
+  const byEmployee = new Map<number, CachedDescriptor[]>();
+  for (const entry of entries) {
+    const list = byEmployee.get(entry.employeeId) ?? [];
+    list.push(entry);
+    byEmployee.set(entry.employeeId, list);
+  }
+  const means: CachedDescriptor[] = [];
+  for (const [, descs] of byEmployee) {
+    if (descs.length < 2) continue;
+    const mean = new Array(128).fill(0) as number[];
+    for (const d of descs) {
+      for (let i = 0; i < 128; i++) mean[i] += d.descriptor[i];
+    }
+    const n = descs.length;
+    for (let i = 0; i < 128; i++) mean[i] /= n;
+    means.push({ ...descs[0], descriptor: mean });
+  }
+  return means;
+}
+
 export async function loadFaceCache(): Promise<void> {
   const [rows] = await pool.query<RowDataPacket[]>(
     `SELECT fd.employee_id, fd.descriptor,
@@ -25,7 +51,7 @@ export async function loadFaceCache(): Promise<void> {
       WHERE e.is_active = 1`
   );
 
-  cache = rows.map((r) => ({
+  const individual: CachedDescriptor[] = rows.map((r) => ({
     employeeId: r.employee_id,
     employeeCode: r.employee_code,
     fullName: r.full_name,
@@ -34,8 +60,15 @@ export async function loadFaceCache(): Promise<void> {
     // MariaDB JSON column may come back as a string or already-parsed array
     descriptor: typeof r.descriptor === 'string' ? JSON.parse(r.descriptor) : r.descriptor,
   }));
+
+  // Add a mean (centroid) descriptor per employee who has 2+ enrolled poses.
+  // The centroid sits geometrically between the enrolled angles and improves
+  // matching for intermediate head positions (e.g. between straight and slightly
+  // left) that weren't explicitly captured during enrollment.
+  const means = computeMeanDescriptors(individual);
+  cache = [...individual, ...means];
   loaded = true;
-  console.log(`[faceCache] loaded ${cache.length} descriptor(s)`);
+  console.log(`[faceCache] loaded ${individual.length} descriptor(s) + ${means.length} mean(s)`);
 }
 
 export async function ensureFaceCache(): Promise<void> {

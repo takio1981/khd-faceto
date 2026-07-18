@@ -34,8 +34,10 @@
         </td>
         <td>{{ emp.shift_name || '-' }}</td>
         <td>
-          @if (emp.face_count) {
-            <span class="badge on_time">{{ emp.face_count }} ชุด</span>
+          @if ((emp.face_count ?? 0) >= 5) {
+            <span class="badge on_time" matTooltip="ลงทะเบียนครบ 5 มุมแล้ว">{{ emp.face_count }} ภาพ ✓</span>
+          } @else if (emp.face_count) {
+            <span class="badge late" matTooltip="มีเพียง {{ emp.face_count }} ภาพ — ควรลงทะเบียนใหม่ครบ 5 มุม (หน้าตรง/ซ้าย/ขวา/ก้ม/เงย)">{{ emp.face_count }} ภาพ ⚠</span>
           } @else {
             <span class="badge absent">ยังไม่มี</span>
           }
@@ -87,8 +89,10 @@
       <div class="card-field"><span>กะ:</span> {{ emp.shift_name || '-' }}</div>
       <div class="card-field">
         <span>ใบหน้า:</span>
-        @if (emp.face_count) {
-          <span class="badge on_time">{{ emp.face_count }} ชุด</span>
+        @if ((emp.face_count ?? 0) >= 5) {
+          <span class="badge on_time">{{ emp.face_count }} ภาพ ✓</span>
+        } @else if (emp.face_count) {
+          <span class="badge late">{{ emp.face_count }} ภาพ ⚠ (ควรลงทะเบียนใหม่)</span>
         } @else {
           <span class="badge absent">ยังไม่มี</span>
         }
