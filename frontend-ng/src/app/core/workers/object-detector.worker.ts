@@ -18,7 +18,7 @@ async function initModel(): Promise<void> {
   // esbuild wraps CJS modules: exports land on .default in ESM namespace.
   const cocoSsd: { load: (cfg?: object) => Promise<any> } =
     (cocoMod as any).default ?? (cocoMod as any);
-  model = await cocoSsd.load({ base: 'lite_mobilenet_v2' });
+  model = await cocoSsd.load({ base: 'mobilenet_v2' });
 }
 
 self.addEventListener('message', async ({ data }: MessageEvent) => {

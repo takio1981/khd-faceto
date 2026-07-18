@@ -193,7 +193,13 @@ function classify(shift: Shift, now: Date, today: TodayScans): Classification | 
     return null;
   }
 
-  // ---- No check-in yet: only record within check-in window (checkin_start → late_cutoff) ----
+  // ---- No check-in yet ----
+  // Allow check-out in the checkout window even without a prior check-in
+  // (flexible checkout: employee may have been recorded by other means, or missed check-in).
+  if (sec >= checkoutStart && sec <= checkoutEnd) {
+    return { scanType: 'check_out', status: 'on_time', message: 'ลงเวลาออกงาน (ไม่มีบันทึกเข้างานวันนี้)' };
+  }
+  // Only allow check-in within check-in window (checkin_start → late_cutoff).
   if (sec < checkinStart || sec > lateCutoff) {
     return null;
   }
@@ -203,20 +209,8 @@ function classify(shift: Shift, now: Date, today: TodayScans): Classification | 
   return { scanType: 'check_in', status: 'late', message: 'ลงเวลาเข้างานสำเร็จ (สาย)' };
 }
 
-// Returns a contextual "outside window" message: if the person has no check-in
-// yet but the current time falls inside the checkout or OT window, the generic
-// "outside scan window" message is confusing — they need a check-in first.
+// Returns a contextual "outside window" message for display only.
 function outsideWindowMessage(shift: Shift, now: Date, today: TodayScans): string {
-  if (!today.hasCheckIn) {
-    const sec = dateToSeconds(now);
-    const checkoutStart = timeToSeconds(shift.checkout_start);
-    const checkoutEnd   = timeToSeconds(shift.checkout_end);
-    const otStart       = timeToSeconds(shift.ot_start);
-    const otEnd         = timeToSeconds(shift.ot_end);
-    if ((sec >= checkoutStart && sec <= checkoutEnd) || (sec >= otStart && sec <= otEnd)) {
-      return 'ยังไม่มีบันทึกเข้างาน กรุณาสแกนเข้างานก่อน';
-    }
-  }
   return 'ไม่อยู่ในช่วงเวลาลงเวลา (Outside scan window)';
 }
 

@@ -230,6 +230,9 @@ export class CheckinComponent implements AfterViewInit, OnDestroy {
   objectDetectorLoading = false;
   lastObjectDetections: ObjectDetection[] = [];
   private objDetectTimer: ReturnType<typeof setInterval> | null = null;
+  // Global phone-in-frame block: set when COCO-SSD detects a phone; prevents ALL scans.
+  private phoneBlockedUntil = 0;
+  private phoneBlockReported = false;
 
   // Non-human detections with score >= OBJ_MIN_SCORE visible in the frame
   get visibleNonHuman(): ObjectDetection[] {
@@ -653,6 +656,16 @@ export class CheckinComponent implements AfterViewInit, OnDestroy {
       if (!this.running || !this.objectDetectorReady) return;
       try {
         this.lastObjectDetections = await this.facePipeline.detectObjects(this.videoRef.nativeElement);
+        // Global phone/tablet check: set a block that handleDetections will enforce.
+        const PHONE_CLASSES = ['cell phone', 'remote'];
+        const hasPhone = this.lastObjectDetections.some(
+          (d) => PHONE_CLASSES.includes(d.class) && d.score >= 0.2,
+        );
+        if (hasPhone) {
+          this.phoneBlockedUntil = Date.now() + 4000; // keep blocked 4s after last detection
+        } else if (Date.now() > this.phoneBlockedUntil + 1000) {
+          this.phoneBlockReported = false; // reset report flag when block expires
+        }
       } catch { /* best-effort, never block main loop */ }
     }, OBJ_DETECT_INTERVAL_MS);
   }
@@ -1064,10 +1077,40 @@ export class CheckinComponent implements AfterViewInit, OnDestroy {
       }),
     );
 
-    // Step 2: confirm identity (CONFIRM_COUNT frames), then liveness check (blink).
+    // Step 2: confirm identity (CONFIRM_COUNT frames), then liveness check.
     // Only commit the scan after BOTH identity and liveness pass.
     const results: DetWithResult[] = await Promise.all(
       previews.map(async ({ det, r }) => {
+        // ---- Global phone/tablet block ----
+        // Checked FIRST for any recognised employee, regardless of scan_type.
+        // phoneBlockedUntil is set by startObjDetectLoop when COCO-SSD sees a phone.
+        if (r?.matched && r.employee && now < this.phoneBlockedUntil) {
+          const pmKey = r.employee.id;
+          const existingPm = this.pendingMatch[pmKey];
+          if (!existingPm?.livenessFailReported) {
+            if (existingPm) existingPm.livenessFailReported = true;
+            else this.pendingMatch[pmKey] = {
+              count: 1, scanType: r.scan_type ?? '', lastTime: now,
+              livenessPhase: false, livenessStartedAt: now,
+              livenessFailReported: true,
+              livenessPositions: [], phoneDetectedCount: 0, screenFrameFailCount: 0,
+            };
+            if (!this.phoneBlockReported) {
+              this.phoneBlockReported = true;
+              const alertImage = this.facePipeline.captureFaceJpeg(this.videoRef.nativeElement, det.box, 0.85);
+              this.attendanceService.reportLivenessFail(r.employee, alertImage, this.getScanLocationId()).subscribe();
+              this.showResult(
+                `⚠️ ตรวจพบโทรศัพท์มือถือในเฟรม (${r.employee.full_name}) — ระบบบันทึกเหตุการณ์ไว้แล้ว`,
+                'error',
+              );
+            }
+          }
+          if (now > (existingPm?.livenessStartedAt ?? 0) + LIVENESS_RESET_DELAY_MS) {
+            delete this.pendingMatch[pmKey];
+          }
+          return { det, r: { ...r, scan_type: undefined, message: 'ตรวจพบโทรศัพท์มือถือ กรุณาสแกนด้วยใบหน้าจริง' } };
+        }
+
         if (!r || !r.matched || (r as any).ignored || !r.scan_type || !r.employee) {
           return { det, r };
         }
@@ -1075,8 +1118,7 @@ export class CheckinComponent implements AfterViewInit, OnDestroy {
         const key = r.employee.id;
         const existing = this.pendingMatch[key];
 
-        // Update or create pendingMatch. Once in liveness phase, don't reset on
-        // short frame gaps — just keep accumulating EAR readings.
+        // Update or create pendingMatch.
         if (existing?.livenessPhase) {
           existing.lastTime = now;
         } else if (existing && existing.scanType === r.scan_type && now - existing.lastTime <= PENDING_TIMEOUT_MS) {
@@ -1092,30 +1134,6 @@ export class CheckinComponent implements AfterViewInit, OnDestroy {
         }
 
         const pm = this.pendingMatch[key];
-
-        // EARLY phone check — runs in BOTH Phase 1 and Phase 2.
-        // Lower confidence threshold (0.25) to catch phones that are partially visible.
-        // If phone detected 2+ ticks → immediate spoofing fail before any scan is committed.
-        if (this.objectDetectorReady &&
-            this.lastObjectDetections.some((d) => d.class === 'cell phone' && d.score >= 0.25)) {
-          pm.phoneDetectedCount++;
-        }
-        if (pm.phoneDetectedCount >= PHONE_DETECT_THRESHOLD) {
-          if (!pm.livenessFailReported) {
-            pm.livenessFailReported = true;
-            pm.livenessStartedAt = now; // use as fail-timestamp for reset timing
-            const alertImage = this.facePipeline.captureFaceJpeg(this.videoRef.nativeElement, det.box, 0.85);
-            this.attendanceService.reportLivenessFail(r.employee, alertImage, this.getScanLocationId()).subscribe();
-            this.showResult(
-              `⚠️ ตรวจพบโทรศัพท์มือถือในเฟรม (${r.employee.full_name}) — ระบบบันทึกเหตุการณ์ไว้แล้ว`,
-              'error',
-            );
-          }
-          if (now - pm.livenessStartedAt > LIVENESS_RESET_DELAY_MS) {
-            delete this.pendingMatch[key];
-          }
-          return { det, r: { ...r, scan_type: undefined, message: 'ตรวจพบโทรศัพท์มือถือ กรุณาสแกนด้วยใบหน้าจริง' } };
-        }
 
         // Phase 1: count confirmation frames before starting liveness.
         if (!pm.livenessPhase) {
