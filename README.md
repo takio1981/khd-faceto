@@ -2,6 +2,13 @@
 
 Web app สแกนใบหน้าเพื่อลงเวลาเข้า-ออกงาน พร้อมบันทึกภาพใบหน้า, กำหนดกะ/OT, รายงาน, แดชบอร์ด และระบบสิทธิ์ Admin/User
 
+> **v2026-07-18k** ปรับปรุง Anti-Spoofing เป็น **ตรวจจับโทรศัพท์อย่างเดียว** (COCO-SSD Phone Detection Only):
+> - **ยกเลิก Background Blur**: ลบ toggle เบลอพื้นหลังออก + ลบ `#bgCanvas` canvas และ CSS ที่เกี่ยวข้องทั้งหมด
+> - **ตรวจจับ 2 ระดับพร้อมกัน**: (1) **Global Block** — COCO-SSD พบโทรศัพท์/laptop/TV ในเฟรม → block ทุก scan 3 วินาที; (2) **Face-on-Screen** — ใบหน้า (centroid) อยู่ภายใน bbox ของอุปกรณ์ → block ทันที
+> - **บันทึกแจ้งเตือน Spoofing** ทันทีเมื่อตรวจพบ พร้อมระบุเหตุผล ("ตรวจพบใบหน้าบนจอโทรศัพท์/หน้าจอ" หรือ "ตรวจพบโทรศัพท์มือถือในเฟรม") — แก้ bug เดิมที่ `faceIsOnPhoneScreen()` กรองใบหน้าออกแบบเงียบโดยไม่บันทึก
+> - **ลด threshold** จาก 0.2 → 0.1 + เพิ่มคลาส `laptop` และ `tv` (ครอบคลุมการนำหน้าจออื่นมาแสดงภาพ)
+> - **ยกเลิก Passive Liveness Phase 2** ทั้งหมด (motion variance + detectScreenFrame pixel analysis) — เหลือแค่ Phase 1 confirm count → scan
+>
 > **v2026-07-18j** เพิ่ม 2 ฟีเจอร์ใหม่:
 > - **Background Blur (เบลอพื้นหลัง)**: เพิ่ม toggle "🌫️ เบลอพื้นหลัง" ในเมนูตั้งค่าอุปกรณ์ — เบลอพื้นหลังรอบใบหน้าแบบ Portrait Mode ด้วย Canvas API (blur 14px ทั้งเฟรม แล้ว cut-out ใบหน้าแบบคมชัดซ้อนทับ) ช่วยซ่อนพื้นหลัง เพิ่มความแม่นยำ Anti-Spoofing และให้ภาพดูเป็นมืออาชีพ | รองรับ Flip H/V ด้วย CSS transform เช่นเดียวกับ video
 > - **Checkbox Multi-select ในตาราง Attendance**: (Admin เท่านั้น) เลือกรายการแต่ละแถว หรือ "เลือกทั้งหมด" ด้วย header checkbox | แสดง action bar "เลือกแล้ว N รายการ + ปุ่มลบที่เลือก" | backend เพิ่ม `DELETE /api/attendance` (bulk delete by ids array) | selection reset อัตโนมัติเมื่อเปลี่ยนหน้า/ค้นหาใหม่ | รองรับ card view บนมือถือด้วย

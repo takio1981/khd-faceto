@@ -321,14 +321,6 @@ mat-slider {
   display: block;
 }
 
-.cam-wrap canvas.bg-blur-canvas {
-  position: absolute;
-  top: 0;
-  left: 0;
-  width: 100%;
-  z-index: 1;
-}
-
 .cam-wrap canvas.overlay {
   position: absolute;
   top: 0;
@@ -336,12 +328,9 @@ mat-slider {
   z-index: 2;
 }
 
-.cam-stage.flip-h video,
-.cam-stage.flip-h canvas.bg-blur-canvas { transform: scaleX(-1); }
-.cam-stage.flip-v video,
-.cam-stage.flip-v canvas.bg-blur-canvas { transform: scaleY(-1); }
-.cam-stage.flip-h.flip-v video,
-.cam-stage.flip-h.flip-v canvas.bg-blur-canvas { transform: scale(-1, -1); }
+.cam-stage.flip-h video { transform: scaleX(-1); }
+.cam-stage.flip-v video { transform: scaleY(-1); }
+.cam-stage.flip-h.flip-v video { transform: scale(-1, -1); }
 
 .cam-guide {
   position: absolute;

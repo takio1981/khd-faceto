@@ -55,13 +55,8 @@ interface PendingMatch {
   count: number;
   scanType: string;
   lastTime: number;
-  livenessPhase: boolean;
-  livenessStartedAt: number;
-  livenessFailReported: boolean;
-  // Passive liveness signals (populated during Phase 2)
-  livenessPositions: { x: number; y: number }[];
-  phoneDetectedCount: number;
-  screenFrameFailCount: number;
+  spoofReported: boolean;
+  spoofReportedAt: number;
 }
 
 const LOCATION_STORAGE_KEY = 'khd_checkin_location_id';
@@ -80,16 +75,8 @@ const DEFAULT_BOX_SMOOTHING = 0.45;
 const MIN_BOX_SMOOTHING = 0.1;
 const MAX_BOX_SMOOTHING = 0.9;
 const COUNTDOWN_SECONDS = 5;
-// Liveness window: 3 s to collect motion data after identity is confirmed.
-const LIVENESS_WINDOW_MS = 3000;
-// Extra time after reporting the fail before resetting (so the alert stays visible).
-const LIVENESS_RESET_DELAY_MS = 2000;
-// Centroid variance threshold (px²). Below this = face is suspiciously still
-// → likely a printed/screen photo. Real faces at rest: ~1–8 px² from breathing.
-const MOTION_VARIANCE_THRESHOLD = 0.5;
-// How many consecutive COCO-SSD ticks (each ~1 s) a cell phone must appear to
-// trigger an immediate liveness fail.
-const PHONE_DETECT_THRESHOLD = 2;
+// Extra time after reporting spoofing before resetting (so the alert stays visible).
+const SPOOF_RESET_DELAY_MS = 2000;
 const DETECTION_INTERVAL_KEY = 'camDetectionIntervalMs';
 const BOX_SMOOTHING_KEY = 'camBoxSmoothing';
 
@@ -122,7 +109,6 @@ const VFOV_KEY = 'camVFovDeg';
 
 const OBJ_DETECTOR_KEY = 'camObjectDetector';
 const ANTI_SPOOFING_KEY = 'camAntiSpoofing';
-const BG_BLUR_KEY = 'camBackgroundBlur';
 const OBJ_DETECT_INTERVAL_MS = 1000;
 const OBJ_MIN_SCORE = 0.50; // discard low-confidence detections
 
@@ -162,7 +148,6 @@ const MAX_AUTO_ZOOM_SPEED = 0.25;
 export class CheckinComponent implements AfterViewInit, OnDestroy {
   @ViewChild('video') videoRef!: ElementRef<HTMLVideoElement>;
   @ViewChild('overlay') overlayRef!: ElementRef<HTMLCanvasElement>;
-  @ViewChild('bgCanvas') bgCanvasRef?: ElementRef<HTMLCanvasElement>;
   @ViewChild('camWrap') camWrapRef!: ElementRef<HTMLDivElement>;
   @ViewChild('camFrame') camFrameRef!: ElementRef<HTMLDivElement>;
 
@@ -239,7 +224,6 @@ export class CheckinComponent implements AfterViewInit, OnDestroy {
 
   // ===== Anti-spoofing (phone/screen detection) =====
   antiSpoofingEnabled = true; // on by default; admin can disable for testing
-  backgroundBlurEnabled = false;
 
   // Non-human detections with score >= OBJ_MIN_SCORE visible in the frame
   get visibleNonHuman(): ObjectDetection[] {
@@ -363,7 +347,6 @@ export class CheckinComponent implements AfterViewInit, OnDestroy {
     );
     this.objectDetectorEnabled = localStorage.getItem(OBJ_DETECTOR_KEY) === '1';
     this.antiSpoofingEnabled = localStorage.getItem(ANTI_SPOOFING_KEY) !== '0'; // default ON
-    this.backgroundBlurEnabled = localStorage.getItem(BG_BLUR_KEY) === '1';
     this.autoZoomEnabled = localStorage.getItem(AUTO_ZOOM_KEY) === '1';
     this.autoZoomMaxLevel = this.clampNumber(
       Number(localStorage.getItem(AUTO_ZOOM_LEVEL_KEY)) || DEFAULT_AUTO_ZOOM_LEVEL,
@@ -655,10 +638,6 @@ export class CheckinComponent implements AfterViewInit, OnDestroy {
     }
   }
 
-  onBackgroundBlurToggle(): void {
-    localStorage.setItem(BG_BLUR_KEY, this.backgroundBlurEnabled ? '1' : '0');
-  }
-
   private initObjectDetector(): void {
     this.objectDetectorLoading = true;
     this.facePipeline.loadObjectDetector().then(() => {
@@ -674,13 +653,14 @@ export class CheckinComponent implements AfterViewInit, OnDestroy {
       if (!this.running || !this.objectDetectorReady) return;
       try {
         this.lastObjectDetections = await this.facePipeline.detectObjects(this.videoRef.nativeElement);
-        // Global phone/tablet check: set a block that handleDetections will enforce.
-        const PHONE_CLASSES = ['cell phone', 'remote'];
+        // Global phone/screen block: if any phone/screen-type device is detected,
+        // block ALL face scans for the next few seconds and log spoofing if a face matches.
+        const PHONE_CLASSES = ['cell phone', 'remote', 'laptop', 'tv'];
         const hasPhone = this.lastObjectDetections.some(
-          (d) => PHONE_CLASSES.includes(d.class) && d.score >= 0.2,
+          (d) => PHONE_CLASSES.includes(d.class) && d.score >= 0.1,
         );
         if (hasPhone) {
-          this.phoneBlockedUntil = Date.now() + 4000; // keep blocked 4s after last detection
+          this.phoneBlockedUntil = Date.now() + 3000; // keep blocked 3s after last detection
         } else if (Date.now() > this.phoneBlockedUntil + 1000) {
           this.phoneBlockReported = false; // reset report flag when block expires
         }
@@ -708,24 +688,21 @@ export class CheckinComponent implements AfterViewInit, OnDestroy {
     );
   }
 
-  // Returns true if this face box has significant overlap with a detected phone/tablet bbox.
-  // Uses the latest COCO-SSD detections (updated every 1s by startObjDetectLoop).
-  // When true, the face is almost certainly displayed on a phone/tablet screen.
-  private faceIsOnPhoneScreen(faceBox: { x: number; y: number; width: number; height: number }): boolean {
+  // Returns true if the face centre sits inside any detected phone/screen/laptop/tv bbox.
+  // Used as a secondary spoofing check: when COCO-SSD sees a screen-type device that
+  // contains the face centre, the face is almost certainly being displayed on that device.
+  private faceIsOnScreen(faceBox: { x: number; y: number; width: number; height: number }): boolean {
     if (!this.objectDetectorReady || !this.antiSpoofingEnabled) return false;
-    const phones = this.lastObjectDetections.filter(
-      (d) => ['cell phone', 'remote'].includes(d.class) && d.score >= 0.15,
+    const screenClasses = ['cell phone', 'remote', 'laptop', 'tv'];
+    const screens = this.lastObjectDetections.filter(
+      (d) => screenClasses.includes(d.class) && d.score >= 0.1,
     );
-    if (!phones.length) return false;
-    const fl = faceBox.x, ft = faceBox.y;
-    const fr = faceBox.x + faceBox.width, fb = faceBox.y + faceBox.height;
-    return phones.some(({ bbox: [bx, by, bw, bh] }) => {
-      const overlapX = Math.max(0, Math.min(fr, bx + bw) - Math.max(fl, bx));
-      const overlapY = Math.max(0, Math.min(fb, by + bh) - Math.max(ft, by));
-      const overlapArea = overlapX * overlapY;
-      const faceArea = faceBox.width * faceBox.height;
-      return overlapArea > faceArea * 0.25; // >25% face area inside phone bbox
-    });
+    if (!screens.length) return false;
+    const fcx = faceBox.x + faceBox.width / 2;
+    const fcy = faceBox.y + faceBox.height / 2;
+    return screens.some(({ bbox: [bx, by, bw, bh] }) =>
+      fcx >= bx && fcx <= bx + bw && fcy >= by && fcy <= by + bh,
+    );
   }
 
   // Converts face-box-height percentage to an estimated real-world distance
@@ -844,30 +821,6 @@ export class CheckinComponent implements AfterViewInit, OnDestroy {
     const sx = overlay.width / (video.videoWidth || 640);
     const sy = overlay.height / (video.videoHeight || 480);
     ctx.clearRect(0, 0, overlay.width, overlay.height);
-
-    // Portrait-mode background blur: draw blurred video frame with unblurred
-    // face patches cut out on top, so the background is masked while the face
-    // stays crisp — helps anti-spoofing by hiding reference-background textures.
-    const bgCanvas = this.bgCanvasRef?.nativeElement;
-    if (bgCanvas && this.backgroundBlurEnabled && video.videoWidth) {
-      bgCanvas.width = video.videoWidth;
-      bgCanvas.height = video.videoHeight;
-      const bgCtx = bgCanvas.getContext('2d');
-      if (bgCtx) {
-        bgCtx.filter = 'blur(14px)';
-        bgCtx.drawImage(video, 0, 0, bgCanvas.width, bgCanvas.height);
-        bgCtx.filter = 'none';
-        results.forEach(({ det }) => {
-          const b = det.box;
-          const pad = 40;
-          const fx = Math.max(0, b.x - pad);
-          const fy = Math.max(0, b.y - pad);
-          const fw = Math.min(bgCanvas.width - fx, b.width + pad * 2);
-          const fh = Math.min(bgCanvas.height - fy, b.height + pad * 2);
-          bgCtx.drawImage(video, fx, fy, fw, fh, fx, fy, fw, fh);
-        });
-      }
-    }
 
     this.updateAutoZoom(results, overlay.width, overlay.height);
 
@@ -1099,15 +1052,11 @@ export class CheckinComponent implements AfterViewInit, OnDestroy {
       return;
     }
 
-    // Anti-spoofing gate 1: if COCO-SSD detects this face is ON a phone screen → block it.
-    // faceIsOnPhoneScreen() checks geometric overlap between face bbox and phone bbox.
-    const detsAfterPhoneScreen = this.antiSpoofingEnabled
-      ? sizeDets.filter((d) => !this.faceIsOnPhoneScreen(d.box))
-      : sizeDets;
-
     // Object-detector gate: filter out any detection where COCO-SSD says the
     // overlapping region is NOT a person (e.g. a dog, a photo on a screen).
-    const dets = detsAfterPhoneScreen.filter((d) => this.faceIsHuman(d.box));
+    // Note: phone-screen check runs LATER (in the pending match loop) so it can
+    // log a spoofing alert — unlike a pre-filter that would silently drop the face.
+    const dets = sizeDets.filter((d) => this.faceIsHuman(d.box));
     const hadNonHuman = dets.length < sizeDets.length;
     if (!dets.length) {
       this.drawAll([]);
@@ -1145,41 +1094,52 @@ export class CheckinComponent implements AfterViewInit, OnDestroy {
       }),
     );
 
-    // Step 2: confirm identity (CONFIRM_COUNT frames), then liveness check.
-    // Only commit the scan after BOTH identity and liveness pass.
+    // Step 2: confirm identity (CONFIRM_COUNT frames); phone-detection anti-spoofing runs here.
     const results: DetWithResult[] = await Promise.all(
       previews.map(async ({ det, r }) => {
-        // ---- Global phone/tablet block ----
-        // Checked FIRST for any recognised employee, regardless of scan_type.
-        // phoneBlockedUntil is set by startObjDetectLoop when COCO-SSD sees a phone.
-        if (r?.matched && r.employee && now < this.phoneBlockedUntil) {
-          const pmKey = r.employee.id;
-          const existingPm = this.pendingMatch[pmKey];
-          if (!existingPm?.livenessFailReported) {
-            if (existingPm) existingPm.livenessFailReported = true;
-            else this.pendingMatch[pmKey] = {
-              count: 1, scanType: r.scan_type ?? '', lastTime: now,
-              livenessPhase: false, livenessStartedAt: now,
-              livenessFailReported: true,
-              livenessPositions: [], phoneDetectedCount: 0, screenFrameFailCount: 0,
-            };
-            if (!this.phoneBlockReported) {
-              this.phoneBlockReported = true;
-              const alertImage = this.facePipeline.captureFaceJpeg(this.videoRef.nativeElement, det.box, 0.85);
-              this.attendanceService.reportLivenessFail(r.employee, alertImage, this.getScanLocationId()).subscribe();
-              this.showResult(
-                `⚠️ ตรวจพบโทรศัพท์มือถือในเฟรม (${r.employee.full_name}) — ระบบบันทึกเหตุการณ์ไว้แล้ว`,
-                'error',
-              );
+        // ---- Anti-spoofing: phone/screen detection ----
+        // Two complementary checks — both set a spoofReported flag so the alert is
+        // logged once per incident and the scan is blocked until the phone leaves:
+        //
+        // Check A — Global COCO-SSD phone block: phoneBlockedUntil is set in
+        //   startObjDetectLoop when COCO-SSD detects cell phone/laptop/tv/remote.
+        //   Fires for ANY matched face while a phone-class object is visible.
+        //
+        // Check B — Face-centre-on-screen: the face centre sits inside a phone/screen
+        //   bbox, meaning the face is probably being displayed on that device.
+        //   Provides a second chance when Check A's confidence threshold was missed.
+
+        if (this.antiSpoofingEnabled && r?.matched && r.employee) {
+          const isPhoneBlocked = now < this.phoneBlockedUntil;
+          const isOnScreen = this.objectDetectorReady && this.faceIsOnScreen(det.box);
+
+          if (isPhoneBlocked || isOnScreen) {
+            const pmKey = r.employee.id;
+            let pm = this.pendingMatch[pmKey];
+            if (!pm?.spoofReported) {
+              if (pm) { pm.spoofReported = true; pm.spoofReportedAt = now; }
+              else {
+                this.pendingMatch[pmKey] = {
+                  count: 1, scanType: r.scan_type ?? '', lastTime: now,
+                  spoofReported: true, spoofReportedAt: now,
+                };
+              }
+              pm = this.pendingMatch[pmKey];
+              if (!this.phoneBlockReported) {
+                this.phoneBlockReported = true;
+                const alertImage = this.facePipeline.captureFaceJpeg(this.videoRef.nativeElement, det.box, 0.85);
+                this.attendanceService.reportLivenessFail(r.employee, alertImage, this.getScanLocationId()).subscribe();
+                const reason = isOnScreen ? 'ตรวจพบใบหน้าบนจอโทรศัพท์/หน้าจอ' : 'ตรวจพบโทรศัพท์มือถือในเฟรม';
+                this.showResult(`⚠️ ${reason} (${r.employee.full_name}) — ระบบบันทึกเหตุการณ์ไว้แล้ว`, 'error');
+              }
             }
+            pm = this.pendingMatch[pmKey];
+            if (pm && now > pm.spoofReportedAt + SPOOF_RESET_DELAY_MS) delete this.pendingMatch[pmKey];
+            return { det, r: { ...r, scan_type: undefined, message: 'ตรวจพบโทรศัพท์/จอแสดงภาพ กรุณาสแกนด้วยใบหน้าจริงต่อหน้ากล้อง' } };
           }
-          if (now > (existingPm?.livenessStartedAt ?? 0) + LIVENESS_RESET_DELAY_MS) {
-            delete this.pendingMatch[pmKey];
-          }
-          return { det, r: { ...r, scan_type: undefined, message: 'ตรวจพบโทรศัพท์มือถือ กรุณาสแกนด้วยใบหน้าจริง' } };
         }
 
-        if (!r || !r.matched || (r as any).ignored || !r.scan_type || !r.employee) {
+        if (!r?.matched || (r as any).ignored || !r.scan_type || !r.employee) {
           return { det, r };
         }
 
@@ -1187,124 +1147,36 @@ export class CheckinComponent implements AfterViewInit, OnDestroy {
         const existing = this.pendingMatch[key];
 
         // Update or create pendingMatch.
-        if (existing?.livenessPhase) {
-          existing.lastTime = now;
-        } else if (existing && existing.scanType === r.scan_type && now - existing.lastTime <= PENDING_TIMEOUT_MS) {
+        if (existing && !existing.spoofReported && existing.scanType === r.scan_type && now - existing.lastTime <= PENDING_TIMEOUT_MS) {
           existing.count += 1;
           existing.lastTime = now;
-        } else {
+        } else if (!existing?.spoofReported) {
           this.pendingMatch[key] = {
             count: 1, scanType: r.scan_type, lastTime: now,
-            livenessPhase: false, livenessStartedAt: 0,
-            livenessFailReported: false,
-            livenessPositions: [], phoneDetectedCount: 0, screenFrameFailCount: 0,
+            spoofReported: false, spoofReportedAt: 0,
           };
         }
 
         const pm = this.pendingMatch[key];
-
-        // Anti-spoofing: screen-frame detection (runs every 2 frames from Phase 1).
-        // Checks for dark uniform bezels around the face box — characteristic of a phone screen.
-        // Works immediately in Phase 1 so phone faces are caught before the liveness window opens.
-        if (this.antiSpoofingEnabled && pm.count % 2 === 0) {
-          if (this.facePipeline.detectScreenFrame(this.videoRef.nativeElement, det.box)) {
-            pm.screenFrameFailCount++;
-            // Phase 1 early fail: 3 screen-frame detections → spoofing.
-            if (!pm.livenessPhase && pm.screenFrameFailCount >= 3 && !pm.livenessFailReported) {
-              pm.livenessFailReported = true;
-              pm.livenessStartedAt = now; // used for reset timing
-              const alertImage = this.facePipeline.captureFaceJpeg(this.videoRef.nativeElement, det.box, 0.85);
-              this.attendanceService.reportLivenessFail(r.employee, alertImage, this.getScanLocationId()).subscribe();
-              this.showResult(
-                `⚠️ ตรวจพบกรอบหน้าจอโทรศัพท์/แท็บเล็ต (${r.employee.full_name}) — ระบบบันทึกเหตุการณ์ไว้แล้ว`,
-                'error',
-              );
-            }
-          }
+        if (pm.spoofReported) {
+          if (now > pm.spoofReportedAt + SPOOF_RESET_DELAY_MS) delete this.pendingMatch[key];
+          return { det, r: { ...r, scan_type: undefined } };
+        }
+        if (pm.count < CONFIRM_COUNT) {
+          return { det, r: { ...r, scan_type: undefined, pendingConfirm: true } };
         }
 
-        // Phase 1: count confirmation frames before starting liveness.
-        if (!pm.livenessPhase) {
-          if (pm.livenessFailReported) {
-            // Already flagged as spoofing in Phase 1 screen-frame check.
-            if (now - pm.livenessStartedAt > LIVENESS_RESET_DELAY_MS) delete this.pendingMatch[key];
-            return { det, r: { ...r, scan_type: undefined, message: 'ตรวจพบกรอบหน้าจอ กรุณาสแกนด้วยใบหน้าจริง' } };
-          }
-          if (pm.count < CONFIRM_COUNT) {
-            return { det, r: { ...r, scan_type: undefined, pendingConfirm: true } };
-          }
-          pm.livenessPhase = true;
-          pm.livenessStartedAt = now;
+        // Confirmed! Commit the scan.
+        delete this.pendingMatch[key];
+        const imageBase64 = this.facePipeline.captureFaceJpeg(this.videoRef.nativeElement, det.box, 0.8);
+        try {
+          const saved = await firstValueFrom(
+            this.attendanceService.scan(det.descriptor, imageBase64, this.getScanLocationId()),
+          );
+          return { det, r: saved, imageBase64 };
+        } catch {
+          return { det, r };
         }
-
-        // Phase 2: passive liveness — track motion and screen frame.
-
-        // 2a. Collect face centroid (mean of 68 landmarks) each frame.
-        if (det.landmarks?.positions?.length === 68) {
-          const pts = det.landmarks.positions as { x: number; y: number }[];
-          let lx = 0, ly = 0;
-          for (const p of pts) { lx += p.x; ly += p.y; }
-          pm.livenessPositions.push({ x: lx / 68, y: ly / 68 });
-        }
-
-        // Still collecting data — wait for window to close.
-        if (now - pm.livenessStartedAt <= LIVENESS_WINDOW_MS) {
-          return { det, r: { ...r, scan_type: undefined, pendingLiveness: true } as any };
-        }
-
-        // 2e. Window complete → evaluate motion variance + screen frame signals.
-        if (!pm.livenessFailReported) {
-          const positions = pm.livenessPositions;
-          let spoofing = false;
-          let reason = '';
-
-          if (this.antiSpoofingEnabled) {
-            if (positions.length >= 8) {
-              let sx = 0, sy = 0;
-              for (const p of positions) { sx += p.x; sy += p.y; }
-              const mx = sx / positions.length, my = sy / positions.length;
-              let vx = 0, vy = 0;
-              for (const p of positions) { vx += (p.x - mx) ** 2; vy += (p.y - my) ** 2; }
-              const variance = (vx + vy) / (2 * positions.length);
-              if (variance < MOTION_VARIANCE_THRESHOLD) {
-                spoofing = true;
-                reason = 'ใบหน้าไม่มีการเคลื่อนไหวตามธรรมชาติ';
-              }
-            }
-
-            if (!spoofing && pm.screenFrameFailCount >= 2) {
-              spoofing = true;
-              reason = 'ตรวจพบกรอบหน้าจอรอบใบหน้า';
-            }
-          }
-
-          if (spoofing) {
-            pm.livenessFailReported = true;
-            const alertImage = this.facePipeline.captureFaceJpeg(this.videoRef.nativeElement, det.box, 0.85);
-            this.attendanceService.reportLivenessFail(r.employee, alertImage, this.getScanLocationId()).subscribe();
-            this.showResult(
-              `⚠️ ตรวจพบการนำภาพมาสแกน — ${reason} (${r.employee.full_name}) — ระบบบันทึกเหตุการณ์ไว้แล้ว`,
-              'error',
-            );
-          } else {
-            // Liveness PASS → commit scan.
-            delete this.pendingMatch[key];
-            const imageBase64 = this.facePipeline.captureFaceJpeg(this.videoRef.nativeElement, det.box, 0.8);
-            try {
-              const saved = await firstValueFrom(
-                this.attendanceService.scan(det.descriptor, imageBase64, this.getScanLocationId()),
-              );
-              return { det, r: saved, imageBase64 };
-            } catch {
-              return { det, r };
-            }
-          }
-        }
-
-        if (now - pm.livenessStartedAt > LIVENESS_WINDOW_MS + LIVENESS_RESET_DELAY_MS) {
-          delete this.pendingMatch[key];
-        }
-        return { det, r: { ...r, scan_type: undefined, message: 'ตรวจพบการใช้ภาพแทนการสแกนจริง กรุณาสแกนด้วยใบหน้าจริง' } };
       }),
     );
 
@@ -1315,7 +1187,6 @@ export class CheckinComponent implements AfterViewInit, OnDestroy {
     let known = 0;
     let unknown = 0;
     let confirming = 0;
-    let livenessChecking = 0;
     const names: string[] = [];
     const backendMessages: string[] = [];
 
@@ -1326,10 +1197,6 @@ export class CheckinComponent implements AfterViewInit, OnDestroy {
         continue;
       }
       known++;
-      if ((r as any).pendingLiveness) {
-        livenessChecking++;
-        continue;
-      }
       if ((r as any).pendingConfirm) {
         confirming++;
         continue;
@@ -1356,8 +1223,6 @@ export class CheckinComponent implements AfterViewInit, OnDestroy {
       this.loadFeed();
       this.setStatus(`✓ บันทึก ${recorded} คน: ${names.join(', ')}`, 'success');
       this.showResult(`✓ บันทึกสำเร็จ ${recorded} คน — ${names.join(', ')}`, 'success');
-    } else if (livenessChecking > 0) {
-      this.setStatus(`🔍 กำลังตรวจสอบใบหน้าจริง กรุณาหน้ากล้องสักครู่ (${livenessChecking} คน)`, 'warn');
     } else if (confirming > 0) {
       this.setStatus(`กำลังยืนยันใบหน้า ${confirming} คน...`, 'scanning');
     } else if (unknown > 0 && known === 0) {
