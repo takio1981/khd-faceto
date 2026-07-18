@@ -11,6 +11,7 @@
   margin-bottom: 20px;
 }
 .date-field { width: 160px; }
+.delete-sel-btn { margin-left: auto; }
 
 .empty-state {
   text-align: center;
@@ -35,10 +36,19 @@
   th { background: #f9fafb; font-weight: 600; }
   tr:hover td { background: #f0fdf4; }
 
-  .id-cell  { width: 60px;  color: #aaa; font-size: 0.82rem; }
-  .dt-cell  { white-space: nowrap; }
-  .img-cell { white-space: nowrap; }
-  .img-btn  { font-size: 0.85rem; }
+  .chk-cell   { width: 44px; padding: 6px 8px; }
+  .id-col     { width: 50px; }
+  .id-cell    { color: #aaa; font-size: 0.82rem; }
+  .dt-cell    { white-space: nowrap; }
+  .img-cell   { white-space: nowrap; }
+  .img-btn    { font-size: 0.85rem; }
+  .action-cell{ width: 56px; text-align: center; padding: 4px; }
+
+  tr.row-selected td { background: #f0fdf4; }
+}
+
+@media (prefers-color-scheme: dark) {
+  .alert-table tr.row-selected td { background: #14291f; }
 }
 
 @media (prefers-color-scheme: dark) {

@@ -106,6 +106,38 @@ router.get('/liveness-alerts/:id/image', verifyJWT, requireRole('admin'), asyncH
   createReadStream(abs).pipe(res);
 }));
 
+// DELETE /api/attendance/liveness-alerts/:id  - admin only: delete one alert + its image file
+router.delete('/liveness-alerts/:id', verifyJWT, requireRole('admin'), asyncHandler(async (req, res) => {
+  const id = parseInt(req.params.id, 10);
+  if (!Number.isFinite(id)) { res.status(400).json({ error: 'id ไม่ถูกต้อง' }); return; }
+  const [rows] = await pool.query<RowDataPacket[]>('SELECT face_image_path FROM spoofing_alerts WHERE id = ?', [id]);
+  if (!rows.length) { res.status(404).json({ error: 'ไม่พบข้อมูล' }); return; }
+  if (rows[0].face_image_path) {
+    try { await fs.unlink(path.join(config.face.imageDir, rows[0].face_image_path)); } catch { /* file may be absent */ }
+  }
+  await pool.query('DELETE FROM spoofing_alerts WHERE id = ?', [id]);
+  res.json({ ok: true });
+}));
+
+// DELETE /api/attendance/liveness-alerts  - admin only: bulk delete by ids array
+router.delete('/liveness-alerts', verifyJWT, requireRole('admin'), asyncHandler(async (req, res) => {
+  const ids: number[] = Array.isArray(req.body?.ids)
+    ? req.body.ids.map(Number).filter(Number.isFinite)
+    : [];
+  if (!ids.length) { res.status(400).json({ error: 'ต้องระบุ ids' }); return; }
+  const placeholders = ids.map(() => '?').join(',');
+  const [rows] = await pool.query<RowDataPacket[]>(
+    `SELECT face_image_path FROM spoofing_alerts WHERE id IN (${placeholders})`, ids
+  );
+  for (const row of rows) {
+    if (row.face_image_path) {
+      try { await fs.unlink(path.join(config.face.imageDir, row.face_image_path)); } catch { /* ok */ }
+    }
+  }
+  await pool.query(`DELETE FROM spoofing_alerts WHERE id IN (${placeholders})`, ids);
+  res.json({ ok: true, deleted: ids.length });
+}));
+
 // GET /api/attendance  - list with filters
 // Query: dateFrom, dateTo, employeeId, department, scanType, status, search, page, pageSize
 router.get('/', verifyJWT, asyncHandler(async (req, res) => {

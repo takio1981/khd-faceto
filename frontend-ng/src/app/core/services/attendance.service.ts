@@ -92,4 +92,12 @@ export class AttendanceService {
   getSpoofingAlertImageBlob(alertId: number): Observable<Blob> {
     return this.http.get(`${base}/liveness-alerts/${alertId}/image`, { responseType: 'blob' });
   }
+
+  deleteSpoofingAlert(id: number): Observable<{ ok: boolean }> {
+    return this.http.delete<{ ok: boolean }>(`${base}/liveness-alerts/${id}`);
+  }
+
+  deleteSpoofingAlerts(ids: number[]): Observable<{ ok: boolean; deleted: number }> {
+    return this.http.delete<{ ok: boolean; deleted: number }>(`${base}/liveness-alerts`, { body: { ids } });
+  }
 }

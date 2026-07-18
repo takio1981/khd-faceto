@@ -25,6 +25,12 @@
     <button mat-stroked-button (click)="dateFrom = null; dateTo = null; applyFilter()">
       <mat-icon>clear</mat-icon> ล้าง
     </button>
+
+    @if (selectedCount > 0) {
+      <button mat-raised-button color="warn" class="delete-sel-btn" (click)="deleteSelected()">
+        <mat-icon>delete_sweep</mat-icon> ลบที่เลือก ({{ selectedCount }})
+      </button>
+    }
   </div>
 
   <!-- Loading -->
@@ -46,16 +52,32 @@
       <table class="alert-table">
         <thead>
           <tr>
-            <th>#</th>
+            <th class="chk-cell">
+              <mat-checkbox
+                [checked]="allSelected"
+                [indeterminate]="someSelected"
+                (change)="toggleSelectAll()"
+                color="primary">
+              </mat-checkbox>
+            </th>
+            <th class="id-col">#</th>
             <th>วันที่ / เวลา</th>
             <th>พนักงานที่ถูกปลอมแปลง</th>
             <th>สถานที่สแกน</th>
             <th>ใบหน้าที่จับได้</th>
+            <th>จัดการ</th>
           </tr>
         </thead>
         <tbody>
           @for (a of alerts(); track a.id) {
-            <tr>
+            <tr [class.row-selected]="selectedIds.has(a.id)">
+              <td class="chk-cell">
+                <mat-checkbox
+                  [checked]="selectedIds.has(a.id)"
+                  (change)="toggleSelect(a.id)"
+                  color="primary">
+                </mat-checkbox>
+              </td>
               <td class="id-cell">{{ a.id }}</td>
               <td class="dt-cell">{{ formatDt(a.detected_at) }}</td>
               <td>
@@ -75,6 +97,11 @@
                 } @else {
                   <span class="muted">ไม่มีภาพ</span>
                 }
+              </td>
+              <td class="action-cell">
+                <button mat-icon-button color="warn" (click)="deleteOne(a)" matTooltip="ลบรายการนี้">
+                  <mat-icon>delete</mat-icon>
+                </button>
               </td>
             </tr>
           }

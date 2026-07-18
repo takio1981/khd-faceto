@@ -1,7 +1,9 @@
 import { CommonModule } from '@angular/common';
 import { Component, OnInit, signal } from '@angular/core';
+import { firstValueFrom } from 'rxjs';
 import { FormsModule } from '@angular/forms';
 import { MatButtonModule } from '@angular/material/button';
+import { MatCheckboxModule } from '@angular/material/checkbox';
 import { MatNativeDateModule } from '@angular/material/core';
 import { MatDatepickerModule } from '@angular/material/datepicker';
 import { MatDialog, MatDialogModule } from '@angular/material/dialog';
@@ -23,6 +25,7 @@ import { SpoofingAlert, SpoofingAlertListResponse } from '../../core/models/mode
     CommonModule,
     FormsModule,
     MatButtonModule,
+    MatCheckboxModule,
     MatDatepickerModule,
     MatNativeDateModule,
     MatDialogModule,
@@ -50,6 +53,16 @@ export class SecurityAlertsComponent implements OnInit {
   previewAlt = '';
   previewLoading = false;
 
+  selectedIds = new Set<number>();
+  get selectedCount(): number { return this.selectedIds.size; }
+  get allSelected(): boolean {
+    const a = this.alerts();
+    return a.length > 0 && a.every((x) => this.selectedIds.has(x.id));
+  }
+  get someSelected(): boolean {
+    return this.selectedIds.size > 0 && !this.allSelected;
+  }
+
   constructor(
     private attendanceService: AttendanceService,
     private notify: NotifyService,
@@ -67,6 +80,57 @@ export class SecurityAlertsComponent implements OnInit {
     const m = String(d.getMonth() + 1).padStart(2, '0');
     const day = String(d.getDate()).padStart(2, '0');
     return `${y}-${m}-${day}`;
+  }
+
+  toggleSelectAll(): void {
+    if (this.allSelected) {
+      this.alerts().forEach((a) => this.selectedIds.delete(a.id));
+    } else {
+      this.alerts().forEach((a) => this.selectedIds.add(a.id));
+    }
+  }
+
+  toggleSelect(id: number): void {
+    if (this.selectedIds.has(id)) this.selectedIds.delete(id);
+    else this.selectedIds.add(id);
+  }
+
+  async deleteOne(alert: SpoofingAlert): Promise<void> {
+    const ok = await this.notify.confirm({
+      title: 'ลบรายการ',
+      message: `ยืนยันลบเหตุการณ์ #${alert.id} — ${alert.full_name ?? 'ไม่ทราบ'} — ${this.formatDt(alert.detected_at)} ?`,
+      confirmText: 'ลบ',
+      danger: true,
+    });
+    if (!ok) return;
+    try {
+      await firstValueFrom(this.attendanceService.deleteSpoofingAlert(alert.id));
+      this.selectedIds.delete(alert.id);
+      this.notify.toast('ลบรายการสำเร็จ', 'success');
+      this.load();
+    } catch {
+      this.notify.toast('ลบไม่สำเร็จ', 'error');
+    }
+  }
+
+  async deleteSelected(): Promise<void> {
+    const ids = [...this.selectedIds];
+    const ok = await this.notify.confirm({
+      title: 'ลบรายการที่เลือก',
+      message: `ยืนยันลบ ${ids.length} รายการที่เลือก? ไฟล์ภาพจะถูกลบด้วย`,
+      confirmText: `ลบ ${ids.length} รายการ`,
+      danger: true,
+    });
+    if (!ok) return;
+    try {
+      await firstValueFrom(this.attendanceService.deleteSpoofingAlerts(ids));
+      this.selectedIds.clear();
+      this.notify.toast(`ลบ ${ids.length} รายการสำเร็จ`, 'success');
+      if (this.page > 0 && this.alerts().length === ids.length) this.page = 0;
+      this.load();
+    } catch {
+      this.notify.toast('ลบไม่สำเร็จ', 'error');
+    }
   }
 
   load(): void {
