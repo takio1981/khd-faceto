@@ -1093,6 +1093,30 @@ export class CheckinComponent implements AfterViewInit, OnDestroy {
 
         const pm = this.pendingMatch[key];
 
+        // EARLY phone check — runs in BOTH Phase 1 and Phase 2.
+        // Lower confidence threshold (0.25) to catch phones that are partially visible.
+        // If phone detected 2+ ticks → immediate spoofing fail before any scan is committed.
+        if (this.objectDetectorReady &&
+            this.lastObjectDetections.some((d) => d.class === 'cell phone' && d.score >= 0.25)) {
+          pm.phoneDetectedCount++;
+        }
+        if (pm.phoneDetectedCount >= PHONE_DETECT_THRESHOLD) {
+          if (!pm.livenessFailReported) {
+            pm.livenessFailReported = true;
+            pm.livenessStartedAt = now; // use as fail-timestamp for reset timing
+            const alertImage = this.facePipeline.captureFaceJpeg(this.videoRef.nativeElement, det.box, 0.85);
+            this.attendanceService.reportLivenessFail(r.employee, alertImage, this.getScanLocationId()).subscribe();
+            this.showResult(
+              `⚠️ ตรวจพบโทรศัพท์มือถือในเฟรม (${r.employee.full_name}) — ระบบบันทึกเหตุการณ์ไว้แล้ว`,
+              'error',
+            );
+          }
+          if (now - pm.livenessStartedAt > LIVENESS_RESET_DELAY_MS) {
+            delete this.pendingMatch[key];
+          }
+          return { det, r: { ...r, scan_type: undefined, message: 'ตรวจพบโทรศัพท์มือถือ กรุณาสแกนด้วยใบหน้าจริง' } };
+        }
+
         // Phase 1: count confirmation frames before starting liveness.
         if (!pm.livenessPhase) {
           if (pm.count < CONFIRM_COUNT) {
@@ -1102,7 +1126,7 @@ export class CheckinComponent implements AfterViewInit, OnDestroy {
           pm.livenessStartedAt = now;
         }
 
-        // Phase 2: passive liveness — track motion, check for phone, check screen frame.
+        // Phase 2: passive liveness — track motion and screen frame.
 
         // 2a. Collect face centroid (mean of 68 landmarks) each frame.
         if (det.landmarks?.positions?.length === 68) {
@@ -1112,33 +1136,11 @@ export class CheckinComponent implements AfterViewInit, OnDestroy {
           pm.livenessPositions.push({ x: lx / 68, y: ly / 68 });
         }
 
-        // 2b. COCO-SSD cell phone check (updated every ~1 s by the object-detector loop).
-        if (this.lastObjectDetections.some((d) => d.class === 'cell phone' && d.score >= 0.35)) {
-          pm.phoneDetectedCount++;
-        }
-
-        // 2c. Screen-frame check every ~5 frames (canvas pixel sampling is expensive).
+        // 2b. Screen-frame check every ~5 frames (canvas pixel sampling is expensive).
         if (pm.livenessPositions.length > 0 && pm.livenessPositions.length % 5 === 0) {
           if (this.facePipeline.detectScreenFrame(this.videoRef.nativeElement, det.box)) {
             pm.screenFrameFailCount++;
           }
-        }
-
-        // 2d. Immediate fail: phone visible in 2+ consecutive object-detector ticks.
-        if (pm.phoneDetectedCount >= PHONE_DETECT_THRESHOLD) {
-          if (!pm.livenessFailReported) {
-            pm.livenessFailReported = true;
-            const alertImage = this.facePipeline.captureFaceJpeg(this.videoRef.nativeElement, det.box, 0.85);
-            this.attendanceService.reportLivenessFail(r.employee, alertImage, this.getScanLocationId()).subscribe();
-            this.showResult(
-              `⚠️ ตรวจพบโทรศัพท์มือถือในเฟรม (${r.employee.full_name}) — ระบบบันทึกเหตุการณ์ไว้แล้ว`,
-              'error',
-            );
-          }
-          if (now - pm.livenessStartedAt > LIVENESS_WINDOW_MS + LIVENESS_RESET_DELAY_MS) {
-            delete this.pendingMatch[key];
-          }
-          return { det, r: { ...r, scan_type: undefined, message: 'ตรวจพบโทรศัพท์มือถือ กรุณาสแกนด้วยใบหน้าจริง' } };
         }
 
         // Still collecting data — wait for window to close.
@@ -1326,7 +1328,7 @@ export class CheckinComponent implements AfterViewInit, OnDestroy {
       this.startWatchdog();
       // Always load object detector for phone-in-frame anti-spoofing, regardless
       // of the display-overlay toggle (that toggle only controls display boxes).
-      setTimeout(() => { if (!this.destroyed && this.running) this.initObjectDetector(); }, 6000);
+      setTimeout(() => { if (!this.destroyed && this.running) this.initObjectDetector(); }, 1000);
     } catch (e: any) {
       this.modelsLoading = false;
       this.loadError = e?.message || String(e);
