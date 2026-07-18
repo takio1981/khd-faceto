@@ -122,6 +122,7 @@ const VFOV_KEY = 'camVFovDeg';
 
 const OBJ_DETECTOR_KEY = 'camObjectDetector';
 const ANTI_SPOOFING_KEY = 'camAntiSpoofing';
+const BG_BLUR_KEY = 'camBackgroundBlur';
 const OBJ_DETECT_INTERVAL_MS = 1000;
 const OBJ_MIN_SCORE = 0.50; // discard low-confidence detections
 
@@ -161,6 +162,7 @@ const MAX_AUTO_ZOOM_SPEED = 0.25;
 export class CheckinComponent implements AfterViewInit, OnDestroy {
   @ViewChild('video') videoRef!: ElementRef<HTMLVideoElement>;
   @ViewChild('overlay') overlayRef!: ElementRef<HTMLCanvasElement>;
+  @ViewChild('bgCanvas') bgCanvasRef?: ElementRef<HTMLCanvasElement>;
   @ViewChild('camWrap') camWrapRef!: ElementRef<HTMLDivElement>;
   @ViewChild('camFrame') camFrameRef!: ElementRef<HTMLDivElement>;
 
@@ -237,6 +239,7 @@ export class CheckinComponent implements AfterViewInit, OnDestroy {
 
   // ===== Anti-spoofing (phone/screen detection) =====
   antiSpoofingEnabled = true; // on by default; admin can disable for testing
+  backgroundBlurEnabled = false;
 
   // Non-human detections with score >= OBJ_MIN_SCORE visible in the frame
   get visibleNonHuman(): ObjectDetection[] {
@@ -360,6 +363,7 @@ export class CheckinComponent implements AfterViewInit, OnDestroy {
     );
     this.objectDetectorEnabled = localStorage.getItem(OBJ_DETECTOR_KEY) === '1';
     this.antiSpoofingEnabled = localStorage.getItem(ANTI_SPOOFING_KEY) !== '0'; // default ON
+    this.backgroundBlurEnabled = localStorage.getItem(BG_BLUR_KEY) === '1';
     this.autoZoomEnabled = localStorage.getItem(AUTO_ZOOM_KEY) === '1';
     this.autoZoomMaxLevel = this.clampNumber(
       Number(localStorage.getItem(AUTO_ZOOM_LEVEL_KEY)) || DEFAULT_AUTO_ZOOM_LEVEL,
@@ -651,6 +655,10 @@ export class CheckinComponent implements AfterViewInit, OnDestroy {
     }
   }
 
+  onBackgroundBlurToggle(): void {
+    localStorage.setItem(BG_BLUR_KEY, this.backgroundBlurEnabled ? '1' : '0');
+  }
+
   private initObjectDetector(): void {
     this.objectDetectorLoading = true;
     this.facePipeline.loadObjectDetector().then(() => {
@@ -836,6 +844,30 @@ export class CheckinComponent implements AfterViewInit, OnDestroy {
     const sx = overlay.width / (video.videoWidth || 640);
     const sy = overlay.height / (video.videoHeight || 480);
     ctx.clearRect(0, 0, overlay.width, overlay.height);
+
+    // Portrait-mode background blur: draw blurred video frame with unblurred
+    // face patches cut out on top, so the background is masked while the face
+    // stays crisp — helps anti-spoofing by hiding reference-background textures.
+    const bgCanvas = this.bgCanvasRef?.nativeElement;
+    if (bgCanvas && this.backgroundBlurEnabled && video.videoWidth) {
+      bgCanvas.width = video.videoWidth;
+      bgCanvas.height = video.videoHeight;
+      const bgCtx = bgCanvas.getContext('2d');
+      if (bgCtx) {
+        bgCtx.filter = 'blur(14px)';
+        bgCtx.drawImage(video, 0, 0, bgCanvas.width, bgCanvas.height);
+        bgCtx.filter = 'none';
+        results.forEach(({ det }) => {
+          const b = det.box;
+          const pad = 40;
+          const fx = Math.max(0, b.x - pad);
+          const fy = Math.max(0, b.y - pad);
+          const fw = Math.min(bgCanvas.width - fx, b.width + pad * 2);
+          const fh = Math.min(bgCanvas.height - fy, b.height + pad * 2);
+          bgCtx.drawImage(video, fx, fy, fw, fh, fx, fy, fw, fh);
+        });
+      }
+    }
 
     this.updateAutoZoom(results, overlay.width, overlay.height);
 

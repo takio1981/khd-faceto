@@ -31,6 +31,7 @@ export class ResponsiveTableComponent<T> implements OnInit, OnDestroy {
   @Input({ required: true }) data: T[] = [];
   @Input() trackByFn: (index: number, item: T) => any = (i) => i;
 
+  @ContentChild('headerRow') headerRowTpl?: TemplateRef<void>;
   @ContentChild('desktopRow') desktopRowTpl?: TemplateRef<{ $implicit: T }>;
   @ContentChild('cardRow') cardRowTpl?: TemplateRef<{ $implicit: T }>;
   @ContentChild('cardActions') cardActionsTpl?: TemplateRef<{ $implicit: T }>;

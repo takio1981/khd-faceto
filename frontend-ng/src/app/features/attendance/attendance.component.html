@@ -80,9 +80,43 @@
   </mat-accordion>
 
   <div class="results-card">
+    @if (isAdmin && selectedCount > 0) {
+      <div class="bulk-action-bar">
+        <span>เลือกแล้ว {{ selectedCount }} รายการ</span>
+        <button mat-flat-button color="warn" (click)="deleteSelected()">
+          <mat-icon>delete_sweep</mat-icon> ลบที่เลือก
+        </button>
+      </div>
+    }
+
     <app-responsive-table [columns]="columns" [data]="records" [trackByFn]="trackById">
+      @if (isAdmin) {
+        <ng-template #headerRow>
+          <tr>
+            <th class="checkbox-col">
+              <mat-checkbox [checked]="allSelected" [indeterminate]="someSelected" (change)="toggleSelectAll($event.checked)"></mat-checkbox>
+            </th>
+            <th>รหัส</th>
+            <th>ชื่อ-นามสกุล</th>
+            <th>แผนก</th>
+            <th>วันที่/เวลา</th>
+            <th>ประเภท</th>
+            <th>สถานะ</th>
+            <th>ความมั่นใจ</th>
+            <th>ภาพ</th>
+            <th>จุดสแกน</th>
+            <th>จัดการ</th>
+          </tr>
+        </ng-template>
+      }
+
       <ng-template #desktopRow let-row>
         <tr>
+          @if (isAdmin) {
+            <td class="checkbox-col">
+              <mat-checkbox [checked]="selectedIds.has(row.id)" (change)="toggleSelect(row.id, $event.checked)"></mat-checkbox>
+            </td>
+          }
           <td>{{ row.employee_code }}</td>
           <td>{{ row.full_name }}</td>
           <td>{{ row.department || '-' }}</td>
@@ -112,6 +146,11 @@
       </ng-template>
 
       <ng-template #cardRow let-row>
+        @if (isAdmin) {
+          <div class="card-checkbox">
+            <mat-checkbox [checked]="selectedIds.has(row.id)" (change)="toggleSelect(row.id, $event.checked)">เลือก</mat-checkbox>
+          </div>
+        }
         <div class="card-line"><strong>{{ row.employee_code }} - {{ row.full_name }}</strong></div>
         <div class="card-line"><span class="label">แผนก:</span> {{ row.department || '-' }}</div>
         <div class="card-line"><span class="label">วันที่/เวลา:</span> {{ fmtDateTime(row.scan_time) }}</div>

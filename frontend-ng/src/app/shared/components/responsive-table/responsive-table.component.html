@@ -2,11 +2,15 @@
   <div class="table-scroll-guard">
     <table class="data-table">
       <thead>
-        <tr>
-          @for (col of columns; track col.key) {
-            <th>{{ col.label }}</th>
-          }
-        </tr>
+        @if (headerRowTpl) {
+          <ng-container *ngTemplateOutlet="headerRowTpl"></ng-container>
+        } @else {
+          <tr>
+            @for (col of columns; track col.key) {
+              <th>{{ col.label }}</th>
+            }
+          </tr>
+        }
       </thead>
       <tbody>
         @for (row of data; track trackByFn($index, row)) {

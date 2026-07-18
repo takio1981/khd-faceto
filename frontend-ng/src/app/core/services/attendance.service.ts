@@ -42,6 +42,10 @@ export class AttendanceService {
     return this.http.delete<{ ok: boolean }>(`${base}/${id}`);
   }
 
+  bulkDelete(ids: number[]): Observable<{ ok: boolean; deleted: number }> {
+    return this.http.delete<{ ok: boolean; deleted: number }>(base, { body: { ids } });
+  }
+
   scan(descriptor: number[], imageBase64: string | undefined, scanLocationId: number | null): Observable<ScanResult> {
     return this.http.post<ScanResult>(`${base}/scan`, { descriptor, imageBase64, scanLocationId });
   }

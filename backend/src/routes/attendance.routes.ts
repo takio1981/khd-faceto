@@ -331,6 +331,26 @@ router.post('/preview', scanLimiter, asyncHandler(async (req, res) => {
   res.json(previewResult);
 }));
 
+// DELETE /api/attendance  - Admin: bulk delete records by ids array
+router.delete('/', verifyJWT, requireRole('admin'), asyncHandler(async (req, res) => {
+  const ids: number[] = req.body?.ids ?? [];
+  if (!Array.isArray(ids) || ids.length === 0) {
+    return res.status(400).json({ error: 'ids array required' });
+  }
+  const placeholders = ids.map(() => '?').join(', ');
+  await pool.query<ResultSetHeader>(
+    `DELETE FROM attendance_records WHERE id IN (${placeholders})`,
+    ids,
+  );
+  await logAudit(req, {
+    action: 'attendance.bulk_delete',
+    targetTable: 'attendance_records',
+    targetId: ids[0],
+    before: { ids },
+  });
+  res.json({ ok: true, deleted: ids.length });
+}));
+
 // DELETE /api/attendance/:id  - Admin: delete a record
 router.delete('/:id', verifyJWT, requireRole('admin'), asyncHandler(async (req, res) => {
   const [beforeRows] = await pool.query<RowDataPacket[]>('SELECT * FROM attendance_records WHERE id = ?', [req.params.id]);

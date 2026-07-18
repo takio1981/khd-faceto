@@ -11,6 +11,7 @@ import { MatIconModule } from '@angular/material/icon';
 import { MatInputModule } from '@angular/material/input';
 import { MatPaginatorModule, PageEvent } from '@angular/material/paginator';
 import { MatSelectModule } from '@angular/material/select';
+import { MatCheckboxModule } from '@angular/material/checkbox';
 import { MatTooltipModule } from '@angular/material/tooltip';
 
 import { AttendanceService, AttendanceFilter } from '../../core/services/attendance.service';
@@ -191,6 +192,7 @@ export class AttendanceEditDialogComponent {
     MatSelectModule,
     MatInputModule,
     MatButtonModule,
+    MatCheckboxModule,
     MatIconModule,
     MatPaginatorModule,
     MatTooltipModule,
@@ -228,6 +230,11 @@ export class AttendanceComponent implements OnInit, OnDestroy {
   pageSize = 20;
   loading = false;
 
+  selectedIds = new Set<number>();
+  get allSelected(): boolean { return this.records.length > 0 && this.records.every(r => this.selectedIds.has(r.id)); }
+  get someSelected(): boolean { return this.records.some(r => this.selectedIds.has(r.id)) && !this.allSelected; }
+  get selectedCount(): number { return this.selectedIds.size; }
+
   readonly scanTypeLabel = SCANTYPE_TH;
   readonly statusLabel = STATUS_TH;
   readonly fmtDateTime = fmtDateTime;
@@ -256,7 +263,7 @@ export class AttendanceComponent implements OnInit, OnDestroy {
 
   constructor() {
     if (this.isAdmin) {
-      this.columns = [...this.columns, { key: 'actions', label: 'จัดการ' }];
+      this.columns = [{ key: 'select', label: '' }, ...this.columns, { key: 'actions', label: 'จัดการ' }];
     }
   }
 
@@ -325,6 +332,7 @@ export class AttendanceComponent implements OnInit, OnDestroy {
   }
 
   load(): void {
+    this.selectedIds.clear();
     this.loading = true;
     this.attendanceService.list(this.buildFilter(this.page + 1)).subscribe({
       next: (res) => {
@@ -420,6 +428,36 @@ export class AttendanceComponent implements OnInit, OnDestroy {
       error: (err) => {
         this.notify.toast(err.error?.error || 'ลบไม่สำเร็จ', 'error');
       },
+    });
+  }
+
+  toggleSelectAll(checked: boolean): void {
+    if (checked) this.records.forEach(r => this.selectedIds.add(r.id));
+    else this.selectedIds.clear();
+  }
+
+  toggleSelect(id: number, checked: boolean): void {
+    if (checked) this.selectedIds.add(id);
+    else this.selectedIds.delete(id);
+  }
+
+  async deleteSelected(): Promise<void> {
+    const ids = [...this.selectedIds];
+    if (!ids.length) return;
+    const ok = await this.notify.confirm({
+      title: 'ยืนยันการลบ',
+      message: `ลบ ${ids.length} รายการที่เลือก? ข้อมูลจะถูกลบอย่างถาวร ไม่สามารถเรียกคืนได้`,
+      confirmText: 'ลบ',
+      cancelText: 'ยกเลิก',
+      danger: true,
+    });
+    if (!ok) return;
+    this.attendanceService.bulkDelete(ids).subscribe({
+      next: (res) => {
+        this.notify.toast(`ลบ ${res.deleted} รายการแล้ว`, 'success');
+        this.load();
+      },
+      error: (err) => this.notify.toast(err.error?.error || 'ลบไม่สำเร็จ', 'error'),
     });
   }
 }

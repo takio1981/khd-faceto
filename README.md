@@ -2,6 +2,10 @@
 
 Web app สแกนใบหน้าเพื่อลงเวลาเข้า-ออกงาน พร้อมบันทึกภาพใบหน้า, กำหนดกะ/OT, รายงาน, แดชบอร์ด และระบบสิทธิ์ Admin/User
 
+> **v2026-07-18j** เพิ่ม 2 ฟีเจอร์ใหม่:
+> - **Background Blur (เบลอพื้นหลัง)**: เพิ่ม toggle "🌫️ เบลอพื้นหลัง" ในเมนูตั้งค่าอุปกรณ์ — เบลอพื้นหลังรอบใบหน้าแบบ Portrait Mode ด้วย Canvas API (blur 14px ทั้งเฟรม แล้ว cut-out ใบหน้าแบบคมชัดซ้อนทับ) ช่วยซ่อนพื้นหลัง เพิ่มความแม่นยำ Anti-Spoofing และให้ภาพดูเป็นมืออาชีพ | รองรับ Flip H/V ด้วย CSS transform เช่นเดียวกับ video
+> - **Checkbox Multi-select ในตาราง Attendance**: (Admin เท่านั้น) เลือกรายการแต่ละแถว หรือ "เลือกทั้งหมด" ด้วย header checkbox | แสดง action bar "เลือกแล้ว N รายการ + ปุ่มลบที่เลือก" | backend เพิ่ม `DELETE /api/attendance` (bulk delete by ids array) | selection reset อัตโนมัติเมื่อเปลี่ยนหน้า/ค้นหาใหม่ | รองรับ card view บนมือถือด้วย
+>
 > **v2026-07-18i** แก้ false positive Anti-Spoofing: ระบบเคยตรวจจับพื้นหลังมืด (ผ้าม่าน/กำแพง) เป็นกรอบโทรศัพท์ผิดพลาด — เปลี่ยนเงื่อนไขเป็น **ต้องพบ OPPOSITE PAIR** (ซ้าย+ขวา หรือ บน+ล่าง ต้องมืดพร้อมกัน): phone bezel มีกรอบทั้งสองข้าง แต่ background มืดแค่ด้านเดียว | ปรับ threshold: brightness<95, std<35 | Phase 1 early-fail ต้องพบ 3 ครั้ง (จาก 2) เพื่อลด false positive
 >
 > **v2026-07-18h** ปรับปรุง Anti-Spoofing ให้ทำงานได้แม้ไม่มี COCO-SSD + เพิ่ม toggle เปิด-ปิดในเมนูตั้งค่าอุปกรณ์:

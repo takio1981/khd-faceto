@@ -35,6 +35,30 @@
   background: transparent;
 }
 
+.bulk-action-bar {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 8px 12px;
+  margin-bottom: 8px;
+  background: var(--mat-sys-surface-variant, #e0e0e0);
+  border-radius: 8px;
+  font-size: 14px;
+  font-weight: 500;
+}
+
+.checkbox-col {
+  width: 44px;
+  padding-left: 8px !important;
+  padding-right: 4px !important;
+}
+
+.card-checkbox {
+  margin-bottom: 8px;
+  padding-bottom: 8px;
+  border-bottom: 1px solid var(--divider, #e0e0e0);
+}
+
 .actions-cell {
   white-space: nowrap;
   text-align: right;

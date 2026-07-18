@@ -162,6 +162,17 @@
 
           <div class="cam-select">
             <div class="cam-select-row cam-zoom-toggle-row">
+              <label>🌫️ เบลอพื้นหลัง (Background Blur)</label>
+              <mat-slide-toggle [(ngModel)]="backgroundBlurEnabled" (ngModelChange)="onBackgroundBlurToggle()"></mat-slide-toggle>
+            </div>
+            <p class="cam-setting-hint">
+              เบลอพื้นหลังรอบใบหน้าแบบ Portrait Mode — ช่วยซ่อนพื้นหลังทำให้ระบบตรวจจับกรอบโทรศัพท์ได้แม่นขึ้น
+              และให้ภาพดูเป็นมืออาชีพมากขึ้น (ใบหน้าคมชัด, พื้นหลังเบลอ)
+            </p>
+          </div>
+
+          <div class="cam-select">
+            <div class="cam-select-row cam-zoom-toggle-row">
               <label>🛡️ ป้องกันการปลอมแปลงใบหน้า (Anti-Spoofing)</label>
               <mat-slide-toggle [(ngModel)]="antiSpoofingEnabled" (ngModelChange)="onAntiSpoofingToggle()"></mat-slide-toggle>
             </div>
@@ -206,7 +217,8 @@
       <div class="cam-wrap" #camWrap>
         <div class="cam-stage" [class.flip-h]="flipH" [class.flip-v]="flipV">
           <div class="cam-frame" #camFrame>
-            <video #video autoplay muted playsinline></video>
+            <video #video autoplay muted playsinline [style.opacity]="backgroundBlurEnabled ? 0 : 1"></video>
+            <canvas #bgCanvas class="bg-blur-canvas" [style.display]="backgroundBlurEnabled ? 'block' : 'none'"></canvas>
             <canvas #overlay class="overlay"></canvas>
             <div class="cam-guide"><span class="tl"></span><span class="tr"></span><span class="bl"></span><span class="br"></span></div>
             <div class="zoom-badge" *ngIf="autoZoomEnabled && isZoomActive">🔍 {{ currentZoomDisplay }}</div>
