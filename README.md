@@ -2,6 +2,13 @@
 
 Web app สแกนใบหน้าเพื่อลงเวลาเข้า-ออกงาน พร้อมบันทึกภาพใบหน้า, กำหนดกะ/OT, รายงาน, แดชบอร์ด และระบบสิทธิ์ Admin/User
 
+> **v2026-07-18l** เพิ่ม **Screen Brightness + Texture Detection** แก้ปัญหา COCO-SSD ตรวจจับโทรศัพท์ไม่ได้เมื่อถือชิดกล้อง (เห็นแค่จอ ไม่เห็น body):
+> - **Signal ① Brightness Grid**: วิเคราะห์เฟรมทั้งหมด 8×6 cells — เซลล์ที่มี mean luminance > 155 + within-cell variance < 700 คือ "screen-like"; หากครอบคลุม ≥35% ของเฟรม = ตรวจพบจอโทรศัพท์ — ทำงานได้แม้ phone body อยู่นอกเฟรม
+> - **Signal ② Face Texture (Gradient)**: crop ใบหน้า 24×24 px คำนวณ avg gradient magnitude — ผิวคนจริง > 9 px/cell, ใบหน้า JPEG บนจอ < 9 px/cell; ใช้เป็น secondary signal ยืนยันร่วมกับ brightness
+> - **Chip แสดงสถานะ real-time**: 🟢/🔴 จอ XX% แสดงที่มุมล่างเฟรมเสมอเมื่อ Anti-Spoofing เปิด (ใช้ tune threshold ได้)
+> - ทั้งสองทำงานเป็น pure Canvas/pixel ops บน canvas ขนาดเล็ก < 1ms ต่อเฟรม ไม่ต้องโหลดโมเดลเพิ่ม
+> - ปรับ threshold ผ่าน constants: `SCREEN_CELL_BRIGHT`, `SCREEN_CELL_UNIFORM`, `SCREEN_COVERAGE_RATIO`, `SCREEN_FACE_GRAD_MAX`
+>
 > **v2026-07-18k** ปรับปรุง Anti-Spoofing เป็น **ตรวจจับโทรศัพท์อย่างเดียว** (COCO-SSD Phone Detection Only):
 > - **ยกเลิก Background Blur**: ลบ toggle เบลอพื้นหลังออก + ลบ `#bgCanvas` canvas และ CSS ที่เกี่ยวข้องทั้งหมด
 > - **ตรวจจับ 2 ระดับพร้อมกัน**: (1) **Global Block** — COCO-SSD พบโทรศัพท์/laptop/TV ในเฟรม → block ทุก scan 3 วินาที; (2) **Face-on-Screen** — ใบหน้า (centroid) อยู่ภายใน bbox ของอุปกรณ์ → block ทันที

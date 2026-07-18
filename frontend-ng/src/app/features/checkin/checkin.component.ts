@@ -112,6 +112,25 @@ const ANTI_SPOOFING_KEY = 'camAntiSpoofing';
 const OBJ_DETECT_INTERVAL_MS = 1000;
 const OBJ_MIN_SCORE = 0.50; // discard low-confidence detections
 
+// Screen brightness / texture detection thresholds.
+// Adjustable so a project with unusual lighting can tune without recompiling.
+// Brightness grid: a cell is "screen-like" when mean luminance > BRIGHT and within-cell
+// variance < UNIFORM (phone backlight produces high, spatially smooth luminance).
+const SCREEN_CELL_BRIGHT = 155;  // 0-255 luminance, lower = more sensitive
+const SCREEN_CELL_UNIFORM = 700; // variance threshold, higher = more permissive
+const SCREEN_COVERAGE_RATIO = 0.35; // fraction of grid cells that must qualify
+const SCREEN_AVG_LUMA_ALT = 175;    // secondary trigger: very bright overall frame
+const SCREEN_ALT_COVERAGE = 0.20;   // alt coverage needed when avg luma is high
+// Texture (gradient) signal on the face patch: screens show JPEG-smoothed faces,
+// real skin has fine micro-texture → higher average gradient magnitude.
+const SCREEN_FACE_GRAD_MAX = 9.0;   // avg gradient below this = too smooth = screen
+
+interface ScreenDetectResult {
+  detected: boolean;
+  confidence: number; // 0.0-1.0
+  reason: string;
+}
+
 // Auto-zoom: when a face is detected the cam-frame div is CSS-scaled toward
 // the face centre so the kiosk display zooms in automatically.
 // Flip is applied on the <video> element via CSS class; here we invert the
@@ -224,6 +243,14 @@ export class CheckinComponent implements AfterViewInit, OnDestroy {
 
   // ===== Anti-spoofing (phone/screen detection) =====
   antiSpoofingEnabled = true; // on by default; admin can disable for testing
+
+  // Brightness-uniformity screen detection — updated every handleDetections() call.
+  screenBrightnessDetected = false;
+  screenBrightnessConfidence = 0; // 0.0-1.0, shown in UI for tuning
+
+  // Offscreen canvases reused each frame (avoid GC pressure from repeated creation).
+  private _screenCanvas: HTMLCanvasElement | null = null;
+  private _facePatchCanvas: HTMLCanvasElement | null = null;
 
   // Non-human detections with score >= OBJ_MIN_SCORE visible in the frame
   get visibleNonHuman(): ObjectDetection[] {
@@ -705,6 +732,126 @@ export class CheckinComponent implements AfterViewInit, OnDestroy {
     );
   }
 
+  // Screen detection via two complementary signals that work even when the
+  // phone body is entirely out of frame (COCO-SSD misses this case):
+  //
+  //  Signal A — Brightness uniformity grid (frame-wide):
+  //    Divide the video frame into an 8×6 grid of cells. Count cells whose
+  //    mean luminance is high AND within-cell variance is low. Phone screens
+  //    emit their own backlight → large uniform bright region. Natural scenes
+  //    lit by ambient light have patchy brightness with higher spatial variance.
+  //
+  //  Signal B — Face-patch texture (gradient magnitude):
+  //    Real skin at close range has fine micro-texture (pores, fine hairs,
+  //    subtle colour variation) → high average gradient magnitude. A face
+  //    photo displayed on a phone screen is JPEG-compressed and filtered by
+  //    the pixel matrix → lower gradient magnitude ("too smooth").
+  //
+  // Both signals are fast Canvas/pixel operations on tiny (64×48 / 24×24)
+  // images — well under 1 ms per call, safe to run every detection frame.
+  private detectScreenByBrightness(
+    faceBox?: { x: number; y: number; width: number; height: number },
+  ): ScreenDetectResult {
+    const video = this.videoRef?.nativeElement;
+    if (!video?.videoWidth || !video?.videoHeight) {
+      return { detected: false, confidence: 0, reason: '' };
+    }
+
+    // ---- Signal A: frame-wide brightness uniformity grid ----
+    const W = 64, H = 48;
+    if (!this._screenCanvas) {
+      this._screenCanvas = document.createElement('canvas');
+      this._screenCanvas.width = W;
+      this._screenCanvas.height = H;
+    }
+    const ctx = this._screenCanvas.getContext('2d', { willReadFrequently: true });
+    if (!ctx) return { detected: false, confidence: 0, reason: '' };
+    ctx.drawImage(video, 0, 0, W, H);
+    const { data } = ctx.getImageData(0, 0, W, H);
+
+    const COLS = 8, ROWS = 6;
+    const cellW = Math.floor(W / COLS);
+    const cellH = Math.floor(H / ROWS);
+    let brightUniformCells = 0;
+    let totalLuma = 0;
+    const totalCells = COLS * ROWS;
+
+    for (let row = 0; row < ROWS; row++) {
+      for (let col = 0; col < COLS; col++) {
+        const lumas: number[] = [];
+        for (let cy = 0; cy < cellH; cy++) {
+          for (let cx = 0; cx < cellW; cx++) {
+            const idx = ((row * cellH + cy) * W + (col * cellW + cx)) * 4;
+            const l = 0.299 * data[idx] + 0.587 * data[idx + 1] + 0.114 * data[idx + 2];
+            lumas.push(l);
+            totalLuma += l;
+          }
+        }
+        const mean = lumas.reduce((a, b) => a + b, 0) / lumas.length;
+        const variance = lumas.reduce((a, v) => a + (v - mean) ** 2, 0) / lumas.length;
+        if (mean > SCREEN_CELL_BRIGHT && variance < SCREEN_CELL_UNIFORM) brightUniformCells++;
+      }
+    }
+
+    const avgLuma = totalLuma / (W * H);
+    const uniformRatio = brightUniformCells / totalCells;
+    const brightnessSignal =
+      uniformRatio >= SCREEN_COVERAGE_RATIO ||
+      (avgLuma > SCREEN_AVG_LUMA_ALT && uniformRatio >= SCREEN_ALT_COVERAGE);
+
+    // ---- Signal B: face-patch gradient magnitude ----
+    let gradientSignal = false;
+    let avgGrad = -1;
+    if (faceBox && faceBox.width > 20 && faceBox.height > 20) {
+      const FP = 24;
+      if (!this._facePatchCanvas) {
+        this._facePatchCanvas = document.createElement('canvas');
+        this._facePatchCanvas.width = FP;
+        this._facePatchCanvas.height = FP;
+      }
+      const fctx = this._facePatchCanvas.getContext('2d', { willReadFrequently: true });
+      if (fctx) {
+        fctx.drawImage(video, faceBox.x, faceBox.y, faceBox.width, faceBox.height, 0, 0, FP, FP);
+        const fd = fctx.getImageData(0, 0, FP, FP).data;
+        const luma = (d: Uint8ClampedArray, i: number) =>
+          0.299 * d[i] + 0.587 * d[i + 1] + 0.114 * d[i + 2];
+        let gradSum = 0;
+        for (let y = 1; y < FP - 1; y++) {
+          for (let x = 1; x < FP - 1; x++) {
+            const gx = luma(fd, ((y) * FP + x + 1) * 4) - luma(fd, ((y) * FP + x - 1) * 4);
+            const gy = luma(fd, ((y + 1) * FP + x) * 4) - luma(fd, ((y - 1) * FP + x) * 4);
+            gradSum += Math.sqrt(gx * gx + gy * gy);
+          }
+        }
+        avgGrad = gradSum / ((FP - 2) * (FP - 2));
+        // Only flag as screen if face region is also bright enough to be backlit
+        gradientSignal = avgGrad < SCREEN_FACE_GRAD_MAX && avgLuma > 120;
+      }
+    }
+
+    const detected = brightnessSignal || gradientSignal;
+    const confidence = Math.min(
+      1,
+      Math.max(
+        uniformRatio,
+        gradientSignal ? Math.max(0, 1 - avgGrad / SCREEN_FACE_GRAD_MAX) * 0.8 : 0,
+      ),
+    );
+
+    let reason = '';
+    if (detected) {
+      if (brightnessSignal && gradientSignal) {
+        reason = `ตรวจพบแสงจอ+ใบหน้าเรียบเกินไป [${Math.round(uniformRatio * 100)}%, grad:${avgGrad.toFixed(1)}]`;
+      } else if (brightnessSignal) {
+        reason = `ตรวจพบแสงสม่ำเสมอผิดปกติ (จอโทรศัพท์/หน้าจอ) [${Math.round(uniformRatio * 100)}%]`;
+      } else {
+        reason = `ใบหน้าเรียบเกินไป — อาจเป็นภาพในจอโทรศัพท์ [grad:${avgGrad.toFixed(1)}]`;
+      }
+    }
+
+    return { detected, confidence, reason };
+  }
+
   // Converts face-box-height percentage to an estimated real-world distance
   // using the pinhole camera model (similar triangles):
   //   distance = faceHeight_m / (2 * tan(vFov/2) * pct/100)
@@ -1073,6 +1220,13 @@ export class CheckinComponent implements AfterViewInit, OnDestroy {
 
     const now = Date.now();
 
+    // Frame-wide brightness/uniformity screen detection (runs once per frame, no faceBox yet).
+    // Per-face texture (gradient) analysis runs later inside the pending-match loop where
+    // we have the face box. Both results feed the combined anti-spoofing decision.
+    const frameScreen = this.antiSpoofingEnabled ? this.detectScreenByBrightness() : null;
+    this.screenBrightnessDetected = frameScreen?.detected ?? false;
+    this.screenBrightnessConfidence = frameScreen?.confidence ?? 0;
+
     // Step 1: cheap preview (descriptor only) for every detected face.
     const previews: { det: FaceDetectionResult; r: ScanResult | null }[] = await Promise.all(
       dets.map(async (det) => {
@@ -1110,10 +1264,20 @@ export class CheckinComponent implements AfterViewInit, OnDestroy {
         //   Provides a second chance when Check A's confidence threshold was missed.
 
         if (this.antiSpoofingEnabled && r?.matched && r.employee) {
+          // Check A — COCO-SSD global phone block
           const isPhoneBlocked = now < this.phoneBlockedUntil;
+          // Check B — face centre inside a detected screen bbox
           const isOnScreen = this.objectDetectorReady && this.faceIsOnScreen(det.box);
+          // Check C — brightness uniformity (frame-wide, computed above)
+          const isFrameScreen = frameScreen?.detected ?? false;
+          // Check D — face-patch gradient (per-face texture; only computed if needed)
+          const facePatchResult =
+            !isPhoneBlocked && !isOnScreen && !isFrameScreen
+              ? this.detectScreenByBrightness(det.box)
+              : null;
+          const isFlatFace = facePatchResult?.detected ?? false;
 
-          if (isPhoneBlocked || isOnScreen) {
+          if (isPhoneBlocked || isOnScreen || isFrameScreen || isFlatFace) {
             const pmKey = r.employee.id;
             let pm = this.pendingMatch[pmKey];
             if (!pm?.spoofReported) {
@@ -1129,7 +1293,13 @@ export class CheckinComponent implements AfterViewInit, OnDestroy {
                 this.phoneBlockReported = true;
                 const alertImage = this.facePipeline.captureFaceJpeg(this.videoRef.nativeElement, det.box, 0.85);
                 this.attendanceService.reportLivenessFail(r.employee, alertImage, this.getScanLocationId()).subscribe();
-                const reason = isOnScreen ? 'ตรวจพบใบหน้าบนจอโทรศัพท์/หน้าจอ' : 'ตรวจพบโทรศัพท์มือถือในเฟรม';
+                const reason = isOnScreen
+                  ? 'ตรวจพบใบหน้าบนจอโทรศัพท์/หน้าจอ (COCO-SSD)'
+                  : isFrameScreen
+                    ? (frameScreen?.reason ?? 'ตรวจพบแสงสม่ำเสมอผิดปกติ (จอโทรศัพท์/หน้าจอ)')
+                    : isFlatFace
+                      ? (facePatchResult?.reason ?? 'ใบหน้าเรียบเกินไป — อาจเป็นภาพในจอโทรศัพท์')
+                      : 'ตรวจพบโทรศัพท์มือถือในเฟรม (COCO-SSD)';
                 this.showResult(`⚠️ ${reason} (${r.employee.full_name}) — ระบบบันทึกเหตุการณ์ไว้แล้ว`, 'error');
               }
             }
