@@ -166,15 +166,15 @@
               <mat-slide-toggle [(ngModel)]="antiSpoofingEnabled" (ngModelChange)="onAntiSpoofingToggle()"></mat-slide-toggle>
             </div>
             <p class="cam-setting-hint">
-              ใช้ <b>3 วิธีตรวจจับ</b>พร้อมกัน เพื่อรับมือกรณีโทรศัพท์ชิดกล้องหรือนอกเฟรม:<br>
+              ใช้ <b>3 วิธีตรวจจับ</b>พร้อมกัน:<br>
               ① <b>COCO-SSD</b> — ตรวจจับ cell phone/laptop/TV เมื่อมองเห็น body โทรศัพท์<br>
-              ② <b>Brightness Grid</b> — วิเคราะห์แสงสม่ำเสมอผิดปกติทั่วเฟรม (backlight จอโทรศัพท์) ทำงานแม้เห็นแค่จอ ไม่ต้องเห็น body<br>
-              ③ <b>Texture Analysis</b> — ตรวจจับใบหน้าที่ "เรียบเกินไป" เทียบกับผิวคนจริง (ภาพ JPEG บนจอมี texture ต่ำกว่า)<br>
-              เปิดไว้เสมอในสภาพแวดล้อมจริง, ปิดได้เฉพาะสำหรับการทดสอบ — chip 🟢🔴 จอ แสดงค่าความเชื่อมั่น Brightness Detection real-time<br>
+              ② <b>Phone Bezel</b> (หลัก) — ตรวจ "กรอบมืด" รอบใบหน้าที่ detect ได้; ใบหน้าบนจอโทรศัพท์มีกรอบดำล้อมเสมอ ใบหน้าจริงไม่มี — ทำงานแม้ COCO-SSD ตรวจจับไม่ได้<br>
+              ③ <b>Brightness Grid</b> (สำรอง) — ตรวจแสงสม่ำเสมอสูงผิดปกติ (backlight จอในห้องมืด)<br>
+              chip 🟢🔴 จอ แสดงค่า confidence สูงสุดที่ตรวจจับได้ในขณะนั้น<br>
               สถานะ COCO-SSD:
               @if (objectDetectorLoading) { ⏳ กำลังโหลดโมเดล... }
               @else if (objectDetectorReady) { ✅ พร้อมแล้ว }
-              @else { ⬜ ยังไม่ได้โหลด (Brightness+Texture ทำงานได้โดยไม่ต้องรอ) }
+              @else { ⬜ ยังไม่ได้โหลด (Bezel Detection ทำงานได้ทันที ไม่ต้องรอ) }
             </p>
           </div>
 

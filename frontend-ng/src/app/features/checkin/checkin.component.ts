@@ -739,32 +739,14 @@ export class CheckinComponent implements AfterViewInit, OnDestroy {
     );
   }
 
-  // Screen detection via two complementary signals that work even when the
-  // phone body is entirely out of frame (COCO-SSD misses this case):
-  //
-  //  Signal A — Brightness uniformity grid (frame-wide):
-  //    Divide the video frame into an 8×6 grid of cells. Count cells whose
-  //    mean luminance is high AND within-cell variance is low. Phone screens
-  //    emit their own backlight → large uniform bright region. Natural scenes
-  //    lit by ambient light have patchy brightness with higher spatial variance.
-  //
-  //  Signal B — Face-patch texture (gradient magnitude):
-  //    Real skin at close range has fine micro-texture (pores, fine hairs,
-  //    subtle colour variation) → high average gradient magnitude. A face
-  //    photo displayed on a phone screen is JPEG-compressed and filtered by
-  //    the pixel matrix → lower gradient magnitude ("too smooth").
-  //
-  // Both signals are fast Canvas/pixel operations on tiny (64×48 / 24×24)
-  // images — well under 1 ms per call, safe to run every detection frame.
-  private detectScreenByBrightness(
-    faceBox?: { x: number; y: number; width: number; height: number },
-  ): ScreenDetectResult {
+  // Frame-wide brightness uniformity check (Signal A).
+  // Conservative threshold: only catches very bright phone screens in dim rooms.
+  // The primary per-face check is detectPhoneBezel() below.
+  private detectScreenByBrightness(): ScreenDetectResult {
     const video = this.videoRef?.nativeElement;
     if (!video?.videoWidth || !video?.videoHeight) {
       return { detected: false, confidence: 0, reason: '' };
     }
-
-    // ---- Signal A: frame-wide brightness uniformity grid ----
     const W = 64, H = 48;
     if (!this._screenCanvas) {
       this._screenCanvas = document.createElement('canvas');
@@ -775,14 +757,12 @@ export class CheckinComponent implements AfterViewInit, OnDestroy {
     if (!ctx) return { detected: false, confidence: 0, reason: '' };
     ctx.drawImage(video, 0, 0, W, H);
     const { data } = ctx.getImageData(0, 0, W, H);
-
     const COLS = 8, ROWS = 6;
     const cellW = Math.floor(W / COLS);
     const cellH = Math.floor(H / ROWS);
     let brightUniformCells = 0;
     let totalLuma = 0;
     const totalCells = COLS * ROWS;
-
     for (let row = 0; row < ROWS; row++) {
       for (let col = 0; col < COLS; col++) {
         const lumas: number[] = [];
@@ -799,64 +779,118 @@ export class CheckinComponent implements AfterViewInit, OnDestroy {
         if (mean > SCREEN_CELL_BRIGHT && variance < SCREEN_CELL_UNIFORM) brightUniformCells++;
       }
     }
-
     const avgLuma = totalLuma / (W * H);
     const uniformRatio = brightUniformCells / totalCells;
-    const brightnessSignal =
+    const detected =
       uniformRatio >= SCREEN_COVERAGE_RATIO ||
       (avgLuma > SCREEN_AVG_LUMA_ALT && uniformRatio >= SCREEN_ALT_COVERAGE);
+    return {
+      detected,
+      confidence: uniformRatio,
+      reason: detected ? `ตรวจพบแสงสม่ำเสมอสูงผิดปกติ [${Math.round(uniformRatio * 100)}%]` : '',
+    };
+  }
 
-    // ---- Signal B: face-patch gradient magnitude ----
-    let gradientSignal = false;
-    let avgGrad = -1;
-    if (faceBox && faceBox.width > 20 && faceBox.height > 20) {
-      const FP = 24;
-      if (!this._facePatchCanvas) {
-        this._facePatchCanvas = document.createElement('canvas');
-        this._facePatchCanvas.width = FP;
-        this._facePatchCanvas.height = FP;
-      }
-      const fctx = this._facePatchCanvas.getContext('2d', { willReadFrequently: true });
-      if (fctx) {
-        fctx.drawImage(video, faceBox.x, faceBox.y, faceBox.width, faceBox.height, 0, 0, FP, FP);
-        const fd = fctx.getImageData(0, 0, FP, FP).data;
-        const luma = (d: Uint8ClampedArray, i: number) =>
-          0.299 * d[i] + 0.587 * d[i + 1] + 0.114 * d[i + 2];
-        let gradSum = 0;
-        for (let y = 1; y < FP - 1; y++) {
-          for (let x = 1; x < FP - 1; x++) {
-            const gx = luma(fd, ((y) * FP + x + 1) * 4) - luma(fd, ((y) * FP + x - 1) * 4);
-            const gy = luma(fd, ((y + 1) * FP + x) * 4) - luma(fd, ((y - 1) * FP + x) * 4);
-            gradSum += Math.sqrt(gx * gx + gy * gy);
-          }
-        }
-        avgGrad = gradSum / ((FP - 2) * (FP - 2));
-        // Only flag as screen if face region is also bright enough to be backlit
-        gradientSignal = avgGrad < SCREEN_FACE_GRAD_MAX && avgLuma > 120;
-      }
+  // Phone-bezel detection (PRIMARY per-face signal).
+  //
+  // A face shown on a phone screen always has a dark rectangular bezel around
+  // it (phone frame / notification bar). A real face in a room does NOT have
+  // a uniformly dark rectangle immediately surrounding it.
+  //
+  // Method: expand the face bbox by EXPAND_R on each side. Draw the expanded
+  // region onto a tiny canvas divided into a 3×3 zone grid:
+  //
+  //   ┌──────────────────┐
+  //   │  TL │  TOP  │ TR │  ← border ring (bezel check region)
+  //   ├─────┼────────┼───┤
+  //   │ LFT │  FACE  │ RT │
+  //   ├─────┼────────┼───┤
+  //   │  BL │  BOT  │ BR │
+  //   └──────────────────┘
+  //
+  // If the 4 border strips (top/bottom/left/right of the expanded region) are:
+  //   • dark on average (mean luminance < BEZEL_DARK_MAX), AND
+  //   • the face centre is clearly brighter (contrast > BEZEL_CONTRAST_MIN)
+  // the face is surrounded by a phone bezel → spoofing likely.
+  //
+  // Works even when the phone body is entirely out of frame because it
+  // analyses the CONTENT just outside the detected face area.
+  private detectPhoneBezel(
+    faceBox: { x: number; y: number; width: number; height: number },
+  ): ScreenDetectResult {
+    const video = this.videoRef?.nativeElement;
+    if (!video?.videoWidth || !video?.videoHeight || faceBox.width < 30 || faceBox.height < 30) {
+      return { detected: false, confidence: 0, reason: '' };
     }
+    const vw = video.videoWidth, vh = video.videoHeight;
+    const { x, y, width: w, height: h } = faceBox;
 
-    const detected = brightnessSignal || gradientSignal;
-    const confidence = Math.min(
-      1,
-      Math.max(
-        uniformRatio,
-        gradientSignal ? Math.max(0, 1 - avgGrad / SCREEN_FACE_GRAD_MAX) * 0.8 : 0,
-      ),
-    );
+    // Expand the face box by 35% each side to sample the surrounding region.
+    const EXPAND_R = 0.35;
+    const ex = Math.max(0, x - w * EXPAND_R);
+    const ey = Math.max(0, y - h * EXPAND_R);
+    const er = Math.min(vw, x + w + w * EXPAND_R);
+    const eb = Math.min(vh, y + h + h * EXPAND_R);
+    const ew = er - ex, eh = eb - ey;
+    if (ew < 4 || eh < 4) return { detected: false, confidence: 0, reason: '' };
 
-    let reason = '';
-    if (detected) {
-      if (brightnessSignal && gradientSignal) {
-        reason = `ตรวจพบแสงจอ+ใบหน้าเรียบเกินไป [${Math.round(uniformRatio * 100)}%, grad:${avgGrad.toFixed(1)}]`;
-      } else if (brightnessSignal) {
-        reason = `ตรวจพบแสงสม่ำเสมอผิดปกติ (จอโทรศัพท์/หน้าจอ) [${Math.round(uniformRatio * 100)}%]`;
-      } else {
-        reason = `ใบหน้าเรียบเกินไป — อาจเป็นภาพในจอโทรศัพท์ [grad:${avgGrad.toFixed(1)}]`;
-      }
+    // Draw the expanded region at 9×9 (face maps to inner 3×3, border = outer ring).
+    const SZ = 9;
+    if (!this._facePatchCanvas) {
+      this._facePatchCanvas = document.createElement('canvas');
     }
+    this._facePatchCanvas.width = SZ;
+    this._facePatchCanvas.height = SZ;
+    const fctx = this._facePatchCanvas.getContext('2d', { willReadFrequently: true });
+    if (!fctx) return { detected: false, confidence: 0, reason: '' };
+    fctx.drawImage(video, ex, ey, ew, eh, 0, 0, SZ, SZ);
+    const { data } = fctx.getImageData(0, 0, SZ, SZ);
 
-    return { detected, confidence, reason };
+    const luma = (px: number, py: number) => {
+      const i = (py * SZ + px) * 4;
+      return 0.299 * data[i] + 0.587 * data[i + 1] + 0.114 * data[i + 2];
+    };
+
+    // Face centre: inner 3×3 (pixels 3-5 in the 9×9 grid)
+    const F0 = 3, F1 = 5;
+    let faceSum = 0, faceN = 0;
+    for (let py = F0; py <= F1; py++) for (let px = F0; px <= F1; px++) { faceSum += luma(px, py); faceN++; }
+    const faceMean = faceSum / faceN;
+
+    // Border strips (outer ring, excluding corners for stability)
+    const stripMean = (x0: number, x1: number, y0: number, y1: number) => {
+      let s = 0, n = 0;
+      for (let py = y0; py <= y1; py++) for (let px = x0; px <= x1; px++) { s += luma(px, py); n++; }
+      return n ? s / n : 255;
+    };
+    const topMean    = stripMean(F0, F1, 0, F0 - 1);
+    const bottomMean = stripMean(F0, F1, F1 + 1, SZ - 1);
+    const leftMean   = stripMean(0, F0 - 1, F0, F1);
+    const rightMean  = stripMean(F1 + 1, SZ - 1, F0, F1);
+    const allStrips  = [topMean, bottomMean, leftMean, rightMean];
+    const avgBorder  = allStrips.reduce((a, b) => a + b, 0) / 4;
+
+    // Bezel = border is dark AND face is clearly brighter
+    const BEZEL_DARK = 90;       // border mean below this = dark bezel
+    const CONTRAST_MIN = 45;     // face must be this much brighter than border
+    const darkStrips = allStrips.filter(m => m < BEZEL_DARK && faceMean - m > CONTRAST_MIN).length;
+
+    // Require at least an opposite pair (both horizontal OR both vertical strips qualify)
+    const hPair = topMean < BEZEL_DARK && faceMean - topMean > CONTRAST_MIN &&
+                  bottomMean < BEZEL_DARK && faceMean - bottomMean > CONTRAST_MIN;
+    const vPair = leftMean < BEZEL_DARK && faceMean - leftMean > CONTRAST_MIN &&
+                  rightMean < BEZEL_DARK && faceMean - rightMean > CONTRAST_MIN;
+
+    const detected = hPair || vPair || darkStrips >= 3;
+    const confidence = Math.min(1, darkStrips / 4 + (hPair || vPair ? 0.25 : 0));
+
+    return {
+      detected,
+      confidence,
+      reason: detected
+        ? `ตรวจพบกรอบมืดรอบใบหน้า (กรอบโทรศัพท์) border:${Math.round(avgBorder)} face:${Math.round(faceMean)} dark:${darkStrips}/4`
+        : '',
+    };
   }
 
   // Converts face-box-height percentage to an estimated real-world distance
@@ -1278,19 +1312,19 @@ export class CheckinComponent implements AfterViewInit, OnDestroy {
           const isOnScreen = this.objectDetectorReady && this.faceIsOnScreen(det.box);
           // Check C — brightness uniformity (frame-wide, very conservative threshold)
           const isFrameScreen = frameScreen?.detected ?? false;
-          // Check D — face-patch gradient texture (PRIMARY detector, runs always).
-          // detectScreenByBrightness with faceBox runs Signal B (gradient) independently
-          // of Signal A; Signal A inside it also has a very high threshold so it won't
-          // false-positive in normal office lighting.
-          const facePatchResult = this.detectScreenByBrightness(det.box);
-          const isFlatFace = facePatchResult.detected;
-          // Update chip to reflect the face-texture confidence (more meaningful than frame brightness)
-          if (facePatchResult.confidence > this.screenBrightnessConfidence) {
-            this.screenBrightnessDetected = isFlatFace;
-            this.screenBrightnessConfidence = facePatchResult.confidence;
+          // Check D — phone bezel detection (PRIMARY per-face detector).
+          // Detects the dark rectangular frame (phone bezel/body) around the
+          // face when it is shown on a phone screen. A real face in a room
+          // does NOT have a uniformly dark border immediately surrounding it.
+          const bezelResult = this.detectPhoneBezel(det.box);
+          const hasBezel = bezelResult.detected;
+          // Update chip so it reflects the most significant signal seen so far.
+          if (bezelResult.confidence > this.screenBrightnessConfidence) {
+            this.screenBrightnessDetected = hasBezel;
+            this.screenBrightnessConfidence = bezelResult.confidence;
           }
 
-          if (isPhoneBlocked || isOnScreen || isFrameScreen || isFlatFace) {
+          if (isPhoneBlocked || isOnScreen || isFrameScreen || hasBezel) {
             const pmKey = r.employee.id;
             let pm = this.pendingMatch[pmKey];
             if (!pm?.spoofReported) {
@@ -1310,8 +1344,8 @@ export class CheckinComponent implements AfterViewInit, OnDestroy {
                   ? 'ตรวจพบใบหน้าบนจอโทรศัพท์/หน้าจอ (COCO-SSD)'
                   : isFrameScreen
                     ? (frameScreen?.reason ?? 'ตรวจพบแสงสม่ำเสมอผิดปกติ (จอโทรศัพท์/หน้าจอ)')
-                    : isFlatFace
-                      ? (facePatchResult?.reason ?? 'ใบหน้าเรียบเกินไป — อาจเป็นภาพในจอโทรศัพท์')
+                    : hasBezel
+                      ? (bezelResult.reason || 'ตรวจพบกรอบมืดรอบใบหน้า — ใบหน้าอยู่ในจอโทรศัพท์')
                       : 'ตรวจพบโทรศัพท์มือถือในเฟรม (COCO-SSD)';
                 this.showResult(`⚠️ ${reason} (${r.employee.full_name}) — ระบบบันทึกเหตุการณ์ไว้แล้ว`, 'error');
               }
