@@ -73,6 +73,17 @@
       </mat-form-field>
 
       <mat-form-field appearance="outline">
+        <mat-label>กะวันหยุด</mat-label>
+        <mat-select formControlName="holiday_shift_id">
+          <mat-option [value]="null">— ใช้กะปกติ —</mat-option>
+          @for (s of data.shifts; track s.id) {
+            <mat-option [value]="s.id">{{ s.name }}</mat-option>
+          }
+        </mat-select>
+        <mat-hint>ถ้ากำหนดไว้ จะใช้กะนี้แทนกะปกติในวันหยุดประกาศ</mat-hint>
+      </mat-form-field>
+
+      <mat-form-field appearance="outline">
         <mat-label>ผู้บังคับบัญชา</mat-label>
         <mat-select formControlName="supervisor_id">
           <mat-option [value]="null">— ไม่ระบุ —</mat-option>

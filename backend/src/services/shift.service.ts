@@ -8,6 +8,7 @@ import { Shift, ScanType, AttendanceStatus, ScanResult } from '../types';
 import { ensureFaceCache, findBestMatchStrict } from './faceCache';
 import { notifyScan, notifyUnknownFace } from './notification.service';
 import { ictSecondsSinceMidnight, ictMysqlDateTime, ictDateKey, ictTimeStamp } from '../utils/ict';
+import { isHoliday } from './holidays.service';
 
 // ---- Time helpers ---------------------------------------------------------
 
@@ -101,6 +102,17 @@ async function getShift(shiftId: number | null): Promise<Shift | null> {
   const params = shiftId ? [shiftId] : [];
   const [rows] = await pool.query<RowDataPacket[]>(sql, params);
   return rows.length ? (rows[0] as Shift) : null;
+}
+
+// Returns the effective shift for a scan: if today is a declared holiday AND
+// the employee has a holiday_shift_id configured, use that shift; otherwise
+// fall back to their regular shift (or the first-defined shift if none assigned).
+async function getEffectiveShift(shiftId: number | null, holidayShiftId: number | null, now: Date): Promise<Shift | null> {
+  if (holidayShiftId && (await isHoliday(dateKey(now)))) {
+    const [rows] = await pool.query<RowDataPacket[]>('SELECT * FROM shifts WHERE id = ? LIMIT 1', [holidayShiftId]);
+    if (rows.length) return rows[0] as Shift;
+  }
+  return getShift(shiftId);
 }
 
 // ---- Today's existing scans ----------------------------------------------
@@ -245,7 +257,7 @@ export async function processScan(
     }
   }
 
-  const shift = await getShift(entry.shiftId);
+  const shift = await getEffectiveShift(entry.shiftId, entry.holidayShiftId, now);
   if (!shift) {
     return {
       matched: true,
@@ -374,7 +386,7 @@ export async function processScanPreview(
     }
   }
 
-  const shift = await getShift(entry.shiftId);
+  const shift = await getEffectiveShift(entry.shiftId, entry.holidayShiftId, now);
   if (!shift) {
     return {
       matched: true,

@@ -9,6 +9,7 @@ export interface CachedDescriptor {
   employeeCode: string;
   fullName: string;
   shiftId: number | null;
+  holidayShiftId: number | null;
   descriptor: number[]; // 128 floats
 }
 
@@ -18,7 +19,7 @@ let loaded = false;
 export async function loadFaceCache(): Promise<void> {
   const [rows] = await pool.query<RowDataPacket[]>(
     `SELECT fd.employee_id, fd.descriptor,
-            e.employee_code, e.full_name, e.shift_id
+            e.employee_code, e.full_name, e.shift_id, e.holiday_shift_id
        FROM face_descriptors fd
        JOIN employees e ON e.id = fd.employee_id
       WHERE e.is_active = 1`
@@ -29,6 +30,7 @@ export async function loadFaceCache(): Promise<void> {
     employeeCode: r.employee_code,
     fullName: r.full_name,
     shiftId: r.shift_id,
+    holidayShiftId: r.holiday_shift_id ?? null,
     // MariaDB JSON column may come back as a string or already-parsed array
     descriptor: typeof r.descriptor === 'string' ? JSON.parse(r.descriptor) : r.descriptor,
   }));

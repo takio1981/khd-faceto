@@ -33,13 +33,15 @@ async function resolvePositionText(positionId: number | null | undefined): Promi
 }
 
 const EMPLOYEE_SELECT = `
-  SELECT e.*, s.name AS shift_name, sup.full_name AS supervisor_name,
+  SELECT e.*, s.name AS shift_name, hs.name AS holiday_shift_name,
+         sup.full_name AS supervisor_name,
          dept.name AS department_name, dv.name AS division_name, dv.id AS division_id,
          pos.name AS position_name, lvl.name AS level_name,
          u.username AS login_username, u.role AS login_role,
          (SELECT COUNT(*) FROM face_descriptors fd WHERE fd.employee_id = e.id) AS face_count
     FROM employees e
     LEFT JOIN shifts s ON s.id = e.shift_id
+    LEFT JOIN shifts hs ON hs.id = e.holiday_shift_id
     LEFT JOIN employees sup ON sup.id = e.supervisor_id
     LEFT JOIN departments dept ON dept.id = e.department_id
     LEFT JOIN divisions dv ON dv.id = dept.division_id
@@ -70,7 +72,7 @@ router.get('/:id', asyncHandler(async (req, res) => {
 
 // POST /api/employees  - create. Optionally create a linked login account.
 router.post('/', asyncHandler(async (req, res) => {
-  const { employee_code, full_name, department_id, position_id, level_id, employee_type, shift_id, supervisor_id,
+  const { employee_code, full_name, department_id, position_id, level_id, employee_type, shift_id, holiday_shift_id, supervisor_id,
           notify_email, notify_line_user_id, notify_telegram_chat_id, notify_enabled,
           create_login, login_username, login_password, login_role } = req.body ?? {};
 
@@ -90,12 +92,12 @@ router.post('/', asyncHandler(async (req, res) => {
   const departmentText = await resolveDepartmentText(department_id);
   const positionText = await resolvePositionText(position_id);
   const [result] = await pool.query<ResultSetHeader>(
-    `INSERT INTO employees (employee_code, full_name, department, department_id, position, position_id, level_id, employee_type, shift_id, supervisor_id,
+    `INSERT INTO employees (employee_code, full_name, department, department_id, position, position_id, level_id, employee_type, shift_id, holiday_shift_id, supervisor_id,
                              notify_email, notify_line_user_id, notify_telegram_chat_id, notify_enabled)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     [
       employee_code, full_name, departmentText, department_id || null, positionText, position_id || null, level_id || null, employee_type || 'temp_employee',
-      shift_id || null, supervisor_id || null,
+      shift_id || null, holiday_shift_id || null, supervisor_id || null,
       notify_email || null, notify_line_user_id || null, notify_telegram_chat_id || null,
       notify_enabled === undefined ? 1 : notify_enabled ? 1 : 0,
     ]
@@ -116,7 +118,7 @@ router.post('/', asyncHandler(async (req, res) => {
 
 // PUT /api/employees/:id
 router.put('/:id', asyncHandler(async (req, res) => {
-  const { employee_code, full_name, department_id, position_id, level_id, employee_type, shift_id, supervisor_id, is_active,
+  const { employee_code, full_name, department_id, position_id, level_id, employee_type, shift_id, holiday_shift_id, supervisor_id, is_active,
           notify_email, notify_line_user_id, notify_telegram_chat_id, notify_enabled } = req.body ?? {};
 
   if (supervisor_id && Number(supervisor_id) === Number(req.params.id)) {
@@ -135,15 +137,19 @@ router.put('/:id', asyncHandler(async (req, res) => {
   const [beforeRows] = await pool.query<RowDataPacket[]>('SELECT * FROM employees WHERE id = ?', [req.params.id]);
   const departmentText = await resolveDepartmentText(department_id);
   const positionText = await resolvePositionText(position_id);
+  const body = req.body ?? {};
+  const holidayShiftClause = 'holiday_shift_id' in body ? ', holiday_shift_id = ?' : '';
+  const holidayShiftParam = 'holiday_shift_id' in body ? [holiday_shift_id || null] : [];
   await pool.query<ResultSetHeader>(
     `UPDATE employees
         SET employee_code = ?, full_name = ?, department = ?, department_id = ?, position = ?, position_id = ?, level_id = ?, employee_type = ?,
-            shift_id = ?, supervisor_id = ?, is_active = ?,
+            shift_id = ?${holidayShiftClause}, supervisor_id = ?, is_active = ?,
             notify_email = ?, notify_line_user_id = ?, notify_telegram_chat_id = ?, notify_enabled = ?
       WHERE id = ?`,
     [
       employee_code, full_name, departmentText, department_id || null, positionText, position_id || null, level_id || null, employee_type || 'temp_employee',
-      shift_id || null, supervisor_id || null, is_active === undefined ? 1 : is_active ? 1 : 0,
+      shift_id || null, ...holidayShiftParam,
+      supervisor_id || null, is_active === undefined ? 1 : is_active ? 1 : 0,
       notify_email || null, notify_line_user_id || null, notify_telegram_chat_id || null,
       notify_enabled === undefined ? 1 : notify_enabled ? 1 : 0,
       req.params.id,
