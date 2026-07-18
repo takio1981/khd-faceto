@@ -502,9 +502,10 @@ export class FacePipelineService {
   }
 
   // Passive screen-frame detector for anti-spoofing.
-  // Samples narrow strips just outside the face bounding box.
-  // Phone/tablet bezels are dark, uniform bands — flagged when per-channel
-  // std < 45 AND average brightness < 130.  Triggers on 1+ matching strip.
+  // Samples 4 strips just outside the face bounding box (left, right, top, bottom).
+  // A phone/tablet bezel forms a RECTANGULAR frame, so BOTH members of an opposite pair
+  // (left+right OR top+bottom) must be dark.  A single dark background wall only
+  // darkens ONE side and therefore does NOT trigger — avoiding false positives.
   detectScreenFrame(video: HTMLVideoElement, faceBox: { x: number; y: number; width: number; height: number }): boolean {
     const vw = video.videoWidth || 640;
     const vh = video.videoHeight || 480;
@@ -525,33 +526,34 @@ export class FacePipelineService {
     const fw = Math.max(1, Math.round(faceBox.width * scaleX));
     const fh = Math.max(1, Math.round(faceBox.height * scaleY));
 
-    // Try gap=3 first; if strips fall out-of-bounds, fall back to gap=0 (directly adjacent).
-    let darkCount = 0;
-    for (const gap of [3, 0]) {
-      const strip = 14;
-      const regions = [
-        { x: fx - gap - strip, y: fy,                w: strip, h: fh   }, // left
-        { x: fx + fw + gap,    y: fy,                w: strip, h: fh   }, // right
-        { x: fx,               y: fy - gap - strip,  w: fw,    h: strip }, // top
-        { x: fx,               y: fy + fh + gap,     w: fw,    h: strip }, // bottom
-      ];
-      darkCount = 0;
-      for (const s of regions) {
-        if (s.w <= 0 || s.h <= 0 || s.x < 0 || s.y < 0 || s.x + s.w > sw || s.y + s.h > sh) continue;
-        const data = ctx.getImageData(s.x, s.y, s.w, s.h).data;
-        const n = data.length / 4;
-        if (n === 0) continue;
-        let rs = 0, gs = 0, bs = 0, rq = 0, gq = 0, bq = 0;
-        for (let i = 0; i < data.length; i += 4) {
-          rs += data[i]; gs += data[i + 1]; bs += data[i + 2];
-          rq += data[i] * data[i]; gq += data[i + 1] * data[i + 1]; bq += data[i + 2] * data[i + 2];
-        }
-        const rm = rs / n, gm = gs / n, bm = bs / n;
-        const std = Math.sqrt(((rq / n - rm * rm) + (gq / n - gm * gm) + (bq / n - bm * bm)) / 3);
-        const brightness = (rm + gm + bm) / 3;
-        if (std < 45 && brightness < 130) darkCount++;
+    const sampleStrip = (s: { x: number; y: number; w: number; h: number }): boolean => {
+      if (s.w <= 0 || s.h <= 0 || s.x < 0 || s.y < 0 || s.x + s.w > sw || s.y + s.h > sh) return false;
+      const data = ctx.getImageData(s.x, s.y, s.w, s.h).data;
+      const n = data.length / 4;
+      if (n === 0) return false;
+      let rs = 0, gs = 0, bs = 0, rq = 0, gq = 0, bq = 0;
+      for (let i = 0; i < data.length; i += 4) {
+        rs += data[i]; gs += data[i + 1]; bs += data[i + 2];
+        rq += data[i] * data[i]; gq += data[i + 1] * data[i + 1]; bq += data[i + 2] * data[i + 2];
       }
-      if (darkCount >= 1) return true; // found at least one dark strip
+      const rm = rs / n, gm = gs / n, bm = bs / n;
+      const std = Math.sqrt(((rq / n - rm * rm) + (gq / n - gm * gm) + (bq / n - bm * bm)) / 3);
+      const brightness = (rm + gm + bm) / 3;
+      // Phone bezels: dark (brightness<95) AND uniform (std<35)
+      return std < 35 && brightness < 95;
+    };
+
+    // Try gap=4 first; fall back to gap=0 for thin-bezel phones.
+    for (const gap of [4, 0]) {
+      const strip = 12;
+      const left   = sampleStrip({ x: fx - gap - strip, y: fy,                w: strip, h: fh   });
+      const right  = sampleStrip({ x: fx + fw + gap,    y: fy,                w: strip, h: fh   });
+      const top    = sampleStrip({ x: fx,               y: fy - gap - strip,  w: fw,    h: strip });
+      const bottom = sampleStrip({ x: fx,               y: fy + fh + gap,     w: fw,    h: strip });
+
+      // Require an OPPOSITE PAIR: both left+right OR both top+bottom must be dark.
+      // A background wall only darkens one side; a phone frame darkens at least two opposite sides.
+      if ((left && right) || (top && bottom)) return true;
     }
     return false;
   }

@@ -1177,8 +1177,8 @@ export class CheckinComponent implements AfterViewInit, OnDestroy {
         if (this.antiSpoofingEnabled && pm.count % 2 === 0) {
           if (this.facePipeline.detectScreenFrame(this.videoRef.nativeElement, det.box)) {
             pm.screenFrameFailCount++;
-            // Phase 1 early fail: 2 consecutive screen-frame detections → spoofing.
-            if (!pm.livenessPhase && pm.screenFrameFailCount >= 2 && !pm.livenessFailReported) {
+            // Phase 1 early fail: 3 screen-frame detections → spoofing.
+            if (!pm.livenessPhase && pm.screenFrameFailCount >= 3 && !pm.livenessFailReported) {
               pm.livenessFailReported = true;
               pm.livenessStartedAt = now; // used for reset timing
               const alertImage = this.facePipeline.captureFaceJpeg(this.videoRef.nativeElement, det.box, 0.85);
