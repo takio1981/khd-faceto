@@ -2,6 +2,7 @@ import { CommonModule } from '@angular/common';
 import { Component, Inject, OnDestroy, OnInit, inject } from '@angular/core';
 import { FormBuilder, ReactiveFormsModule } from '@angular/forms';
 import { MatNativeDateModule, provideNativeDateAdapter } from '@angular/material/core';
+import { MatTabsModule } from '@angular/material/tabs';
 import { MatButtonModule } from '@angular/material/button';
 import { MatDatepickerModule } from '@angular/material/datepicker';
 import { MAT_DIALOG_DATA, MatDialog, MatDialogModule, MatDialogRef } from '@angular/material/dialog';
@@ -55,14 +56,37 @@ function toDatetimeLocal(iso: string | null | undefined): string {
 @Component({
   selector: 'app-attendance-image-dialog',
   standalone: true,
-  imports: [MatDialogModule, MatButtonModule],
+  imports: [MatDialogModule, MatButtonModule, MatTabsModule],
   template: `
-    <h2 mat-dialog-title>ภาพใบหน้าขณะลงเวลา</h2>
+    <h2 mat-dialog-title>ภาพขณะลงเวลา</h2>
     <mat-dialog-content class="img-dialog-content">
-      @if (data.imageUrl) {
-        <img [src]="data.imageUrl" alt="face" class="face-img" />
+      @if (data.hasFullFrame) {
+        <mat-tab-group animationDuration="150ms">
+          <mat-tab label="👤 ใบหน้า">
+            <div class="tab-img-wrap">
+              @if (data.faceImageUrl) {
+                <img [src]="data.faceImageUrl" alt="face" class="dialog-img" />
+              } @else {
+                <p class="loading-text">กำลังโหลดภาพ...</p>
+              }
+            </div>
+          </mat-tab>
+          <mat-tab label="🌍 สภาพแวดล้อม">
+            <div class="tab-img-wrap">
+              @if (data.fullFrameUrl) {
+                <img [src]="data.fullFrameUrl" alt="full frame" class="dialog-img" />
+              } @else {
+                <p class="loading-text">กำลังโหลดภาพ...</p>
+              }
+            </div>
+          </mat-tab>
+        </mat-tab-group>
       } @else {
-        <p>กำลังโหลดภาพ...</p>
+        @if (data.faceImageUrl) {
+          <img [src]="data.faceImageUrl" alt="face" class="dialog-img" />
+        } @else {
+          <p class="loading-text">กำลังโหลดภาพ...</p>
+        }
       }
     </mat-dialog-content>
     <mat-dialog-actions align="end">
@@ -73,23 +97,35 @@ function toDatetimeLocal(iso: string | null | undefined): string {
     `
       .img-dialog-content {
         display: flex;
+        flex-direction: column;
         justify-content: center;
         align-items: center;
-        min-width: 240px;
+        min-width: 280px;
         min-height: 160px;
+        padding-top: 8px;
       }
-      .face-img {
-        max-width: 420px;
-        max-height: 70vh;
+      mat-tab-group { width: 100%; }
+      .tab-img-wrap {
+        display: flex;
+        justify-content: center;
+        align-items: center;
+        padding: 12px 0;
+        min-height: 140px;
+      }
+      .dialog-img {
+        max-width: 100%;
+        max-height: 65vh;
         border-radius: 8px;
+        display: block;
       }
+      .loading-text { color: #666; font-size: 13px; }
     `,
   ],
 })
 export class AttendanceImageDialogComponent {
   constructor(
     public dialogRef: MatDialogRef<AttendanceImageDialogComponent>,
-    @Inject(MAT_DIALOG_DATA) public data: { imageUrl: string | null },
+    @Inject(MAT_DIALOG_DATA) public data: { faceImageUrl: string | null; fullFrameUrl: string | null; hasFullFrame: boolean },
   ) {}
 }
 
@@ -363,23 +399,34 @@ export class AttendanceComponent implements OnInit, OnDestroy {
 
   viewImage(row: AttendanceRecord): void {
     if (!row.face_image_path) return;
+    const hasFullFrame = !!row.full_frame_path;
     const ref = this.dialog.open(AttendanceImageDialogComponent, {
-      data: { imageUrl: null },
-      width: '480px',
+      data: { faceImageUrl: null, fullFrameUrl: null, hasFullFrame },
+      width: hasFullFrame ? '560px' : '480px',
     });
+
     this.attendanceService.getImageBlob(row.id).subscribe({
       next: (blob) => {
         const url = URL.createObjectURL(blob);
         this.objectUrls.add(url);
-        ref.componentInstance.data.imageUrl = url;
+        ref.componentInstance.data.faceImageUrl = url;
       },
       error: () => {
         this.notify.toast('ไม่สามารถโหลดภาพได้', 'error');
         ref.close();
       },
     });
-    // Object URLs created here are revoked together on component destroy
-    // (see ngOnDestroy) rather than per-dialog-close, to keep things simple.
+
+    if (hasFullFrame) {
+      this.attendanceService.getFullFrameBlob(row.id).subscribe({
+        next: (blob) => {
+          const url = URL.createObjectURL(blob);
+          this.objectUrls.add(url);
+          ref.componentInstance.data.fullFrameUrl = url;
+        },
+        error: () => { /* non-critical — face crop still shows */ },
+      });
+    }
   }
 
   editRecord(row: AttendanceRecord): void {

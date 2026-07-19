@@ -2,6 +2,11 @@
 
 Web app สแกนใบหน้าเพื่อลงเวลาเข้า-ออกงาน พร้อมบันทึกภาพใบหน้า, กำหนดกะ/OT, รายงาน, แดชบอร์ด และระบบสิทธิ์ Admin/User
 
+> **v2026-07-19b** เพิ่มแสดงภาพเต็มเฟรมในประวัติการลงเวลา:
+> - **ปุ่ม "ดูภาพ"** เปิด dialog แสดง 2 tab: **"👤 ใบหน้า"** (face crop เหมือนเดิม) + **"🌍 สภาพแวดล้อม"** (ภาพเต็มเฟรมจากกล้อง) — tab สภาพแวดล้อมแสดงเมื่อมี `full_frame_path` เท่านั้น
+> - เพิ่ม `full_frame_path` ใน `AttendanceRecord` model
+> - `getFullFrameBlob(id)` ใน AttendanceService โหลดภาพเต็มเฟรมจาก `GET /api/attendance/full-frame/:id`
+>
 > **v2026-07-19a** ยกเลิกระบบตรวจจับโทรศัพท์/อุปกรณ์ทั้งหมด + เพิ่มบันทึกภาพเต็มเฟรมทุก scan:
 > - **ลบ Anti-Spoofing ทั้งหมด**: ยกเลิก COCO-SSD phone detection, Phone Bezel Detection, Brightness Grid Detection, chip "🟢🔴 จอ %", toggle ป้องกันการปลอมแปลง
 > - **บันทึก 2 ภาพต่อ scan**: (1) ภาพใบหน้า (crop เหมือนเดิม) + (2) **ภาพเต็มเฟรมจากกล้อง** (≤640px) เพื่อให้ admin ดูสภาพแวดล้อม/background ได้โดยตรง

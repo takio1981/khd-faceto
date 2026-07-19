@@ -114,6 +114,7 @@ export interface AttendanceRecord {
   scan_location_id?: number | null;
   scan_location_name?: string | null;
   face_image_path?: string | null;
+  full_frame_path?: string | null;
 }
 
 export interface AttendanceListResponse {
