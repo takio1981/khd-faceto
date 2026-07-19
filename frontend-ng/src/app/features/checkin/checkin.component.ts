@@ -55,8 +55,6 @@ interface PendingMatch {
   count: number;
   scanType: string;
   lastTime: number;
-  spoofReported: boolean;
-  spoofReportedAt: number;
 }
 
 const LOCATION_STORAGE_KEY = 'khd_checkin_location_id';
@@ -75,8 +73,6 @@ const DEFAULT_BOX_SMOOTHING = 0.45;
 const MIN_BOX_SMOOTHING = 0.1;
 const MAX_BOX_SMOOTHING = 0.9;
 const COUNTDOWN_SECONDS = 5;
-// Extra time after reporting spoofing before resetting (so the alert stays visible).
-const SPOOF_RESET_DELAY_MS = 2000;
 const DETECTION_INTERVAL_KEY = 'camDetectionIntervalMs';
 const BOX_SMOOTHING_KEY = 'camBoxSmoothing';
 
@@ -108,35 +104,8 @@ const MAX_VFOV_DEG = 120;
 const VFOV_KEY = 'camVFovDeg';
 
 const OBJ_DETECTOR_KEY = 'camObjectDetector';
-const ANTI_SPOOFING_KEY = 'camAntiSpoofing';
 const OBJ_DETECT_INTERVAL_MS = 1000;
-const OBJ_MIN_SCORE = 0.50; // discard low-confidence detections
-
-// Screen brightness / texture detection thresholds.
-// Adjustable so a project with unusual lighting can tune without recompiling.
-// Brightness grid: a cell is "screen-like" when mean luminance > BRIGHT and within-cell
-// variance < UNIFORM (phone backlight produces high, spatially smooth luminance).
-// Signal A (brightness grid) is only reliable in dark/dim environments.
-// In a normally lit office, too many cells qualify as "bright+uniform" regardless
-// of whether a phone screen is present → constant false positives.
-// Keep the threshold very high so it only catches extremely bright phone screens
-// (e.g. phone in a dark room or phone pressed right against the lens).
-const SCREEN_CELL_BRIGHT = 210;  // very high: must be brighter than typical office ambient
-const SCREEN_CELL_UNIFORM = 600; // tighter variance: more certain it's a screen
-const SCREEN_COVERAGE_RATIO = 0.55; // 55% of frame must be this extremely bright
-const SCREEN_AVG_LUMA_ALT = 255;   // effectively disabled (255 is the max)
-const SCREEN_ALT_COVERAGE = 0.99;  // effectively disabled
-// Signal B (face-patch gradient) is the PRIMARY detector.
-// Real skin at close range has fine micro-texture → higher avg gradient magnitude.
-// JPEG-compressed face photo on a phone screen is smoother → lower gradient.
-// Threshold tuned: real face ~12-25 px/cell, screen face ~4-9 px/cell.
-const SCREEN_FACE_GRAD_MAX = 8.5;  // avg gradient below this = too smooth = likely screen
-
-interface ScreenDetectResult {
-  detected: boolean;
-  confidence: number; // 0.0-1.0
-  reason: string;
-}
+const OBJ_MIN_SCORE = 0.50;
 
 // Auto-zoom: when a face is detected the cam-frame div is CSS-scaled toward
 // the face centre so the kiosk display zooms in automatically.
@@ -238,26 +207,12 @@ export class CheckinComponent implements AfterViewInit, OnDestroy {
   get currentZoomDisplay(): string { return this._zoomFactor.toFixed(1) + 'x'; }
   get isZoomActive(): boolean { return this._zoomFactor > 1.02; }
 
-  // ===== Object detector (COCO-SSD) =====
+  // ===== Object detector (COCO-SSD) — human/animal distinction only =====
   objectDetectorEnabled = false;
   objectDetectorReady = false;
   objectDetectorLoading = false;
   lastObjectDetections: ObjectDetection[] = [];
   private objDetectTimer: ReturnType<typeof setInterval> | null = null;
-  // Global phone-in-frame block: set when COCO-SSD detects a phone; prevents ALL scans.
-  private phoneBlockedUntil = 0;
-  private phoneBlockReported = false;
-
-  // ===== Anti-spoofing (phone/screen detection) =====
-  antiSpoofingEnabled = true; // on by default; admin can disable for testing
-
-  // Brightness-uniformity screen detection — updated every handleDetections() call.
-  screenBrightnessDetected = false;
-  screenBrightnessConfidence = 0; // 0.0-1.0, shown in UI for tuning
-
-  // Offscreen canvases reused each frame (avoid GC pressure from repeated creation).
-  private _screenCanvas: HTMLCanvasElement | null = null;
-  private _facePatchCanvas: HTMLCanvasElement | null = null;
 
   // Non-human detections with score >= OBJ_MIN_SCORE visible in the frame
   get visibleNonHuman(): ObjectDetection[] {
@@ -380,7 +335,6 @@ export class CheckinComponent implements AfterViewInit, OnDestroy {
       MAX_VFOV_DEG
     );
     this.objectDetectorEnabled = localStorage.getItem(OBJ_DETECTOR_KEY) === '1';
-    this.antiSpoofingEnabled = localStorage.getItem(ANTI_SPOOFING_KEY) !== '0'; // default ON
     this.autoZoomEnabled = localStorage.getItem(AUTO_ZOOM_KEY) === '1';
     this.autoZoomMaxLevel = this.clampNumber(
       Number(localStorage.getItem(AUTO_ZOOM_LEVEL_KEY)) || DEFAULT_AUTO_ZOOM_LEVEL,
@@ -665,13 +619,6 @@ export class CheckinComponent implements AfterViewInit, OnDestroy {
     }
   }
 
-  onAntiSpoofingToggle(): void {
-    localStorage.setItem(ANTI_SPOOFING_KEY, this.antiSpoofingEnabled ? '1' : '0');
-    if (this.antiSpoofingEnabled && this.running && !this.objectDetectorReady) {
-      this.initObjectDetector();
-    }
-  }
-
   private initObjectDetector(): void {
     this.objectDetectorLoading = true;
     this.facePipeline.loadObjectDetector().then(() => {
@@ -687,17 +634,6 @@ export class CheckinComponent implements AfterViewInit, OnDestroy {
       if (!this.running || !this.objectDetectorReady) return;
       try {
         this.lastObjectDetections = await this.facePipeline.detectObjects(this.videoRef.nativeElement);
-        // Global phone/screen block: if any phone/screen-type device is detected,
-        // block ALL face scans for the next few seconds and log spoofing if a face matches.
-        const PHONE_CLASSES = ['cell phone', 'remote', 'laptop', 'tv'];
-        const hasPhone = this.lastObjectDetections.some(
-          (d) => PHONE_CLASSES.includes(d.class) && d.score >= 0.1,
-        );
-        if (hasPhone) {
-          this.phoneBlockedUntil = Date.now() + 3000; // keep blocked 3s after last detection
-        } else if (Date.now() > this.phoneBlockedUntil + 1000) {
-          this.phoneBlockReported = false; // reset report flag when block expires
-        }
       } catch { /* best-effort, never block main loop */ }
     }, OBJ_DETECT_INTERVAL_MS);
   }
@@ -722,175 +658,27 @@ export class CheckinComponent implements AfterViewInit, OnDestroy {
     );
   }
 
-  // Returns true if the face centre sits inside any detected phone/screen/laptop/tv bbox.
-  // Used as a secondary spoofing check: when COCO-SSD sees a screen-type device that
-  // contains the face centre, the face is almost certainly being displayed on that device.
-  private faceIsOnScreen(faceBox: { x: number; y: number; width: number; height: number }): boolean {
-    if (!this.objectDetectorReady || !this.antiSpoofingEnabled) return false;
-    const screenClasses = ['cell phone', 'remote', 'laptop', 'tv'];
-    const screens = this.lastObjectDetections.filter(
-      (d) => screenClasses.includes(d.class) && d.score >= 0.1,
-    );
-    if (!screens.length) return false;
-    const fcx = faceBox.x + faceBox.width / 2;
-    const fcy = faceBox.y + faceBox.height / 2;
-    return screens.some(({ bbox: [bx, by, bw, bh] }) =>
-      fcx >= bx && fcx <= bx + bw && fcy >= by && fcy <= by + bh,
-    );
-  }
-
-  // Frame-wide brightness uniformity check (Signal A).
-  // Conservative threshold: only catches very bright phone screens in dim rooms.
-  // The primary per-face check is detectPhoneBezel() below.
-  private detectScreenByBrightness(): ScreenDetectResult {
+  // Capture a full-frame JPEG from the live video for environment context.
+  // Downscaled to ≤640 px wide so the stored file stays reasonably small
+  // while still showing the background clearly enough for admin review.
+  private captureFullFrame(): string {
     const video = this.videoRef?.nativeElement;
-    if (!video?.videoWidth || !video?.videoHeight) {
-      return { detected: false, confidence: 0, reason: '' };
+    if (!video?.videoWidth) return '';
+    const maxW = 640;
+    const scale = Math.min(1, maxW / video.videoWidth);
+    const canvas = document.createElement('canvas');
+    canvas.width = Math.round(video.videoWidth * scale);
+    canvas.height = Math.round(video.videoHeight * scale);
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return '';
+    ctx.save();
+    if (this.flipH || this.flipV) {
+      ctx.translate(this.flipH ? canvas.width : 0, this.flipV ? canvas.height : 0);
+      ctx.scale(this.flipH ? -1 : 1, this.flipV ? -1 : 1);
     }
-    const W = 64, H = 48;
-    if (!this._screenCanvas) {
-      this._screenCanvas = document.createElement('canvas');
-      this._screenCanvas.width = W;
-      this._screenCanvas.height = H;
-    }
-    const ctx = this._screenCanvas.getContext('2d', { willReadFrequently: true });
-    if (!ctx) return { detected: false, confidence: 0, reason: '' };
-    ctx.drawImage(video, 0, 0, W, H);
-    const { data } = ctx.getImageData(0, 0, W, H);
-    const COLS = 8, ROWS = 6;
-    const cellW = Math.floor(W / COLS);
-    const cellH = Math.floor(H / ROWS);
-    let brightUniformCells = 0;
-    let totalLuma = 0;
-    const totalCells = COLS * ROWS;
-    for (let row = 0; row < ROWS; row++) {
-      for (let col = 0; col < COLS; col++) {
-        const lumas: number[] = [];
-        for (let cy = 0; cy < cellH; cy++) {
-          for (let cx = 0; cx < cellW; cx++) {
-            const idx = ((row * cellH + cy) * W + (col * cellW + cx)) * 4;
-            const l = 0.299 * data[idx] + 0.587 * data[idx + 1] + 0.114 * data[idx + 2];
-            lumas.push(l);
-            totalLuma += l;
-          }
-        }
-        const mean = lumas.reduce((a, b) => a + b, 0) / lumas.length;
-        const variance = lumas.reduce((a, v) => a + (v - mean) ** 2, 0) / lumas.length;
-        if (mean > SCREEN_CELL_BRIGHT && variance < SCREEN_CELL_UNIFORM) brightUniformCells++;
-      }
-    }
-    const avgLuma = totalLuma / (W * H);
-    const uniformRatio = brightUniformCells / totalCells;
-    const detected =
-      uniformRatio >= SCREEN_COVERAGE_RATIO ||
-      (avgLuma > SCREEN_AVG_LUMA_ALT && uniformRatio >= SCREEN_ALT_COVERAGE);
-    return {
-      detected,
-      confidence: uniformRatio,
-      reason: detected ? `ตรวจพบแสงสม่ำเสมอสูงผิดปกติ [${Math.round(uniformRatio * 100)}%]` : '',
-    };
-  }
-
-  // Phone-bezel detection (PRIMARY per-face signal).
-  //
-  // A face shown on a phone screen always has a dark rectangular bezel around
-  // it (phone frame / notification bar). A real face in a room does NOT have
-  // a uniformly dark rectangle immediately surrounding it.
-  //
-  // Method: expand the face bbox by EXPAND_R on each side. Draw the expanded
-  // region onto a tiny canvas divided into a 3×3 zone grid:
-  //
-  //   ┌──────────────────┐
-  //   │  TL │  TOP  │ TR │  ← border ring (bezel check region)
-  //   ├─────┼────────┼───┤
-  //   │ LFT │  FACE  │ RT │
-  //   ├─────┼────────┼───┤
-  //   │  BL │  BOT  │ BR │
-  //   └──────────────────┘
-  //
-  // If the 4 border strips (top/bottom/left/right of the expanded region) are:
-  //   • dark on average (mean luminance < BEZEL_DARK_MAX), AND
-  //   • the face centre is clearly brighter (contrast > BEZEL_CONTRAST_MIN)
-  // the face is surrounded by a phone bezel → spoofing likely.
-  //
-  // Works even when the phone body is entirely out of frame because it
-  // analyses the CONTENT just outside the detected face area.
-  private detectPhoneBezel(
-    faceBox: { x: number; y: number; width: number; height: number },
-  ): ScreenDetectResult {
-    const video = this.videoRef?.nativeElement;
-    if (!video?.videoWidth || !video?.videoHeight || faceBox.width < 30 || faceBox.height < 30) {
-      return { detected: false, confidence: 0, reason: '' };
-    }
-    const vw = video.videoWidth, vh = video.videoHeight;
-    const { x, y, width: w, height: h } = faceBox;
-
-    // Expand the face box by 35% each side to sample the surrounding region.
-    const EXPAND_R = 0.35;
-    const ex = Math.max(0, x - w * EXPAND_R);
-    const ey = Math.max(0, y - h * EXPAND_R);
-    const er = Math.min(vw, x + w + w * EXPAND_R);
-    const eb = Math.min(vh, y + h + h * EXPAND_R);
-    const ew = er - ex, eh = eb - ey;
-    if (ew < 4 || eh < 4) return { detected: false, confidence: 0, reason: '' };
-
-    // Draw the expanded region at 9×9 (face maps to inner 3×3, border = outer ring).
-    const SZ = 9;
-    if (!this._facePatchCanvas) {
-      this._facePatchCanvas = document.createElement('canvas');
-    }
-    this._facePatchCanvas.width = SZ;
-    this._facePatchCanvas.height = SZ;
-    const fctx = this._facePatchCanvas.getContext('2d', { willReadFrequently: true });
-    if (!fctx) return { detected: false, confidence: 0, reason: '' };
-    fctx.drawImage(video, ex, ey, ew, eh, 0, 0, SZ, SZ);
-    const { data } = fctx.getImageData(0, 0, SZ, SZ);
-
-    const luma = (px: number, py: number) => {
-      const i = (py * SZ + px) * 4;
-      return 0.299 * data[i] + 0.587 * data[i + 1] + 0.114 * data[i + 2];
-    };
-
-    // Face centre: inner 3×3 (pixels 3-5 in the 9×9 grid)
-    const F0 = 3, F1 = 5;
-    let faceSum = 0, faceN = 0;
-    for (let py = F0; py <= F1; py++) for (let px = F0; px <= F1; px++) { faceSum += luma(px, py); faceN++; }
-    const faceMean = faceSum / faceN;
-
-    // Border strips (outer ring, excluding corners for stability)
-    const stripMean = (x0: number, x1: number, y0: number, y1: number) => {
-      let s = 0, n = 0;
-      for (let py = y0; py <= y1; py++) for (let px = x0; px <= x1; px++) { s += luma(px, py); n++; }
-      return n ? s / n : 255;
-    };
-    const topMean    = stripMean(F0, F1, 0, F0 - 1);
-    const bottomMean = stripMean(F0, F1, F1 + 1, SZ - 1);
-    const leftMean   = stripMean(0, F0 - 1, F0, F1);
-    const rightMean  = stripMean(F1 + 1, SZ - 1, F0, F1);
-    const allStrips  = [topMean, bottomMean, leftMean, rightMean];
-    const avgBorder  = allStrips.reduce((a, b) => a + b, 0) / 4;
-
-    // Bezel = border is dark AND face is clearly brighter
-    const BEZEL_DARK = 90;       // border mean below this = dark bezel
-    const CONTRAST_MIN = 45;     // face must be this much brighter than border
-    const darkStrips = allStrips.filter(m => m < BEZEL_DARK && faceMean - m > CONTRAST_MIN).length;
-
-    // Require at least an opposite pair (both horizontal OR both vertical strips qualify)
-    const hPair = topMean < BEZEL_DARK && faceMean - topMean > CONTRAST_MIN &&
-                  bottomMean < BEZEL_DARK && faceMean - bottomMean > CONTRAST_MIN;
-    const vPair = leftMean < BEZEL_DARK && faceMean - leftMean > CONTRAST_MIN &&
-                  rightMean < BEZEL_DARK && faceMean - rightMean > CONTRAST_MIN;
-
-    const detected = hPair || vPair || darkStrips >= 3;
-    const confidence = Math.min(1, darkStrips / 4 + (hPair || vPair ? 0.25 : 0));
-
-    return {
-      detected,
-      confidence,
-      reason: detected
-        ? `ตรวจพบกรอบมืดรอบใบหน้า (กรอบโทรศัพท์) border:${Math.round(avgBorder)} face:${Math.round(faceMean)} dark:${darkStrips}/4`
-        : '',
-    };
+    ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+    ctx.restore();
+    return canvas.toDataURL('image/jpeg', 0.7).split(',')[1] ?? '';
   }
 
   // Converts face-box-height percentage to an estimated real-world distance
@@ -1261,14 +1049,6 @@ export class CheckinComponent implements AfterViewInit, OnDestroy {
 
     const now = Date.now();
 
-    // Frame-wide brightness check (Signal A only, very conservative threshold).
-    // Used for chip display and as a supplementary block; the main detection
-    // is Signal B (face-patch gradient) which runs per-face in the loop below.
-    const frameScreen = this.antiSpoofingEnabled ? this.detectScreenByBrightness() : null;
-    // Chip shows frame-wide confidence; gets updated to face-texture result when a face is present.
-    this.screenBrightnessDetected = frameScreen?.detected ?? false;
-    this.screenBrightnessConfidence = frameScreen?.confidence ?? 0;
-
     // Step 1: cheap preview (descriptor only) for every detected face.
     const previews: { det: FaceDetectionResult; r: ScanResult | null }[] = await Promise.all(
       dets.map(async (det) => {
@@ -1290,72 +1070,9 @@ export class CheckinComponent implements AfterViewInit, OnDestroy {
       }),
     );
 
-    // Step 2: confirm identity (CONFIRM_COUNT frames); phone-detection anti-spoofing runs here.
+    // Step 2: confirm identity (CONFIRM_COUNT frames).
     const results: DetWithResult[] = await Promise.all(
       previews.map(async ({ det, r }) => {
-        // ---- Anti-spoofing: phone/screen detection ----
-        // Two complementary checks — both set a spoofReported flag so the alert is
-        // logged once per incident and the scan is blocked until the phone leaves:
-        //
-        // Check A — Global COCO-SSD phone block: phoneBlockedUntil is set in
-        //   startObjDetectLoop when COCO-SSD detects cell phone/laptop/tv/remote.
-        //   Fires for ANY matched face while a phone-class object is visible.
-        //
-        // Check B — Face-centre-on-screen: the face centre sits inside a phone/screen
-        //   bbox, meaning the face is probably being displayed on that device.
-        //   Provides a second chance when Check A's confidence threshold was missed.
-
-        if (this.antiSpoofingEnabled && r?.matched && r.employee) {
-          // Check A — COCO-SSD global phone block
-          const isPhoneBlocked = now < this.phoneBlockedUntil;
-          // Check B — face centre inside a detected screen bbox
-          const isOnScreen = this.objectDetectorReady && this.faceIsOnScreen(det.box);
-          // Check C — brightness uniformity (frame-wide, very conservative threshold)
-          const isFrameScreen = frameScreen?.detected ?? false;
-          // Check D — phone bezel detection (PRIMARY per-face detector).
-          // Detects the dark rectangular frame (phone bezel/body) around the
-          // face when it is shown on a phone screen. A real face in a room
-          // does NOT have a uniformly dark border immediately surrounding it.
-          const bezelResult = this.detectPhoneBezel(det.box);
-          const hasBezel = bezelResult.detected;
-          // Update chip so it reflects the most significant signal seen so far.
-          if (bezelResult.confidence > this.screenBrightnessConfidence) {
-            this.screenBrightnessDetected = hasBezel;
-            this.screenBrightnessConfidence = bezelResult.confidence;
-          }
-
-          if (isPhoneBlocked || isOnScreen || isFrameScreen || hasBezel) {
-            const pmKey = r.employee.id;
-            let pm = this.pendingMatch[pmKey];
-            if (!pm?.spoofReported) {
-              if (pm) { pm.spoofReported = true; pm.spoofReportedAt = now; }
-              else {
-                this.pendingMatch[pmKey] = {
-                  count: 1, scanType: r.scan_type ?? '', lastTime: now,
-                  spoofReported: true, spoofReportedAt: now,
-                };
-              }
-              pm = this.pendingMatch[pmKey];
-              if (!this.phoneBlockReported) {
-                this.phoneBlockReported = true;
-                const alertImage = this.facePipeline.captureFaceJpeg(this.videoRef.nativeElement, det.box, 0.85);
-                this.attendanceService.reportLivenessFail(r.employee, alertImage, this.getScanLocationId()).subscribe();
-                const reason = isOnScreen
-                  ? 'ตรวจพบใบหน้าบนจอโทรศัพท์/หน้าจอ (COCO-SSD)'
-                  : isFrameScreen
-                    ? (frameScreen?.reason ?? 'ตรวจพบแสงสม่ำเสมอผิดปกติ (จอโทรศัพท์/หน้าจอ)')
-                    : hasBezel
-                      ? (bezelResult.reason || 'ตรวจพบกรอบมืดรอบใบหน้า — ใบหน้าอยู่ในจอโทรศัพท์')
-                      : 'ตรวจพบโทรศัพท์มือถือในเฟรม (COCO-SSD)';
-                this.showResult(`⚠️ ${reason} (${r.employee.full_name}) — ระบบบันทึกเหตุการณ์ไว้แล้ว`, 'error');
-              }
-            }
-            pm = this.pendingMatch[pmKey];
-            if (pm && now > pm.spoofReportedAt + SPOOF_RESET_DELAY_MS) delete this.pendingMatch[pmKey];
-            return { det, r: { ...r, scan_type: undefined, message: 'ตรวจพบโทรศัพท์/จอแสดงภาพ กรุณาสแกนด้วยใบหน้าจริงต่อหน้ากล้อง' } };
-          }
-        }
-
         if (!r?.matched || (r as any).ignored || !r.scan_type || !r.employee) {
           return { det, r };
         }
@@ -1364,31 +1081,25 @@ export class CheckinComponent implements AfterViewInit, OnDestroy {
         const existing = this.pendingMatch[key];
 
         // Update or create pendingMatch.
-        if (existing && !existing.spoofReported && existing.scanType === r.scan_type && now - existing.lastTime <= PENDING_TIMEOUT_MS) {
+        if (existing && existing.scanType === r.scan_type && now - existing.lastTime <= PENDING_TIMEOUT_MS) {
           existing.count += 1;
           existing.lastTime = now;
-        } else if (!existing?.spoofReported) {
-          this.pendingMatch[key] = {
-            count: 1, scanType: r.scan_type, lastTime: now,
-            spoofReported: false, spoofReportedAt: 0,
-          };
+        } else {
+          this.pendingMatch[key] = { count: 1, scanType: r.scan_type, lastTime: now };
         }
 
         const pm = this.pendingMatch[key];
-        if (pm.spoofReported) {
-          if (now > pm.spoofReportedAt + SPOOF_RESET_DELAY_MS) delete this.pendingMatch[key];
-          return { det, r: { ...r, scan_type: undefined } };
-        }
         if (pm.count < CONFIRM_COUNT) {
           return { det, r: { ...r, scan_type: undefined, pendingConfirm: true } };
         }
 
-        // Confirmed! Commit the scan.
+        // Confirmed! Commit the scan — capture both face crop and full frame.
         delete this.pendingMatch[key];
         const imageBase64 = this.facePipeline.captureFaceJpeg(this.videoRef.nativeElement, det.box, 0.8);
+        const fullFrameBase64 = this.captureFullFrame();
         try {
           const saved = await firstValueFrom(
-            this.attendanceService.scan(det.descriptor, imageBase64, this.getScanLocationId()),
+            this.attendanceService.scan(det.descriptor, imageBase64, this.getScanLocationId(), fullFrameBase64),
           );
           return { det, r: saved, imageBase64 };
         } catch {
@@ -1514,9 +1225,9 @@ export class CheckinComponent implements AfterViewInit, OnDestroy {
       this.setStatus('พร้อมสแกน — รองรับหลายคนพร้อมกัน', 'scanning');
       this.loop();
       this.startWatchdog();
-      // Always load object detector for phone-in-frame anti-spoofing, regardless
-      // of the display-overlay toggle (that toggle only controls display boxes).
-      setTimeout(() => { if (!this.destroyed && this.running) this.initObjectDetector(); }, 1000);
+      if (this.objectDetectorEnabled) {
+        setTimeout(() => { if (!this.destroyed && this.running) this.initObjectDetector(); }, 1000);
+      }
     } catch (e: any) {
       this.modelsLoading = false;
       this.loadError = e?.message || String(e);

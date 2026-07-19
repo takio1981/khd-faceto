@@ -220,7 +220,8 @@ export async function processScan(
   descriptor: number[],
   imageBase64: string | null,
   now: Date = new Date(),
-  scanLocationId: number | null = null
+  scanLocationId: number | null = null,
+  fullFrameBase64?: string | null,
 ): Promise<ScanResult> {
   await ensureFaceCache();
 
@@ -278,6 +279,7 @@ export async function processScan(
   // notifyScan() call below for which one saw the path first. Doing it here
   // means notifyScan always has the right path.
   const faceImagePath = await saveFaceImage(imageBase64, entry.employeeCode, now);
+  const fullFramePath = await saveFaceImage(fullFrameBase64 ?? null, `env_${entry.employeeCode}`, now);
   const scanLocationName = await getScanLocationName(scanLocationId);
 
   // Insert the record. A UNIQUE KEY on (employee_id, scan_date, scan_type)
@@ -287,8 +289,8 @@ export async function processScan(
   try {
     const [result] = await pool.query<ResultSetHeader>(
       `INSERT INTO attendance_records
-         (employee_id, scan_location_id, scan_time, scan_type, status, matched_confidence, face_image_path)
-       VALUES (?, ?, ?, ?, ?, ?, ?)`,
+         (employee_id, scan_location_id, scan_time, scan_type, status, matched_confidence, face_image_path, full_frame_path)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
       [
         entry.employeeId,
         scanLocationId,
@@ -297,6 +299,7 @@ export async function processScan(
         classification.status,
         confidence.toFixed(4),
         faceImagePath,
+        fullFramePath,
       ]
     );
 

@@ -22,17 +22,14 @@ const scanLimiter = rateLimit({ windowMs: 60_000, max: 6000, standardHeaders: tr
 // POST /api/attendance/scan  - public: the checkin kiosk page (frontend/public/checkin.html)
 // is reachable without login by design, so anyone with the page open can scan.
 router.post('/scan', scanLimiter, asyncHandler(async (req, res) => {
-  const { descriptor, imageBase64, scanLocationId } = req.body ?? {};
+  const { descriptor, imageBase64, scanLocationId, fullFrameBase64 } = req.body ?? {};
   if (!Array.isArray(descriptor) || descriptor.length !== 128) {
     res.status(400).json({ error: 'descriptor ต้องเป็น array ขนาด 128' });
     return;
   }
   const locId = scanLocationId != null && !Number.isNaN(Number(scanLocationId)) ? Number(scanLocationId) : null;
 
-  // processScan saves the image (if any) and resolves the scan location's
-  // name itself now, so the notification it fires always has the right
-  // face_image_path — no more separate post-hoc UPDATE racing against it.
-  const result = await processScan(descriptor, imageBase64 || null, new Date(), locId);
+  const result = await processScan(descriptor, imageBase64 || null, new Date(), locId, fullFrameBase64 || null);
 
   res.json(result);
 }));
@@ -274,6 +271,26 @@ router.get('/image/:id', verifyJWT, asyncHandler(async (req, res) => {
     await logAudit(req, { action: 'attendance.view_image', targetTable: 'attendance_records', targetId: Number(req.params.id) });
   }
   res.setHeader('Content-Type', 'image/jpeg');
+  createReadStream(abs).on('error', () => res.status(404).end()).pipe(res);
+}));
+
+// GET /api/attendance/full-frame/:id  - admin only: stream the full-frame environment snapshot
+router.get('/full-frame/:id', verifyJWT, requireRole('admin'), asyncHandler(async (req, res) => {
+  const [rows] = await pool.query<RowDataPacket[]>(
+    'SELECT full_frame_path FROM attendance_records WHERE id = ? LIMIT 1',
+    [req.params.id]
+  );
+  if (!rows.length || !rows[0].full_frame_path) {
+    res.status(404).json({ error: 'ไม่พบภาพเต็มเฟรม' });
+    return;
+  }
+  const abs = path.join(config.face.imageDir, rows[0].full_frame_path);
+  if (!abs.startsWith(path.resolve(config.face.imageDir))) {
+    res.status(400).json({ error: 'invalid path' });
+    return;
+  }
+  res.setHeader('Content-Type', 'image/jpeg');
+  res.setHeader('Cache-Control', 'private, max-age=86400');
   createReadStream(abs).on('error', () => res.status(404).end()).pipe(res);
 }));
 

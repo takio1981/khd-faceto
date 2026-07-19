@@ -2,6 +2,13 @@
 
 Web app สแกนใบหน้าเพื่อลงเวลาเข้า-ออกงาน พร้อมบันทึกภาพใบหน้า, กำหนดกะ/OT, รายงาน, แดชบอร์ด และระบบสิทธิ์ Admin/User
 
+> **v2026-07-19a** ยกเลิกระบบตรวจจับโทรศัพท์/อุปกรณ์ทั้งหมด + เพิ่มบันทึกภาพเต็มเฟรมทุก scan:
+> - **ลบ Anti-Spoofing ทั้งหมด**: ยกเลิก COCO-SSD phone detection, Phone Bezel Detection, Brightness Grid Detection, chip "🟢🔴 จอ %", toggle ป้องกันการปลอมแปลง
+> - **บันทึก 2 ภาพต่อ scan**: (1) ภาพใบหน้า (crop เหมือนเดิม) + (2) **ภาพเต็มเฟรมจากกล้อง** (≤640px) เพื่อให้ admin ดูสภาพแวดล้อม/background ได้โดยตรง
+> - **DB Migration 037**: เพิ่มคอลัมน์ `full_frame_path VARCHAR(500)` ใน `attendance_records`
+> - **Backend endpoint ใหม่**: `GET /api/attendance/full-frame/:id` (admin only) สำหรับดูภาพเต็มเฟรม
+> - COCO-SSD object detector คงไว้เฉพาะ toggle "แยกแยะมนุษย์/สัตว์/วัตถุ" (ปิดอยู่โดย default) — ไม่ auto-load เมื่อเปิดกล้องอีกต่อไป
+>
 > **v2026-07-18l** เพิ่ม **Screen Brightness + Texture Detection** แก้ปัญหา COCO-SSD ตรวจจับโทรศัพท์ไม่ได้เมื่อถือชิดกล้อง (เห็นแค่จอ ไม่เห็น body):
 > - **Signal ① Brightness Grid**: วิเคราะห์เฟรมทั้งหมด 8×6 cells — เซลล์ที่มี mean luminance > 155 + within-cell variance < 700 คือ "screen-like"; หากครอบคลุม ≥35% ของเฟรม = ตรวจพบจอโทรศัพท์ — ทำงานได้แม้ phone body อยู่นอกเฟรม
 > - **Signal ② Face Texture (Gradient)**: crop ใบหน้า 24×24 px คำนวณ avg gradient magnitude — ผิวคนจริง > 9 px/cell, ใบหน้า JPEG บนจอ < 9 px/cell; ใช้เป็น secondary signal ยืนยันร่วมกับ brightness

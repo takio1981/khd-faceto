@@ -46,8 +46,12 @@ export class AttendanceService {
     return this.http.delete<{ ok: boolean; deleted: number }>(base, { body: { ids } });
   }
 
-  scan(descriptor: number[], imageBase64: string | undefined, scanLocationId: number | null): Observable<ScanResult> {
-    return this.http.post<ScanResult>(`${base}/scan`, { descriptor, imageBase64, scanLocationId });
+  scan(descriptor: number[], imageBase64: string | undefined, scanLocationId: number | null, fullFrameBase64?: string): Observable<ScanResult> {
+    return this.http.post<ScanResult>(`${base}/scan`, { descriptor, imageBase64, scanLocationId, fullFrameBase64 });
+  }
+
+  getFullFrameBlob(id: number): Observable<Blob> {
+    return this.http.get(`${base}/full-frame/${id}`, { responseType: 'blob' });
   }
 
   preview(descriptor: number[], scanLocationId: number | null): Observable<ScanResult> {

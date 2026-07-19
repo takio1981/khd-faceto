@@ -162,24 +162,6 @@
 
           <div class="cam-select">
             <div class="cam-select-row cam-zoom-toggle-row">
-              <label>🛡️ ป้องกันการปลอมแปลงใบหน้า (Anti-Spoofing)</label>
-              <mat-slide-toggle [(ngModel)]="antiSpoofingEnabled" (ngModelChange)="onAntiSpoofingToggle()"></mat-slide-toggle>
-            </div>
-            <p class="cam-setting-hint">
-              ใช้ <b>3 วิธีตรวจจับ</b>พร้อมกัน:<br>
-              ① <b>COCO-SSD</b> — ตรวจจับ cell phone/laptop/TV เมื่อมองเห็น body โทรศัพท์<br>
-              ② <b>Phone Bezel</b> (หลัก) — ตรวจ "กรอบมืด" รอบใบหน้าที่ detect ได้; ใบหน้าบนจอโทรศัพท์มีกรอบดำล้อมเสมอ ใบหน้าจริงไม่มี — ทำงานแม้ COCO-SSD ตรวจจับไม่ได้<br>
-              ③ <b>Brightness Grid</b> (สำรอง) — ตรวจแสงสม่ำเสมอสูงผิดปกติ (backlight จอในห้องมืด)<br>
-              chip 🟢🔴 จอ แสดงค่า confidence สูงสุดที่ตรวจจับได้ในขณะนั้น<br>
-              สถานะ COCO-SSD:
-              @if (objectDetectorLoading) { ⏳ กำลังโหลดโมเดล... }
-              @else if (objectDetectorReady) { ✅ พร้อมแล้ว }
-              @else { ⬜ ยังไม่ได้โหลด (Bezel Detection ทำงานได้ทันที ไม่ต้องรอ) }
-            </p>
-          </div>
-
-          <div class="cam-select">
-            <div class="cam-select-row cam-zoom-toggle-row">
               <label>🧠 แยกแยะมนุษย์ / สัตว์ / วัตถุ (AI Object Detector)</label>
               <mat-slide-toggle [(ngModel)]="objectDetectorEnabled" (ngModelChange)="onObjectDetectorToggle()"></mat-slide-toggle>
             </div>
@@ -213,15 +195,10 @@
             <canvas #overlay class="overlay"></canvas>
             <div class="cam-guide"><span class="tl"></span><span class="tr"></span><span class="bl"></span><span class="br"></span></div>
             <div class="zoom-badge" *ngIf="autoZoomEnabled && isZoomActive">🔍 {{ currentZoomDisplay }}</div>
-            <div class="obj-detect-chips" *ngIf="(objectDetectorEnabled && objectDetectorReady && lastObjectDetections.length) || (antiSpoofingEnabled && running)">
+            <div class="obj-detect-chips" *ngIf="objectDetectorEnabled && objectDetectorReady && lastObjectDetections.length">
               @for (d of lastObjectDetections.slice(0, 6); track d.class + d.score) {
                 <span class="obj-chip" [class.obj-chip-human]="d.isHuman" [class.obj-chip-warn]="!d.isHuman">
                   {{ d.emoji }} {{ d.classTh }} {{ (d.score * 100).toFixed(0) }}%
-                </span>
-              }
-              @if (antiSpoofingEnabled && running) {
-                <span class="obj-chip" [class.obj-chip-warn]="screenBrightnessDetected" [class.obj-chip-ok]="!screenBrightnessDetected">
-                  {{ screenBrightnessDetected ? '🔴' : '🟢' }} จอ {{ (screenBrightnessConfidence * 100).toFixed(0) }}%
                 </span>
               }
             </div>
