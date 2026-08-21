@@ -813,6 +813,8 @@ export class CheckinComponent implements AfterViewInit, OnDestroy {
     const matchRadius = Math.max(overlay.width, overlay.height) * 0.25;
 
     results.forEach(({ det, r }) => {
+      if (r && (!r.matched || !r.employee)) return; // ไม่รู้จัก — don't draw a box/label at all
+
       const b = det.box;
       const color = this.colorFor(r);
       const label = this.labelFor(r);

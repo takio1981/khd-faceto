@@ -402,12 +402,63 @@ export class FacePipelineService {
 
   // ===== Detection =====
 
+  // Rejects detections whose landmark geometry doesn't look like a real human
+  // face. TinyFaceDetector can score a textured non-face object (e.g. a desk
+  // drawer handle) just high enough to clear scoreThreshold, but the 68-point
+  // landmark regressor fit onto it lands in geometrically implausible spots
+  // (eyes/nose/mouth out of order or outside the box, wrong box aspect
+  // ratio) — checking that catches this false-positive class without having
+  // to raise scoreThreshold back up (which would undo the off-angle/occluded
+  // face improvements DEFAULT_SCORE_THRESHOLD was lowered for).
+  private isPlausibleFace(landmarks: any, box: { x: number; y: number; width: number; height: number }): boolean {
+    if (!landmarks || typeof landmarks.getLeftEye !== 'function') return true; // nothing to check against
+    if (box.width <= 0 || box.height <= 0) return false;
+
+    const aspect = box.width / box.height;
+    if (aspect < 0.55 || aspect > 1.25) return false;
+
+    const avg = (pts: { x: number; y: number }[]) => ({
+      x: pts.reduce((s, p) => s + p.x, 0) / pts.length,
+      y: pts.reduce((s, p) => s + p.y, 0) / pts.length,
+    });
+
+    const leftEye = avg(landmarks.getLeftEye());
+    const rightEye = avg(landmarks.getRightEye());
+    const nose = avg(landmarks.getNose());
+    const mouth = avg(landmarks.getMouth());
+
+    // Eye separation should be a plausible fraction of the box width.
+    const eyeFrac = Math.abs(rightEye.x - leftEye.x) / box.width;
+    if (eyeFrac < 0.2 || eyeFrac > 0.65) return false;
+
+    // Eyes above nose above mouth, each pair separated by a minimum gap —
+    // rejects the collapsed/degenerate landmark fits typical of non-face
+    // textures.
+    const eyeY = (leftEye.y + rightEye.y) / 2;
+    const minGap = box.height * 0.03;
+    if (nose.y - eyeY < minGap || mouth.y - nose.y < minGap) return false;
+
+    // Real face landmarks stay inside their own detection box; landmarks fit
+    // to a non-face pattern often drift outside it.
+    const margin = 0.15;
+    const minX = box.x - box.width * margin;
+    const maxX = box.x + box.width * (1 + margin);
+    const minY = box.y - box.height * margin;
+    const maxY = box.y + box.height * (1 + margin);
+    const positions: { x: number; y: number }[] = landmarks.positions ?? [];
+    const outside = positions.filter((p) => p.x < minX || p.x > maxX || p.y < minY || p.y > maxY).length;
+    if (positions.length && outside / positions.length > 0.1) return false;
+
+    return true;
+  }
+
   async getDescriptor(input: HTMLVideoElement | HTMLImageElement | HTMLCanvasElement): Promise<FaceDetectionResult | null> {
     const detection = await faceapi
       .detectSingleFace(input, this.detectorOptions())
       .withFaceLandmarks()
       .withFaceDescriptor();
     if (!detection) return null;
+    if (!this.isPlausibleFace(detection.landmarks, detection.detection.box)) return null;
     return { descriptor: Array.from(detection.descriptor), box: detection.detection.box };
   }
 
@@ -416,11 +467,13 @@ export class FacePipelineService {
       .detectAllFaces(input, this.detectorOptions())
       .withFaceLandmarks()
       .withFaceDescriptors();
-    return detections.map((d: any) => ({
-      descriptor: Array.from(d.descriptor),
-      box: d.detection.box,
-      landmarks: d.landmarks,
-    }));
+    return detections
+      .filter((d: any) => this.isPlausibleFace(d.landmarks, d.detection.box))
+      .map((d: any) => ({
+        descriptor: Array.from(d.descriptor),
+        box: d.detection.box,
+        landmarks: d.landmarks,
+      }));
   }
 
   // Draw face landmarks on a canvas context. Beyond the raw 68 points, this
