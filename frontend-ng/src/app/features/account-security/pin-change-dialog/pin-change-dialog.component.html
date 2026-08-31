@@ -1,0 +1,24 @@
+<h2 mat-dialog-title>เปลี่ยน PIN</h2>
+<mat-dialog-content>
+  @switch (step()) {
+    @case ('current') {
+      <p class="pin-step-label">PIN ปัจจุบัน</p>
+      <app-pin-input #currentPinInput [disabled]="saving()" (completed)="onCurrentComplete($event)"></app-pin-input>
+    }
+    @case ('new') {
+      <p class="pin-step-label">PIN ใหม่</p>
+      <app-pin-input #newPinInput [disabled]="saving()" (completed)="onNewComplete($event)"></app-pin-input>
+    }
+    @case ('confirm') {
+      <p class="pin-step-label">ยืนยัน PIN ใหม่</p>
+      <app-pin-input #confirmPinInput [disabled]="saving()" (completed)="onConfirmComplete($event)"></app-pin-input>
+    }
+  }
+
+  @if (saving()) {
+    <mat-spinner diameter="20" class="inline-spinner"></mat-spinner>
+  }
+</mat-dialog-content>
+<mat-dialog-actions align="end">
+  <button mat-button type="button" [disabled]="saving()" (click)="cancel()">ยกเลิก</button>
+</mat-dialog-actions>

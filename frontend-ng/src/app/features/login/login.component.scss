@@ -88,6 +88,25 @@
   width: 100%;
 }
 
+.mode-toggle {
+  display: flex;
+  margin-bottom: 16px;
+
+  ::ng-deep .mat-button-toggle {
+    flex: 1;
+  }
+}
+
+.pin-label {
+  margin: 4px 0 12px;
+  color: var(--muted);
+  font-size: 13.5px;
+}
+
+.pin-spinner {
+  margin: 16px auto 0;
+}
+
 .submit-btn {
   margin-top: 8px;
   height: 44px;

@@ -1,0 +1,38 @@
+<h2 mat-dialog-title>รีเซ็ต PIN (ลืม PIN)</h2>
+<mat-dialog-content>
+  @switch (step()) {
+    @case ('password') {
+      <p class="hint">กรุณายืนยันตัวตนด้วยรหัสผ่านก่อนตั้ง PIN ใหม่</p>
+      <form [formGroup]="passwordForm" (ngSubmit)="submitPassword()">
+        <mat-form-field appearance="outline" class="full-width">
+          <mat-label>รหัสผ่าน (Password)</mat-label>
+          <input matInput [type]="showPassword() ? 'text' : 'password'" formControlName="password" autocomplete="current-password" required>
+          <button mat-icon-button matSuffix type="button" tabindex="-1"
+                  [attr.aria-label]="showPassword() ? 'ซ่อนรหัสผ่าน' : 'แสดงรหัสผ่าน'"
+                  (click)="showPassword.set(!showPassword())">
+            <mat-icon>{{ showPassword() ? 'visibility_off' : 'visibility' }}</mat-icon>
+          </button>
+          @if (passwordForm.controls.password.invalid && passwordForm.controls.password.touched) {
+            <mat-error>กรุณากรอกรหัสผ่าน</mat-error>
+          }
+        </mat-form-field>
+        <button mat-flat-button color="primary" type="submit" class="full-width">ถัดไป</button>
+      </form>
+    }
+    @case ('new') {
+      <p class="pin-step-label">PIN ใหม่</p>
+      <app-pin-input #newPinInput [disabled]="saving()" (completed)="onNewComplete($event)"></app-pin-input>
+    }
+    @case ('confirm') {
+      <p class="pin-step-label">ยืนยัน PIN ใหม่</p>
+      <app-pin-input #confirmPinInput [disabled]="saving()" (completed)="onConfirmComplete($event)"></app-pin-input>
+    }
+  }
+
+  @if (saving()) {
+    <mat-spinner diameter="20" class="inline-spinner"></mat-spinner>
+  }
+</mat-dialog-content>
+<mat-dialog-actions align="end">
+  <button mat-button type="button" [disabled]="saving()" (click)="cancel()">ยกเลิก</button>
+</mat-dialog-actions>

@@ -44,6 +44,11 @@ export const routes: Routes = [
           import('./features/notifications/notifications.component').then((m) => m.NotificationsComponent),
       },
       {
+        path: 'account-security',
+        loadComponent: () =>
+          import('./features/account-security/account-security.component').then((m) => m.AccountSecurityComponent),
+      },
+      {
         path: 'employees',
         canActivate: [adminGuard],
         loadComponent: () => import('./features/employees/employees.component').then((m) => m.EmployeesComponent),

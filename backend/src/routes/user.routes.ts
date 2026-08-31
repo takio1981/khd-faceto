@@ -6,6 +6,8 @@ import {
   listUsers, getUser, createUser, updateUser, deleteUser, unlockUser, countAdmins,
   ConflictError, DuplicateUsernameError,
 } from '../services/user.service';
+import { forceResetPin } from '../services/pinAuth.service';
+import { removeAllDevices } from '../services/device.service';
 
 const router = Router();
 
@@ -92,6 +94,24 @@ router.put('/:id', asyncHandler(async (req, res) => {
 router.put('/:id/unlock', asyncHandler(async (req, res) => {
   await unlockUser(Number(req.params.id));
   await logAudit(req, { action: 'user.unlock', targetTable: 'users', targetId: Number(req.params.id) });
+  res.json({ ok: true });
+}));
+
+// Admin PIN housekeeping — deliberately NOT gated by requirePinLoginEnabled:
+// cleaning up a stray PIN/devices for a user is housekeeping, not "PIN
+// login/setup UI", so an org-wide toggle flip shouldn't block it. Admin
+// never sees the PIN itself here, only that it now no longer exists.
+router.post('/:id/pin/force-reset', asyncHandler(async (req, res) => {
+  const userId = Number(req.params.id);
+  await forceResetPin(userId);
+  await logAudit(req, { action: 'pin.reset', targetTable: 'user_pin', targetId: userId });
+  res.json({ ok: true });
+}));
+
+router.delete('/:id/pin/devices', asyncHandler(async (req, res) => {
+  const userId = Number(req.params.id);
+  await removeAllDevices(userId);
+  await logAudit(req, { action: 'device.removed', targetTable: 'user_pin_devices', targetId: userId });
   res.json({ ok: true });
 }));
 

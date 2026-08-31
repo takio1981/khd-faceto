@@ -6,6 +6,7 @@ import { environment } from '../../../environments/environment';
 export interface AppConfig {
   companyName: string;
   appName: string;
+  pinLoginEnabled: boolean;
 }
 
 @Injectable({ providedIn: 'root' })

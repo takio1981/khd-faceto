@@ -1,0 +1,52 @@
+:host {
+  display: block;
+}
+
+.page-title {
+  font-size: 20px;
+  font-weight: 700;
+  color: var(--brand-primary-darker);
+  margin: 16px 0;
+}
+
+.section-card {
+  max-width: 720px;
+  padding: 20px 24px;
+  margin-bottom: 20px;
+}
+
+.section-title {
+  margin: 0 0 10px;
+  font-size: 17px;
+  color: var(--brand-primary-dark);
+}
+
+.muted {
+  color: var(--muted);
+}
+
+.actions-row {
+  display: flex;
+  gap: 10px;
+  margin-top: 10px;
+}
+
+.actions-cell {
+  display: flex;
+  gap: 4px;
+  white-space: nowrap;
+}
+
+.card-field {
+  margin-bottom: 4px;
+
+  .card-label {
+    font-weight: 600;
+    margin-right: 4px;
+  }
+}
+
+.empty-state {
+  text-align: center;
+  padding: 24px 0;
+}

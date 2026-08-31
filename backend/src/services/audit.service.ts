@@ -8,6 +8,11 @@ export interface AuditEntry {
   targetId?: number | null;
   before?: unknown;
   after?: unknown;
+  // Override the actor id/username instead of deriving them from req.user —
+  // needed by POST /auth/pin/login, which logs login success/failure/lock
+  // events before verifyJWT ever runs (req.user isn't populated yet).
+  userId?: number | null;
+  username?: string | null;
 }
 
 // Called explicitly at each mutation site (after the DB write succeeds) —
@@ -16,9 +21,9 @@ export interface AuditEntry {
 // failure should not block the actual operation it's recording.
 export async function logAudit(req: Request, entry: AuditEntry): Promise<void> {
   try {
-    const userId = req.user?.sub ?? null;
-    let username: string | null = null;
-    if (userId) {
+    const userId = entry.userId !== undefined ? entry.userId : (req.user?.sub ?? null);
+    let username: string | null = entry.username ?? null;
+    if (userId && entry.username === undefined) {
       const [rows] = await pool.query<RowDataPacket[]>('SELECT username FROM users WHERE id = ?', [userId]);
       username = rows[0]?.username ?? null;
     }

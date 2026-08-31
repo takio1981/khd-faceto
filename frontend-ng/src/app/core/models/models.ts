@@ -17,6 +17,23 @@ export interface UserAccount {
   is_locked: boolean;
   failed_login_attempts: number;
   created_at: string;
+  pin_configured: boolean;
+  pin_device_count: number;
+}
+
+export interface PinStatus {
+  enabled: boolean;
+  configured: boolean;
+  deviceCount: number;
+}
+
+export interface PinDevice {
+  id: number;
+  user_pin_id: number;
+  device_id: string;
+  device_label: string | null;
+  last_login_at: string | null;
+  created_at: string;
 }
 
 export interface Employee {
@@ -175,6 +192,9 @@ export interface Holiday {
 export interface SettingsResponse {
   loginMaxAttempts: number;
   loginLockoutMinutes: number;
+  pinLoginEnabled: boolean;
+  pinMaxAttempts: number;
+  pinLockoutMinutes: number;
 }
 
 // Exact sub-fields verified against backend/src/services/notification.service.ts

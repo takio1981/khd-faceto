@@ -1,0 +1,64 @@
+<div class="page-container">
+  <h1 class="page-title">PIN & อุปกรณ์ของฉัน</h1>
+
+  <mat-card class="section-card">
+    <h2 class="section-title">สถานะ PIN</h2>
+    @if (status(); as s) {
+      @if (s.configured) {
+        <p>ตั้งค่า PIN แล้ว — ลงทะเบียนอุปกรณ์ {{ devices().length }}/2 เครื่อง</p>
+        <div class="actions-row">
+          <button mat-flat-button color="primary" (click)="openChange()">เปลี่ยน PIN</button>
+          <button mat-stroked-button (click)="openReset()">รีเซ็ต PIN (ลืม PIN)</button>
+        </div>
+      } @else {
+        <p class="muted">คุณยังไม่ได้ตั้งค่า PIN — ตั้งค่าเพื่อเข้าสู่ระบบครั้งต่อไปโดยไม่ต้องพิมพ์รหัสผ่าน</p>
+        <div class="actions-row">
+          <button mat-flat-button color="primary" (click)="openSetup()">ตั้งค่า PIN</button>
+        </div>
+      }
+    }
+  </mat-card>
+
+  @if (status()?.configured) {
+    <mat-card class="section-card">
+      <h2 class="section-title">อุปกรณ์ที่ลงทะเบียน</h2>
+      <app-responsive-table [columns]="columns" [data]="devices()" [trackByFn]="trackById">
+        <ng-template #desktopRow let-d>
+          <tr>
+            <td>
+              {{ d.device_label || 'อุปกรณ์ไม่ทราบชนิด' }}
+              @if (isCurrentDevice(d)) {
+                <span class="badge on_time">อุปกรณ์นี้</span>
+              }
+            </td>
+            <td>{{ d.last_login_at ? (d.last_login_at | date: 'short') : '-' }}</td>
+            <td class="actions-cell">
+              <button mat-icon-button matTooltip="ลบอุปกรณ์" color="warn" (click)="removeDevice(d)">
+                <mat-icon>delete</mat-icon>
+              </button>
+            </td>
+          </tr>
+        </ng-template>
+        <ng-template #cardRow let-d>
+          <div class="card-field">
+            <span class="card-label">อุปกรณ์:</span> {{ d.device_label || 'อุปกรณ์ไม่ทราบชนิด' }}
+            @if (isCurrentDevice(d)) {
+              <span class="badge on_time">อุปกรณ์นี้</span>
+            }
+          </div>
+          <div class="card-field">
+            <span class="card-label">ใช้งานล่าสุด:</span> {{ d.last_login_at ? (d.last_login_at | date: 'short') : '-' }}
+          </div>
+        </ng-template>
+        <ng-template #cardActions let-d>
+          <button mat-icon-button matTooltip="ลบอุปกรณ์" color="warn" (click)="removeDevice(d)">
+            <mat-icon>delete</mat-icon>
+          </button>
+        </ng-template>
+      </app-responsive-table>
+      @if (!devices().length) {
+        <p class="muted empty-state">ยังไม่มีอุปกรณ์ที่ลงทะเบียน</p>
+      }
+    </mat-card>
+  }
+</div>

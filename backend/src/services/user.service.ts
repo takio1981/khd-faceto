@@ -13,6 +13,8 @@ export interface UserListItem {
   is_locked: boolean;
   failed_login_attempts: number;
   created_at: string;
+  pin_configured: boolean;
+  pin_device_count: number;
 }
 
 export interface UserFilter {
@@ -25,9 +27,12 @@ export interface UserFilter {
 
 const SELECT_USER = `
   SELECT u.id, u.username, u.role, u.employee_id, e.employee_code, e.full_name,
-         u.failed_login_attempts, u.locked_until, u.created_at
+         u.failed_login_attempts, u.locked_until, u.created_at,
+         (up.id IS NOT NULL) AS pin_configured,
+         (SELECT COUNT(*) FROM user_pin_devices d WHERE d.user_pin_id = up.id) AS pin_device_count
     FROM users u
-    LEFT JOIN employees e ON e.id = u.employee_id`;
+    LEFT JOIN employees e ON e.id = u.employee_id
+    LEFT JOIN user_pin up ON up.user_id = u.id`;
 
 function toListItem(row: RowDataPacket): UserListItem {
   return {
@@ -40,6 +45,8 @@ function toListItem(row: RowDataPacket): UserListItem {
     is_locked: !!row.locked_until && new Date(row.locked_until).getTime() > Date.now(),
     failed_login_attempts: row.failed_login_attempts,
     created_at: row.created_at,
+    pin_configured: !!row.pin_configured,
+    pin_device_count: Number(row.pin_device_count) || 0,
   };
 }
 

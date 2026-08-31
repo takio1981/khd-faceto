@@ -59,6 +59,23 @@ export interface JWTPayload {
   employeeId: number | null;
 }
 
+export interface UserPin {
+  id: number;
+  user_id: number;
+  pin_hash: string;
+  failed_pin_attempts: number;
+  locked_until: string | null;
+}
+
+export interface UserPinDevice {
+  id: number;
+  user_pin_id: number;
+  device_id: string;
+  device_label: string | null;
+  last_login_at: string | null;
+  created_at: string;
+}
+
 // Result returned by the scan classification service
 export interface ScanResult {
   matched: boolean;

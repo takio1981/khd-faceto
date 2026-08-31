@@ -20,6 +20,27 @@
         <p class="muted">
           เมื่อผู้ใช้กรอกรหัสผ่านผิดครบตามจำนวนครั้งที่กำหนด บัญชีจะถูกล็อกชั่วคราวตามเวลาที่กำหนดไว้
         </p>
+      </mat-card>
+
+      <mat-card class="section-card">
+        <h2 class="section-title">เข้าสู่ระบบด้วย PIN</h2>
+        <form [formGroup]="loginForm" class="form-grid two-col" (ngSubmit)="saveLoginSettings()">
+          <mat-slide-toggle formControlName="pinLoginEnabled" class="full-row">เปิดใช้งานเข้าสู่ระบบด้วย PIN</mat-slide-toggle>
+
+          <mat-form-field appearance="outline">
+            <mat-label>จำนวนครั้งที่ PIN ผิดได้สูงสุด</mat-label>
+            <input matInput type="number" min="1" max="10" formControlName="pinMaxAttempts" />
+          </mat-form-field>
+
+          <mat-form-field appearance="outline">
+            <mat-label>เวลาล็อก PIN (นาที)</mat-label>
+            <input matInput type="number" min="1" max="1440" formControlName="pinLockoutMinutes" />
+          </mat-form-field>
+        </form>
+        <p class="muted">
+          ผู้ใช้ที่เคยเข้าสู่ระบบด้วยรหัสผ่านแล้วสามารถตั้ง PIN 6 หลักเพื่อเข้าสู่ระบบครั้งต่อไปได้โดยไม่ต้องพิมพ์รหัสผ่าน
+          (ผูกกับอุปกรณ์ที่ลงทะเบียนไว้ สูงสุด 2 เครื่องต่อบัญชี) — การเข้าสู่ระบบด้วยรหัสผ่านยังใช้งานได้ตามปกติเสมอ
+        </p>
         <div class="actions-row">
           <button mat-flat-button color="primary" [disabled]="loginSaving" (click)="saveLoginSettings()">
             บันทึก

@@ -51,6 +51,7 @@ export class UsersComponent implements OnInit {
     { key: 'role', label: 'สิทธิ์' },
     { key: 'employee', label: 'ผูกกับพนักงาน' },
     { key: 'status', label: 'สถานะ' },
+    { key: 'pin', label: 'PIN' },
     { key: 'actions', label: 'จัดการ' },
   ];
 
@@ -161,6 +162,44 @@ export class UsersComponent implements OnInit {
         this.load();
       },
       error: (err) => this.notify.toast(err.error?.error || 'ลบไม่สำเร็จ', 'error'),
+    });
+  }
+
+  // Admin never sees the real PIN — only that it's configured, and can wipe
+  // it or its devices when e.g. a phone is lost.
+  async forceResetPin(u: UserAccount): Promise<void> {
+    const ok = await this.notify.confirm({
+      title: 'รีเซ็ต PIN',
+      message: `ล้างค่า PIN และอุปกรณ์ที่ลงทะเบียนทั้งหมดของ "${u.username}"? ผู้ใช้จะต้องตั้ง PIN ใหม่หากต้องการใช้งาน`,
+      confirmText: 'รีเซ็ต',
+      cancelText: 'ยกเลิก',
+      danger: true,
+    });
+    if (!ok) return;
+    this.userService.forceResetPin(u.id).subscribe({
+      next: () => {
+        this.notify.toast('รีเซ็ต PIN แล้ว', 'success');
+        this.load();
+      },
+      error: (err) => this.notify.toast(err.error?.error || 'ดำเนินการไม่สำเร็จ', 'error'),
+    });
+  }
+
+  async removeAllDevices(u: UserAccount): Promise<void> {
+    const ok = await this.notify.confirm({
+      title: 'ลบอุปกรณ์ทั้งหมด',
+      message: `ลบอุปกรณ์ที่ลงทะเบียนสำหรับเข้าสู่ระบบด้วย PIN ของ "${u.username}" ทั้งหมด? PIN ของผู้ใช้ยังคงอยู่ แต่ต้องลงทะเบียนอุปกรณ์ใหม่จึงจะใช้ PIN ได้อีกครั้ง`,
+      confirmText: 'ลบอุปกรณ์',
+      cancelText: 'ยกเลิก',
+      danger: true,
+    });
+    if (!ok) return;
+    this.userService.removeAllDevices(u.id).subscribe({
+      next: () => {
+        this.notify.toast('ลบอุปกรณ์ทั้งหมดแล้ว', 'success');
+        this.load();
+      },
+      error: (err) => this.notify.toast(err.error?.error || 'ดำเนินการไม่สำเร็จ', 'error'),
     });
   }
 }

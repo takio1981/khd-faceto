@@ -1,0 +1,32 @@
+<div class="pin-input" [class.disabled]="disabled">
+  <div class="cells">
+    @for (i of indices; track i) {
+      <input
+        #cell
+        class="cell"
+        [type]="inputType"
+        inputmode="numeric"
+        autocomplete="off"
+        maxlength="1"
+        [attr.aria-label]="'หลักที่ ' + (i + 1)"
+        [value]="digits[i]"
+        [disabled]="disabled"
+        (input)="onInput(i, $event)"
+        (keydown)="onKeydown(i, $event)"
+        (paste)="onPaste($event)"
+      />
+    }
+  </div>
+  @if (masked) {
+    <button
+      mat-icon-button
+      type="button"
+      tabindex="-1"
+      class="reveal-btn"
+      [attr.aria-label]="revealed() ? 'ซ่อน PIN' : 'แสดง PIN'"
+      (click)="toggleReveal()"
+    >
+      <mat-icon>{{ revealed() ? 'visibility_off' : 'visibility' }}</mat-icon>
+    </button>
+  }
+</div>

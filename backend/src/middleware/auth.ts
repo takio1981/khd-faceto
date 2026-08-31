@@ -2,6 +2,7 @@ import { Request, Response, NextFunction } from 'express';
 import jwt from 'jsonwebtoken';
 import { config } from '../config';
 import { JWTPayload, Role } from '../types';
+import { isPinLoginEnabled } from '../services/settings.service';
 
 // Verify the Bearer token and attach req.user
 export function verifyJWT(req: Request, res: Response, next: NextFunction): void {
@@ -33,4 +34,21 @@ export function requireRole(...roles: Role[]) {
     }
     next();
   };
+}
+
+// Gates all PIN login/setup/device routes behind the admin-controlled
+// PIN_LOGIN_ENABLED toggle. Deliberately NOT applied to GET /pin/status
+// (a status read shouldn't require the flag it's reporting on) or to the
+// admin PIN-cleanup endpoints (housekeeping shouldn't be blocked by the
+// org-wide toggle).
+export function requirePinLoginEnabled(req: Request, res: Response, next: NextFunction): void {
+  isPinLoginEnabled()
+    .then((enabled) => {
+      if (!enabled) {
+        res.status(403).json({ error: 'ระบบเข้าสู่ระบบด้วย PIN ถูกปิดใช้งาน', code: 'PIN_LOGIN_DISABLED' });
+        return;
+      }
+      next();
+    })
+    .catch(next);
 }

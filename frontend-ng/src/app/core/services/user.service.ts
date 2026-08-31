@@ -57,4 +57,12 @@ export class UserService {
   delete(id: number): Observable<{ ok: boolean }> {
     return this.http.delete<{ ok: boolean }>(`${base}/${id}`);
   }
+
+  forceResetPin(id: number): Observable<{ ok: boolean }> {
+    return this.http.post<{ ok: boolean }>(`${base}/${id}/pin/force-reset`, {});
+  }
+
+  removeAllDevices(id: number): Observable<{ ok: boolean }> {
+    return this.http.delete<{ ok: boolean }>(`${base}/${id}/pin/devices`);
+  }
 }

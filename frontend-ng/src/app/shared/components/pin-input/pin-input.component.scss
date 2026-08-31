@@ -1,0 +1,37 @@
+.pin-input {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+
+  &.disabled {
+    opacity: 0.6;
+  }
+}
+
+.cells {
+  display: flex;
+  gap: 8px;
+}
+
+.cell {
+  width: 44px;
+  height: 52px;
+  text-align: center;
+  font-size: 22px;
+  font-weight: 600;
+  border: 1.5px solid var(--border);
+  border-radius: 10px;
+  outline: none;
+  background: transparent;
+  color: inherit;
+
+  &:focus {
+    border-color: var(--brand-primary);
+    box-shadow: 0 0 0 3px rgba(15, 138, 79, 0.15);
+  }
+}
+
+.reveal-btn {
+  margin-left: 4px;
+}

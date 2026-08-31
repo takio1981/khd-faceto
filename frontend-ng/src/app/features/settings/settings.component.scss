@@ -88,6 +88,11 @@
   width: 100%;
 }
 
+.full-row {
+  grid-column: 1 / -1;
+  margin-bottom: 8px;
+}
+
 .actions-row {
   display: flex;
   align-items: center;

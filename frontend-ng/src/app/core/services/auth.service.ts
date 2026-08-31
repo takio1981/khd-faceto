@@ -4,6 +4,7 @@ import { Router } from '@angular/router';
 import { Observable, tap } from 'rxjs';
 import { environment } from '../../../environments/environment';
 import { LoginResponse, Role } from '../models/models';
+import { DeviceIdService } from './device-id.service';
 
 const TOKEN_KEY = 'token';
 const ROLE_KEY = 'role';
@@ -21,7 +22,7 @@ export class AuthService {
   readonly username = computed(() => this.usernameSig());
   readonly isAdmin = computed(() => this.roleSig() === 'admin');
 
-  constructor(private http: HttpClient, private router: Router) {}
+  constructor(private http: HttpClient, private router: Router, private deviceId: DeviceIdService) {}
 
   token(): string | null {
     return this.tokenSig();
@@ -35,6 +36,16 @@ export class AuthService {
   login(username: string, password: string): Observable<LoginResponse> {
     return this.http
       .post<LoginResponse>(`${environment.apiBaseUrl}/auth/login`, { username, password })
+      .pipe(tap((res) => this.setSession(res)));
+  }
+
+  loginWithPin(username: string, pin: string): Observable<LoginResponse> {
+    return this.http
+      .post<LoginResponse>(`${environment.apiBaseUrl}/auth/pin/login`, {
+        username,
+        pin,
+        deviceId: this.deviceId.getOrCreate(),
+      })
       .pipe(tap((res) => this.setSession(res)));
   }
 

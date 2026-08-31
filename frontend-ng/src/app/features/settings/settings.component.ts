@@ -98,6 +98,9 @@ export class SettingsComponent implements OnInit, AfterViewInit {
   readonly loginForm = this.fb.group({
     loginMaxAttempts: this.fb.control<number>(5, [Validators.required, Validators.min(1), Validators.max(20)]),
     loginLockoutMinutes: this.fb.control<number>(15, [Validators.required, Validators.min(1), Validators.max(1440)]),
+    pinLoginEnabled: this.fb.control<boolean>(false),
+    pinMaxAttempts: this.fb.control<number>(5, [Validators.required, Validators.min(1), Validators.max(10)]),
+    pinLockoutMinutes: this.fb.control<number>(5, [Validators.required, Validators.min(1), Validators.max(1440)]),
   });
   loginSaving = false;
 
@@ -177,6 +180,14 @@ export class SettingsComponent implements OnInit, AfterViewInit {
     'user.update': 'แก้ไขผู้ใช้',
     'user.unlock': 'ปลดล็อกบัญชีผู้ใช้',
     'user.delete': 'ลบผู้ใช้',
+    'pin.created': 'ตั้งค่า PIN',
+    'pin.changed': 'เปลี่ยน PIN',
+    'pin.reset': 'รีเซ็ต PIN',
+    'pin_login.success': 'เข้าสู่ระบบด้วย PIN สำเร็จ',
+    'pin_login.failed': 'เข้าสู่ระบบด้วย PIN ไม่สำเร็จ',
+    'pin.locked': 'PIN ถูกล็อกชั่วคราว',
+    'device.registered': 'ลงทะเบียนอุปกรณ์ PIN',
+    'device.removed': 'ลบอุปกรณ์ PIN',
     'correction_request.create': 'ยื่นคำขอแก้ไข/อุทธรณ์เวลา',
     'correction_request.supervisor_decision': 'หัวหน้าพิจารณาคำขอแก้ไขเวลา',
     'correction_request.admin_decision': 'admin ยืนยันคำขอแก้ไขเวลา',
@@ -343,7 +354,13 @@ export class SettingsComponent implements OnInit, AfterViewInit {
     this.loginSaving = true;
     const v = this.loginForm.getRawValue();
     this.settingsService
-      .update({ loginMaxAttempts: v.loginMaxAttempts!, loginLockoutMinutes: v.loginLockoutMinutes! })
+      .update({
+        loginMaxAttempts: v.loginMaxAttempts!,
+        loginLockoutMinutes: v.loginLockoutMinutes!,
+        pinLoginEnabled: v.pinLoginEnabled!,
+        pinMaxAttempts: v.pinMaxAttempts!,
+        pinLockoutMinutes: v.pinLockoutMinutes!,
+      })
       .subscribe({
         next: () => {
           this.loginSaving = false;

@@ -1,0 +1,19 @@
+<h2 mat-dialog-title>ตั้งค่า PIN Login</h2>
+<mat-dialog-content>
+  <p class="hint">คุณยังไม่ได้ตั้ง PIN — ต้องการตั้ง PIN 6 หลักเพื่อเข้าสู่ระบบครั้งต่อไปโดยไม่ต้องพิมพ์รหัสผ่านหรือไม่?</p>
+
+  @if (step() === 'new') {
+    <p class="pin-step-label">PIN ใหม่</p>
+    <app-pin-input #newPinInput [disabled]="saving()" (completed)="onNewComplete($event)"></app-pin-input>
+  } @else {
+    <p class="pin-step-label">ยืนยัน PIN</p>
+    <app-pin-input #confirmPinInput [disabled]="saving()" (completed)="onConfirmComplete($event)"></app-pin-input>
+  }
+
+  @if (saving()) {
+    <mat-spinner diameter="20" class="inline-spinner"></mat-spinner>
+  }
+</mat-dialog-content>
+<mat-dialog-actions align="end">
+  <button mat-button type="button" [disabled]="saving()" (click)="skip()">ข้ามไปก่อน</button>
+</mat-dialog-actions>

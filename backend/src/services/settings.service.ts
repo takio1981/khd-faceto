@@ -6,11 +6,17 @@ import { RowDataPacket } from 'mysql2';
 const DEFAULTS: Record<string, string> = {
   login_max_attempts: '5',
   login_lockout_minutes: '15',
+  pin_login_enabled: 'false',
+  pin_max_attempts: '5',
+  pin_lockout_minutes: '5',
 };
 
 export interface LoginSettings {
   loginMaxAttempts: number;
   loginLockoutMinutes: number;
+  pinLoginEnabled: boolean;
+  pinMaxAttempts: number;
+  pinLockoutMinutes: number;
 }
 
 async function getSetting(key: string): Promise<string> {
@@ -22,14 +28,27 @@ async function getSetting(key: string): Promise<string> {
 }
 
 export async function getLoginSettings(): Promise<LoginSettings> {
-  const [maxAttempts, lockoutMinutes] = await Promise.all([
+  const [maxAttempts, lockoutMinutes, pinLoginEnabled, pinMaxAttempts, pinLockoutMinutes] = await Promise.all([
     getSetting('login_max_attempts'),
     getSetting('login_lockout_minutes'),
+    getSetting('pin_login_enabled'),
+    getSetting('pin_max_attempts'),
+    getSetting('pin_lockout_minutes'),
   ]);
   return {
     loginMaxAttempts: parseInt(maxAttempts, 10),
     loginLockoutMinutes: parseInt(lockoutMinutes, 10),
+    pinLoginEnabled: pinLoginEnabled === 'true',
+    pinMaxAttempts: parseInt(pinMaxAttempts, 10),
+    pinLockoutMinutes: parseInt(pinLockoutMinutes, 10),
   };
+}
+
+// Single-key read used by the requirePinLoginEnabled gate middleware, which
+// runs on every PIN/device request — avoids fetching all 5 settings just to
+// check 1 boolean.
+export async function isPinLoginEnabled(): Promise<boolean> {
+  return (await getSetting('pin_login_enabled')) === 'true';
 }
 
 export async function setSetting(key: string, value: string): Promise<void> {

@@ -10,9 +10,11 @@ import { waitForDb } from './db';
 import { loadFaceCache } from './services/faceCache';
 import { startAbsentCheckScheduler } from './services/notification.service';
 import { ensureSelfSignedCert } from './services/certs';
-import { errorHandler } from './middleware/errorHandler';
+import { errorHandler, asyncHandler } from './middleware/errorHandler';
+import { isPinLoginEnabled } from './services/settings.service';
 
 import authRoutes from './routes/auth.routes';
+import pinAuthRoutes from './routes/pinAuth.routes';
 import employeeRoutes from './routes/employee.routes';
 import shiftRoutes from './routes/shift.routes';
 import attendanceRoutes from './routes/attendance.routes';
@@ -68,12 +70,17 @@ async function main() {
   }));
 
   // Expose branding to the frontend without auth
-  base.get('/api/config', (_req, res) => {
-    res.json({ companyName: config.companyName, appName: config.appName });
-  });
+  base.get('/api/config', asyncHandler(async (_req, res) => {
+    res.json({
+      companyName: config.companyName,
+      appName: config.appName,
+      pinLoginEnabled: await isPinLoginEnabled(),
+    });
+  }));
 
   // API routes
   base.use('/api/auth', authRoutes);
+  base.use('/api/auth', pinAuthRoutes);
   base.use('/api/employees', employeeRoutes);
   base.use('/api/shifts', shiftRoutes);
   base.use('/api/attendance', attendanceRoutes);

@@ -26,6 +26,7 @@ const NAV_LINKS: NavLink[] = [
   { path: '/reports', label: 'รายงาน', icon: 'summarize' },
   { path: '/correction-requests', label: 'คำขอแก้ไข/อุทธรณ์เวลา', icon: 'gavel' },
   { path: '/notifications', label: 'ประวัติการแจ้งเตือน', icon: 'notifications' },
+  { path: '/account-security', label: 'PIN & อุปกรณ์ของฉัน', icon: 'pin' },
   { path: '/employees', label: 'พนักงาน', icon: 'badge', adminOnly: true },
   { path: '/users', label: 'จัดการผู้ใช้งาน', icon: 'manage_accounts', adminOnly: true },
   { path: '/shifts', label: 'กะการทำงาน', icon: 'schedule', adminOnly: true },
@@ -49,6 +50,7 @@ export class AppShellComponent implements OnInit, OnDestroy {
   readonly isHandset = signal(false);
   readonly appName = signal('ระบบลงเวลา KHD-FaceTo');
   readonly companyName = signal('สำนักงานสาธารณสุขจังหวัดนครราชสีมา');
+  readonly pinLoginEnabled = signal(false);
 
   private breakpointSub?: Subscription;
   private pollTimer?: ReturnType<typeof setInterval>;
@@ -64,7 +66,7 @@ export class AppShellComponent implements OnInit, OnDestroy {
   ) {}
 
   ngOnInit(): void {
-    this.links = NAV_LINKS.filter((l) => !l.adminOnly || this.auth.isAdmin());
+    this.refreshLinks();
 
     this.breakpointSub = this.breakpointObserver
       .observe([Breakpoints.Handset, Breakpoints.Tablet])
@@ -74,6 +76,8 @@ export class AppShellComponent implements OnInit, OnDestroy {
       next: (c) => {
         if (c.appName) this.appName.set(c.appName);
         if (c.companyName) this.companyName.set(c.companyName);
+        this.pinLoginEnabled.set(!!c.pinLoginEnabled);
+        this.refreshLinks();
       },
       error: () => {},
     });
@@ -94,6 +98,12 @@ export class AppShellComponent implements OnInit, OnDestroy {
 
   logout(): void {
     this.auth.logout();
+  }
+
+  private refreshLinks(): void {
+    this.links = NAV_LINKS.filter(
+      (l) => (!l.adminOnly || this.auth.isAdmin()) && (l.path !== '/account-security' || this.pinLoginEnabled())
+    );
   }
 
   private pollNotifications(): void {

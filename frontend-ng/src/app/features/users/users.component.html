@@ -48,6 +48,13 @@
               <span class="badge on_time">ปกติ</span>
             }
           </td>
+          <td>
+            @if (u.pin_configured) {
+              <span class="badge on_time">ตั้งค่าแล้ว ({{ u.pin_device_count }}/2)</span>
+            } @else {
+              <span class="muted">ยังไม่ได้ตั้งค่า</span>
+            }
+          </td>
           <td class="actions-cell">
             <button mat-icon-button matTooltip="แก้ไข" (click)="openEditDialog(u)">
               <mat-icon>edit</mat-icon>
@@ -55,6 +62,14 @@
             @if (u.is_locked) {
               <button mat-icon-button matTooltip="ปลดล็อกบัญชี" (click)="unlock(u)">
                 <mat-icon>lock_open</mat-icon>
+              </button>
+            }
+            @if (u.pin_configured) {
+              <button mat-icon-button matTooltip="รีเซ็ต PIN" (click)="forceResetPin(u)">
+                <mat-icon>pin</mat-icon>
+              </button>
+              <button mat-icon-button matTooltip="ลบอุปกรณ์ PIN ทั้งหมด" (click)="removeAllDevices(u)">
+                <mat-icon>phonelink_erase</mat-icon>
               </button>
             }
             @if (!isSelf(u)) {
@@ -77,6 +92,14 @@
             <span class="badge on_time">ปกติ</span>
           }
         </div>
+        <div class="card-field">
+          <span class="card-label">PIN:</span>
+          @if (u.pin_configured) {
+            <span class="badge on_time">ตั้งค่าแล้ว ({{ u.pin_device_count }}/2)</span>
+          } @else {
+            <span class="muted">ยังไม่ได้ตั้งค่า</span>
+          }
+        </div>
       </ng-template>
       <ng-template #cardActions let-u>
         <button mat-icon-button matTooltip="แก้ไข" (click)="openEditDialog(u)">
@@ -85,6 +108,14 @@
         @if (u.is_locked) {
           <button mat-icon-button matTooltip="ปลดล็อกบัญชี" (click)="unlock(u)">
             <mat-icon>lock_open</mat-icon>
+          </button>
+        }
+        @if (u.pin_configured) {
+          <button mat-icon-button matTooltip="รีเซ็ต PIN" (click)="forceResetPin(u)">
+            <mat-icon>pin</mat-icon>
+          </button>
+          <button mat-icon-button matTooltip="ลบอุปกรณ์ PIN ทั้งหมด" (click)="removeAllDevices(u)">
+            <mat-icon>phonelink_erase</mat-icon>
           </button>
         }
         @if (!isSelf(u)) {
