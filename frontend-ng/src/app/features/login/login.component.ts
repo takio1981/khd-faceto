@@ -167,8 +167,14 @@ export class LoginComponent implements OnInit, AfterViewInit {
     patchLeafletDefaultIcon();
 
     this.map = L.map(this.mapEl.nativeElement).setView(NAKHON_RATCHASIMA, 11);
-    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-      attribution: '&copy; OpenStreetMap contributors',
+    // Esri's free World Street Map tiles, not raw tile.openstreetmap.org —
+    // OSM's volunteer-run tile servers actively block apps that don't follow
+    // their usage policy (osm.wiki/Blocked), which this one tripped in
+    // production. CARTO's CDN (tried first) now requires a signed-up API key
+    // even for basic tiles. Esri's ArcGIS REST tile service is free, doesn't
+    // require an API key, and is meant for exactly this kind of usage.
+    L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Street_Map/MapServer/tile/{z}/{y}/{x}', {
+      attribution: 'Tiles &copy; Esri &mdash; Source: Esri, DeLorme, NAVTEQ',
       maxZoom: 19,
     }).addTo(this.map);
 

@@ -380,8 +380,10 @@ export class SettingsComponent implements OnInit, AfterViewInit {
     patchLeafletDefaultIcon();
 
     this.map = L.map(this.mapEl.nativeElement).setView(NAKHON_RATCHASIMA, 12);
-    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-      attribution: '&copy; OpenStreetMap contributors',
+    // Esri's free World Street Map tiles — see the matching comment in
+    // login.component.ts's initMap() for why not raw OSM or CARTO.
+    L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Street_Map/MapServer/tile/{z}/{y}/{x}', {
+      attribution: 'Tiles &copy; Esri &mdash; Source: Esri, DeLorme, NAVTEQ',
       maxZoom: 19,
     }).addTo(this.map);
 
