@@ -110,6 +110,15 @@ function shiftAppliesOnDate(shift: Shift, dateKeyStr: string): boolean {
   return !!shift[DOW_COLUMNS[dowFromDateKey(dateKeyStr)]];
 }
 
+// A calendar day that counts as OT for classification purposes: an actual
+// Saturday/Sunday or a declared holiday — independent of which shift (regular
+// or holiday-designated) ends up resolving for that day. Exported so
+// processScan/processScanPreview can compute it once and pass it into
+// classify().
+export async function isOtDate(dateKeyStr: string): Promise<boolean> {
+  return isWeekendDateKey(dateKeyStr) || (await isHoliday(dateKeyStr));
+}
+
 // Resolves which of an employee's two shifts (if either) is active for a
 // given calendar day: prefer holiday_shift_id on weekends/declared holidays
 // (existing behavior), but only if that shift's own days-of-week actually
@@ -123,7 +132,7 @@ export async function resolveEffectiveShift(
   holidayShiftId: number | null,
   dateKeyStr: string
 ): Promise<Shift | null> {
-  const preferHoliday = !!holidayShiftId && (isWeekendDateKey(dateKeyStr) || (await isHoliday(dateKeyStr)));
+  const preferHoliday = !!holidayShiftId && (await isOtDate(dateKeyStr));
   const order = preferHoliday ? [holidayShiftId, shiftId] : [shiftId, holidayShiftId];
   for (const id of order) {
     const shift = await getShift(id);
@@ -141,6 +150,7 @@ interface TodayScans {
   hasOtOut: boolean;
   lastScanTime: Date | null;
   checkInTime: Date | null;
+  otInTime: Date | null;
 }
 
 async function getTodayScans(employeeId: number, day: string): Promise<TodayScans> {
@@ -157,14 +167,15 @@ async function getTodayScans(employeeId: number, day: string): Promise<TodayScan
   let hasOtOut = false;
   let lastScanTime: Date | null = null;
   let checkInTime: Date | null = null;
+  let otInTime: Date | null = null;
   for (const r of rows) {
     if (r.scan_type === 'check_in') { hasCheckIn = true; checkInTime = new Date(r.scan_time); }
     if (r.scan_type === 'check_out') hasCheckOut = true;
-    if (r.scan_type === 'ot_in') hasOtIn = true;
+    if (r.scan_type === 'ot_in') { hasOtIn = true; otInTime = new Date(r.scan_time); }
     if (r.scan_type === 'ot_out') hasOtOut = true;
     lastScanTime = new Date(r.scan_time);
   }
-  return { hasCheckIn, hasCheckOut, hasOtIn, hasOtOut, lastScanTime, checkInTime };
+  return { hasCheckIn, hasCheckOut, hasOtIn, hasOtOut, lastScanTime, checkInTime, otInTime };
 }
 
 // ---- Classification -------------------------------------------------------
@@ -181,8 +192,16 @@ interface Classification {
 //   checkout_start .. checkout_end  → ออกงาน (requires prior check-in)
 //   ot_start .. ot_end              → OT-เข้า / OT-ออก (requires prior check-in+check-out)
 // Scans that fall outside every applicable window return null → no record written.
-function classify(shift: Shift, now: Date, today: TodayScans): Classification | null {
-  if (shift.flexible_time) return classifyFlexible(shift, now, today);
+//
+// `isOtDay` (an actual Saturday/Sunday or declared holiday — see isOtDate
+// above) reclassifies the whole session as OT: the first scan in the normal
+// check-in window records ot_in instead of check_in, the second (in the
+// checkout window) records ot_out instead of check_out, with no on_time/late
+// distinction. This applies regardless of whether the resolved shift is the
+// employee's regular shift_id (whose days-of-week happen to include this
+// day) or a dedicated holiday_shift_id — any work on an OT day is OT.
+function classify(shift: Shift, now: Date, today: TodayScans, isOtDay: boolean): Classification | null {
+  if (shift.flexible_time) return classifyFlexible(shift, now, today, isOtDay);
 
   const sec = dateToSeconds(now);
 
@@ -194,34 +213,49 @@ function classify(shift: Shift, now: Date, today: TodayScans): Classification | 
   const otStart       = timeToSeconds(shift.ot_start);
   const otEnd         = timeToSeconds(shift.ot_end);
 
-  // ---- Day already complete (has both check-in and check-out) ----
-  if (today.hasCheckIn && today.hasCheckOut) {
-    if (today.hasOtIn && !today.hasOtOut) {
-      return { scanType: 'ot_out', status: 'ot', message: 'บันทึกเวลา OT-ออก' };
-    }
-    if (!today.hasOtIn && sec >= otStart && sec <= otEnd) {
-      return { scanType: 'ot_in', status: 'ot', message: 'บันทึกเวลา OT-เข้า' };
+  const hasIn  = isOtDay ? today.hasOtIn  : today.hasCheckIn;
+  const hasOut = isOtDay ? today.hasOtOut : today.hasCheckOut;
+
+  // ---- Day already complete ----
+  if (hasIn && hasOut) {
+    // A normal day still allows a further same-day OT phase (ot_start..
+    // ot_end) after regular hours. An OT day's whole session was already OT
+    // — there's no additional phase beyond it.
+    if (!isOtDay) {
+      if (today.hasOtIn && !today.hasOtOut) {
+        return { scanType: 'ot_out', status: 'ot', message: 'บันทึกเวลา OT-ออก' };
+      }
+      if (!today.hasOtIn && sec >= otStart && sec <= otEnd) {
+        return { scanType: 'ot_in', status: 'ot', message: 'บันทึกเวลา OT-เข้า' };
+      }
     }
     return null;
   }
 
-  // ---- Has check-in, awaiting check-out ----
-  if (today.hasCheckIn && !today.hasCheckOut) {
+  // ---- Has entry, awaiting exit ----
+  if (hasIn && !hasOut) {
     if (sec >= checkoutStart && sec <= checkoutEnd) {
-      return { scanType: 'check_out', status: 'on_time', message: 'ลงเวลาออกงานสำเร็จ' };
+      return isOtDay
+        ? { scanType: 'ot_out', status: 'ot', message: 'บันทึกเวลา OT-ออก' }
+        : { scanType: 'check_out', status: 'on_time', message: 'ลงเวลาออกงานสำเร็จ' };
     }
     return null;
   }
 
-  // ---- No check-in yet ----
-  // Allow check-out in the checkout window even without a prior check-in
-  // (flexible checkout: employee may have been recorded by other means, or missed check-in).
+  // ---- No entry yet ----
+  // Allow exit in the checkout window even without a prior entry (employee
+  // may have been recorded by other means, or missed the entry scan).
   if (sec >= checkoutStart && sec <= checkoutEnd) {
-    return { scanType: 'check_out', status: 'on_time', message: 'ลงเวลาออกงาน (ไม่มีบันทึกเข้างานวันนี้)' };
+    return isOtDay
+      ? { scanType: 'ot_out', status: 'ot', message: 'บันทึกเวลา OT-ออก (ไม่มีบันทึกเข้างานวันนี้)' }
+      : { scanType: 'check_out', status: 'on_time', message: 'ลงเวลาออกงาน (ไม่มีบันทึกเข้างานวันนี้)' };
   }
-  // Only allow check-in within check-in window (checkin_start → late_cutoff).
+  // Only allow entry within the check-in window (checkin_start → late_cutoff).
   if (sec < checkinStart || sec > lateCutoff) {
     return null;
+  }
+  if (isOtDay) {
+    return { scanType: 'ot_in', status: 'ot', message: 'บันทึกเวลา OT-เข้า' };
   }
   if (sec <= checkinEnd) {
     return { scanType: 'check_in', status: 'on_time', message: 'ลงเวลาเข้างานสำเร็จ (ตรงเวลา)' };
@@ -230,37 +264,56 @@ function classify(shift: Shift, now: Date, today: TodayScans): Classification | 
 }
 
 // Flexible-time shift (e.g. a holiday/on-call shift): any time is a valid
-// check-in or check-out. No late/on-time distinction (there's no fixed
-// start to be late against) and no separate OT phase — a single in/out
-// pair is the whole session, already identifiable as holiday/OT work via
-// attendance_records.shift_id.
+// entry or exit. No on-time/late distinction (there's no fixed start to be
+// late against) and no separate additional OT phase — a single in/out pair
+// is the whole session. On an OT day (see isOtDate) that pair is recorded as
+// ot_in/ot_out; otherwise as check_in/check_out.
 //
 // flexible_min_hours (0 = no restriction) guards against a second scan of
-// the same person shortly after check-in — past the general anti-duplicate
+// the same person shortly after entry — past the general anti-duplicate
 // cooldown (config.face.cooldownMinutes, typically a few minutes) but still
-// clearly not a real end-of-shift — being misread as a check-out.
-function classifyFlexible(shift: Shift, now: Date, today: TodayScans): Classification | null {
-  if (today.hasCheckIn && today.hasCheckOut) return null; // day already complete
-  if (today.hasCheckIn) {
-    if (shift.flexible_min_hours > 0 && today.checkInTime) {
-      const hoursSinceCheckIn = (now.getTime() - today.checkInTime.getTime()) / 3_600_000;
-      if (hoursSinceCheckIn < shift.flexible_min_hours) return null; // too soon to check out
+// clearly not a real end-of-shift — being misread as an exit.
+function classifyFlexible(shift: Shift, now: Date, today: TodayScans, isOtDay: boolean): Classification | null {
+  const hasIn  = isOtDay ? today.hasOtIn  : today.hasCheckIn;
+  const hasOut = isOtDay ? today.hasOtOut : today.hasCheckOut;
+
+  if (hasIn && hasOut) return null; // day already complete
+  if (hasIn) {
+    if (shift.flexible_min_hours > 0) {
+      const inTime = isOtDay ? today.otInTime : today.checkInTime;
+      if (inTime) {
+        const hoursSinceIn = (now.getTime() - inTime.getTime()) / 3_600_000;
+        if (hoursSinceIn < shift.flexible_min_hours) return null; // too soon to exit
+      }
     }
-    return { scanType: 'check_out', status: 'on_time', message: 'ลงเวลาออกงานสำเร็จ' };
+    return isOtDay
+      ? { scanType: 'ot_out', status: 'ot', message: 'บันทึกเวลา OT-ออก' }
+      : { scanType: 'check_out', status: 'on_time', message: 'ลงเวลาออกงานสำเร็จ' };
   }
-  return { scanType: 'check_in', status: 'on_time', message: 'ลงเวลาเข้างานสำเร็จ' };
+  return isOtDay
+    ? { scanType: 'ot_in', status: 'ot', message: 'บันทึกเวลา OT-เข้า' }
+    : { scanType: 'check_in', status: 'on_time', message: 'ลงเวลาเข้างานสำเร็จ' };
 }
 
 // Returns a contextual "outside window" message for display only.
-function outsideWindowMessage(shift: Shift, now: Date, today: TodayScans): string {
-  if (shift.flexible_time && today.hasCheckIn && today.hasCheckOut) {
-    return 'บันทึกเข้า-ออกงานของวันนี้ครบแล้ว (Already checked in and out today)';
-  }
-  if (shift.flexible_time && today.hasCheckIn && !today.hasCheckOut && shift.flexible_min_hours > 0 && today.checkInTime) {
-    const hoursSinceCheckIn = (now.getTime() - today.checkInTime.getTime()) / 3_600_000;
-    if (hoursSinceCheckIn < shift.flexible_min_hours) {
-      const remainingMin = Math.max(1, Math.ceil((shift.flexible_min_hours - hoursSinceCheckIn) * 60));
-      return `ยังไม่ถึงเวลาขั้นต่ำก่อนออกงาน (ต้องผ่านไปอย่างน้อย ${shift.flexible_min_hours} ชม. หลังเข้างาน — อีกประมาณ ${remainingMin} นาที)`;
+function outsideWindowMessage(shift: Shift, now: Date, today: TodayScans, isOtDay: boolean): string {
+  if (shift.flexible_time) {
+    const hasIn  = isOtDay ? today.hasOtIn  : today.hasCheckIn;
+    const hasOut = isOtDay ? today.hasOtOut : today.hasCheckOut;
+    if (hasIn && hasOut) {
+      return isOtDay
+        ? 'บันทึก OT เข้า-ออกงานของวันนี้ครบแล้ว (Already checked in and out today)'
+        : 'บันทึกเข้า-ออกงานของวันนี้ครบแล้ว (Already checked in and out today)';
+    }
+    if (hasIn && !hasOut && shift.flexible_min_hours > 0) {
+      const inTime = isOtDay ? today.otInTime : today.checkInTime;
+      if (inTime) {
+        const hoursSinceIn = (now.getTime() - inTime.getTime()) / 3_600_000;
+        if (hoursSinceIn < shift.flexible_min_hours) {
+          const remainingMin = Math.max(1, Math.ceil((shift.flexible_min_hours - hoursSinceIn) * 60));
+          return `ยังไม่ถึงเวลาขั้นต่ำก่อนออกงาน (ต้องผ่านไปอย่างน้อย ${shift.flexible_min_hours} ชม. หลังเข้างาน — อีกประมาณ ${remainingMin} นาที)`;
+        }
+      }
     }
   }
   return 'ไม่อยู่ในช่วงเวลาลงเวลา (Outside scan window)';
@@ -288,6 +341,7 @@ export async function processScan(
   const entry = best.entry;
   const confidence = Math.max(0, 1 - best.distance);
   const day = dateKey(now);
+  const otDay = await isOtDate(day);
 
   const today = await getTodayScans(entry.employeeId, day);
 
@@ -315,13 +369,13 @@ export async function processScan(
     };
   }
 
-  const classification = classify(shift, now, today);
+  const classification = classify(shift, now, today, otDay);
   if (!classification) {
     return {
       matched: true,
       employee: { id: entry.employeeId, employee_code: entry.employeeCode, full_name: entry.fullName },
       confidence,
-      message: outsideWindowMessage(shift, now, today),
+      message: outsideWindowMessage(shift, now, today, otDay),
     };
   }
 
@@ -420,6 +474,7 @@ export async function processScanPreview(
   const entry = best.entry;
   const confidence = Math.max(0, 1 - best.distance);
   const day = dateKey(now);
+  const otDay = await isOtDate(day);
 
   const today = await getTodayScans(entry.employeeId, day);
 
@@ -447,13 +502,13 @@ export async function processScanPreview(
     };
   }
 
-  const classification = classify(shift, now, today);
+  const classification = classify(shift, now, today, otDay);
   if (!classification) {
     return {
       matched: true,
       employee: { id: entry.employeeId, employee_code: entry.employeeCode, full_name: entry.fullName },
       confidence,
-      message: outsideWindowMessage(shift, now, today),
+      message: outsideWindowMessage(shift, now, today, otDay),
     };
   }
 

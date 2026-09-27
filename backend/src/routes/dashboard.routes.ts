@@ -61,7 +61,17 @@ router.get('/summary', verifyJWT, asyncHandler(async (req, res) => {
     if (shiftCache.get(key)) expectedToWorkCount++;
   }
 
-  const present = counts.on_time + counts.late;
+  // Distinct employees who showed up today at all — check_in for a normal
+  // day, or ot_in for a day that resolved as OT (weekend/holiday shift, see
+  // shift.service.ts classify()). Counted by employee, not by record, so an
+  // employee with both (regular check-in plus same-day extra OT) isn't
+  // double-counted.
+  const [presentRows] = await pool.query<RowDataPacket[]>(
+    `SELECT COUNT(DISTINCT employee_id) AS cnt FROM attendance_records
+      WHERE DATE(scan_time) = ? AND scan_type IN ('check_in', 'ot_in') ${statusScope}`,
+    statusParams
+  );
+  const present = presentRows[0].cnt as number;
   const isNonWorkday = expectedToWorkCount === 0;
   counts.absent = Math.max(0, expectedToWorkCount - present);
 

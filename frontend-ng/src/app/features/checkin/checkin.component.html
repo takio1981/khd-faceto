@@ -88,6 +88,17 @@
 
           <div class="cam-select">
             <label>🔊 เสียงพูดแจ้งผลการสแกน</label>
+
+            <mat-checkbox [(ngModel)]="usePreRecordedAudio" (change)="toggleUsePreRecordedAudio()">
+              ใช้เสียงพากย์ที่ดาวน์โหลดไว้ในระบบ (ลื่นไหล ไม่มีสะดุด แนะนำ)
+            </mat-checkbox>
+            <mat-checkbox [(ngModel)]="readNameEnabled" (change)="toggleReadName()">
+              อ่านชื่อผู้สแกนผ่านด้วย (เช่น "คุณสมชาย บันทึกสำเร็จค่ะ")
+            </mat-checkbox>
+            <mat-checkbox [(ngModel)]="voiceIsMale" (change)="toggleVoiceGender()">
+              เสียงนี้เป็นเสียงผู้ชาย (เปลี่ยนคำลงท้าย "ค่ะ" เป็น "ครับ")
+            </mat-checkbox>
+
             <div class="cam-select-row">
               <mat-select [(ngModel)]="selectedVoiceURI" (selectionChange)="onVoiceChange($event.value)">
                 <mat-option *ngIf="!availableVoices.length" value="" disabled>ไม่พบเสียงภาษาไทยในเครื่องนี้ (จะใช้เสียงเริ่มต้นของเบราว์เซอร์)</mat-option>
@@ -97,7 +108,9 @@
             </div>
             <p class="cam-setting-hint">
               รายชื่อเสียงที่เลือกได้ขึ้นกับเสียงภาษาไทยที่ติดตั้งอยู่ในเครื่อง/เบราว์เซอร์นี้ (เช่น Windows + Edge มักมีให้เลือกหลายเสียง
-              ส่วน Chrome อาจมีน้อยกว่าหรือต้องต่ออินเทอร์เน็ต) ตั้งค่านี้จำแยกไว้ต่อเครื่อง/เบราว์เซอร์
+              ส่วน Chrome อาจมีน้อยกว่าหรือต้องต่ออินเทอร์เน็ต) ตั้งค่านี้จำแยกไว้ต่อเครื่อง/เบราว์เซอร์ —
+              เมื่อเปิด "ใช้เสียงพากย์ที่ดาวน์โหลดไว้ในระบบ" เสียงในรายการนี้จะถูกใช้เฉพาะตอนอ่านชื่อผู้สแกน (เพราะเป็นข้อความที่เปลี่ยนไปตามคนสแกน
+              จึงอัดเสียงไว้ล่วงหน้าไม่ได้) ส่วนวลีคงที่ "บันทึกสำเร็จ/ลองใหม่" จะเล่นจากไฟล์เสียงที่ดาวน์โหลดไว้เสมอ
             </p>
           </div>
 

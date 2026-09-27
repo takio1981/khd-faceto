@@ -428,8 +428,12 @@ export async function runAbsentCheck(): Promise<void> {
       `SELECT scan_type FROM attendance_records WHERE employee_id = ? AND DATE(scan_time) = ?`,
       [emp.id, today]
     );
-    const hasCheckIn = scans.some((r) => r.scan_type === 'check_in');
-    const hasCheckOut = scans.some((r) => r.scan_type === 'check_out');
+    // A day that resolves as OT (weekend/holiday shift, see classify() in
+    // shift.service.ts) records ot_in/ot_out instead of check_in/check_out —
+    // both count as "showed up" here, or every OT-day attendee would be
+    // wrongly flagged absent.
+    const hasCheckIn = scans.some((r) => r.scan_type === 'check_in' || r.scan_type === 'ot_in');
+    const hasCheckOut = scans.some((r) => r.scan_type === 'check_out' || r.scan_type === 'ot_out');
 
     if (!hasCheckIn) {
       try {

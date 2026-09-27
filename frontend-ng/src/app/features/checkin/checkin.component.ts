@@ -14,6 +14,7 @@ import { MatCardModule } from '@angular/material/card';
 import { MatIconModule } from '@angular/material/icon';
 import { MatProgressSpinnerModule } from '@angular/material/progress-spinner';
 import { MatSelectModule } from '@angular/material/select';
+import { MatCheckboxModule } from '@angular/material/checkbox';
 import { MatSliderModule } from '@angular/material/slider';
 import { MatSlideToggleModule } from '@angular/material/slide-toggle';
 import { firstValueFrom } from 'rxjs';
@@ -108,6 +109,9 @@ const OBJ_DETECT_INTERVAL_MS = 1000;
 const OBJ_MIN_SCORE = 0.50;
 
 const TTS_VOICE_KEY = 'camTtsVoiceURI';
+const TTS_VOICE_GENDER_KEY = 'camTtsVoiceGenders'; // JSON map of voiceURI -> 'male' | 'female'
+const READ_NAME_KEY = 'camReadName';
+const USE_PRERECORDED_AUDIO_KEY = 'camUsePreRecordedTts';
 
 // Auto-zoom: when a face is detected the cam-frame div is CSS-scaled toward
 // the face centre so the kiosk display zooms in automatically.
@@ -133,6 +137,7 @@ const MAX_AUTO_ZOOM_SPEED = 0.25;
     RouterLink,
     MatButtonModule,
     MatCardModule,
+    MatCheckboxModule,
     MatIconModule,
     MatProgressSpinnerModule,
     MatSelectModule,
@@ -174,6 +179,8 @@ export class CheckinComponent implements AfterViewInit, OnDestroy {
   flipV = false;
   showLandmarks = true;
   soundEnabled = true;
+  readNameEnabled = false;
+  voiceIsMale = false;
 
   detectionIntervalMs = DEFAULT_DETECTION_INTERVAL_MS;
   boxSmoothing = DEFAULT_BOX_SMOOTHING;
@@ -308,6 +315,8 @@ export class CheckinComponent implements AfterViewInit, OnDestroy {
     this.flipV = localStorage.getItem('camFlipV') === '1';
     this.showLandmarks = localStorage.getItem('camShowLandmarks') !== '0';
     this.soundEnabled = localStorage.getItem('camSoundEnabled') !== '0';
+    this.readNameEnabled = localStorage.getItem(READ_NAME_KEY) === '1';
+    this.usePreRecordedAudio = localStorage.getItem(USE_PRERECORDED_AUDIO_KEY) !== '0';
     this.loadThaiVoice(); // populate the voice picker even before "start" is clicked
     this.detectionIntervalMs = this.clampNumber(
       Number(localStorage.getItem(DETECTION_INTERVAL_KEY)) || DEFAULT_DETECTION_INTERVAL_MS,
@@ -564,41 +573,112 @@ export class CheckinComponent implements AfterViewInit, OnDestroy {
     const chosen = found || this.availableVoices.find((v) => /female|หญิง/i.test(v.name)) || this.availableVoices[0];
     this.ttsVoice = chosen;
     this.selectedVoiceURI = chosen.voiceURI;
+    this.loadVoiceGenderOverride();
   }
 
   onVoiceChange(voiceURI: string): void {
     this.selectedVoiceURI = voiceURI;
     localStorage.setItem(TTS_VOICE_KEY, voiceURI);
     this.ttsVoice = this.availableVoices.find((v) => v.voiceURI === voiceURI) || null;
+    this.loadVoiceGenderOverride();
   }
 
-  // "ทดสอบเสียง" button — previews the currently-selected voice immediately,
-  // bypassing the sound-enabled toggle and speaking-guard below so the admin
-  // can compare voices back-to-back while picking one.
-  testVoice(): void {
-    if (!('speechSynthesis' in window)) return;
+  // The Web Speech API exposes no formal "gender" field on a voice — this is
+  // a best-effort guess from the voice's name (e.g. "Microsoft Premwadee" vs
+  // "Microsoft Niwat"), which the admin can correct via the "เสียงนี้เป็น
+  // เสียงผู้ชาย" checkbox; the correction is remembered per voice (by
+  // voiceURI) so it doesn't need re-checking every time that voice is picked.
+  private guessIsMaleVoice(name: string): boolean {
+    if (/female|หญิง/i.test(name)) return false;
+    if (/male|ชาย/i.test(name)) return true;
+    return false; // unknown — default to the female-phrased ending (existing default)
+  }
+
+  private readVoiceGenderMap(): Record<string, 'male' | 'female'> {
     try {
-      window.speechSynthesis.cancel();
-      const utter = new SpeechSynthesisUtterance('ทดสอบเสียงพูด บันทึกสำเร็จค่ะ');
-      utter.lang = 'th-TH';
-      if (this.ttsVoice) utter.voice = this.ttsVoice;
-      utter.rate = 1;
-      utter.pitch = 1.15;
-      utter.volume = 1;
-      window.speechSynthesis.speak(utter);
+      return JSON.parse(localStorage.getItem(TTS_VOICE_GENDER_KEY) || '{}');
+    } catch {
+      return {};
+    }
+  }
+
+  private loadVoiceGenderOverride(): void {
+    if (!this.ttsVoice) {
+      this.voiceIsMale = false;
+      return;
+    }
+    const saved = this.readVoiceGenderMap()[this.ttsVoice.voiceURI];
+    this.voiceIsMale = saved ? saved === 'male' : this.guessIsMaleVoice(this.ttsVoice.name);
+  }
+
+  toggleVoiceGender(): void {
+    this.voiceIsMale = !this.voiceIsMale;
+    if (!this.ttsVoice) return;
+    const map = this.readVoiceGenderMap();
+    map[this.ttsVoice.voiceURI] = this.voiceIsMale ? 'male' : 'female';
+    localStorage.setItem(TTS_VOICE_GENDER_KEY, JSON.stringify(map));
+  }
+
+  toggleReadName(): void {
+    this.readNameEnabled = !this.readNameEnabled;
+    localStorage.setItem(READ_NAME_KEY, this.readNameEnabled ? '1' : '0');
+  }
+
+  // Swaps the polite ending for a male voice ("ค่ะ" -> "ครับ") so the spoken
+  // phrase matches the selected/guessed voice gender.
+  private applyGenderEnding(text: string): string {
+    return this.voiceIsMale ? text.replace(/ค่ะ/g, 'ครับ') : text;
+  }
+
+  // ---- Pre-recorded audio (bundled in the project) ----
+  // The browser's live speechSynthesis can stutter or lag, especially for a
+  // non-local/network voice — noticeable on every single scan since these
+  // two fixed phrases are by far the most common announcements. Bundling
+  // real, pre-generated Thai neural-voice MP3s (Microsoft Edge's free
+  // th-TH-PremwadeeNeural/NiwatNeural, downloaded once into
+  // public/audio/tts/) and playing them as plain audio files sidesteps
+  // synthesis entirely for these two phrases — instant, smooth, no network
+  // call at scan time. Only the dynamic name-reading case (below) still
+  // needs live synthesis, since a name can't be pre-recorded for everyone.
+  usePreRecordedAudio = true;
+
+  toggleUsePreRecordedAudio(): void {
+    this.usePreRecordedAudio = !this.usePreRecordedAudio;
+    localStorage.setItem(USE_PRERECORDED_AUDIO_KEY, this.usePreRecordedAudio ? '1' : '0');
+  }
+
+  private playBundledAudio(kind: 'success' | 'retry'): void {
+    try {
+      const gender = this.voiceIsMale ? 'male' : 'female';
+      const audio = new Audio(`audio/tts/${kind}_${gender}.mp3`);
+      audio.volume = 1;
+      audio.play().catch(() => {
+        // Autoplay can be blocked before any page interaction — non-critical,
+        // the scan itself is already recorded regardless of the announcement.
+      });
     } catch {
       // non-critical
     }
   }
 
-  private speak(text: string): void {
-    if (!this.soundEnabled) return;
+  // "ทดสอบเสียง" button — previews whichever the kiosk would actually say
+  // right now (bundled audio or live speechSynthesis, matching the toggle
+  // above) so the admin hears the real result while configuring it.
+  testVoice(): void {
+    if (this.usePreRecordedAudio) {
+      this.playBundledAudio('success');
+      return;
+    }
+    this.speakLive('ทดสอบเสียงพูด บันทึกสำเร็จค่ะ');
+  }
+
+  private speakLive(text: string): void {
     if (!('speechSynthesis' in window)) return;
     try {
       // Don't queue on top of an utterance still playing — with the retry
       // cooldown below this is mostly a safety net against overlapping speech.
       if (window.speechSynthesis.speaking) return;
-      const utter = new SpeechSynthesisUtterance(text);
+      const utter = new SpeechSynthesisUtterance(this.applyGenderEnding(text));
       utter.lang = 'th-TH';
       if (this.ttsVoice) utter.voice = this.ttsVoice;
       utter.rate = 1;
@@ -610,15 +690,29 @@ export class CheckinComponent implements AfterViewInit, OnDestroy {
     }
   }
 
-  private speakSuccess(): void {
-    this.speak('บันทึกสำเร็จค่ะ');
+  // employeeName is only ever read out when "อ่านชื่อผู้สแกนด้วย" is on — that
+  // makes the phrase dynamic per person, so it always goes through live
+  // synthesis instead of the bundled audio even when usePreRecordedAudio is on.
+  private speakSuccess(employeeName?: string): void {
+    if (!this.soundEnabled) return;
+    if (this.usePreRecordedAudio && !(this.readNameEnabled && employeeName)) {
+      this.playBundledAudio('success');
+      return;
+    }
+    const namePart = this.readNameEnabled && employeeName ? `คุณ${employeeName} ` : '';
+    this.speakLive(`${namePart}บันทึกสำเร็จค่ะ`);
   }
 
   private speakRetry(): void {
+    if (!this.soundEnabled) return;
     const now = Date.now();
     if (now - this.lastRetryPromptAt < this.RETRY_PROMPT_COOLDOWN_MS) return;
     this.lastRetryPromptAt = now;
-    this.speak('ลองใหม่ค่ะ');
+    if (this.usePreRecordedAudio) {
+      this.playBundledAudio('retry');
+      return;
+    }
+    this.speakLive('ลองใหม่ค่ะ');
   }
 
   private clampNumber(value: number, min: number, max: number): number {
@@ -1180,6 +1274,7 @@ export class CheckinComponent implements AfterViewInit, OnDestroy {
     let confirming = 0;
     const names: string[] = [];
     const backendMessages: string[] = [];
+    let firstRecordedName: string | undefined;
 
     for (const { r } of results) {
       if (!r) continue;
@@ -1194,6 +1289,7 @@ export class CheckinComponent implements AfterViewInit, OnDestroy {
       }
       if (r.scan_type) {
         recorded++;
+        firstRecordedName ??= r.employee.full_name;
         names.push(`${r.employee.full_name} (${SCANTYPE_TH[r.scan_type] || r.scan_type})`);
         if (!this.toasted[r.employee.id] || now - this.toasted[r.employee.id] > TOAST_GAP_MS) {
           this.toasted[r.employee.id] = now;
@@ -1210,7 +1306,7 @@ export class CheckinComponent implements AfterViewInit, OnDestroy {
     }
 
     if (recorded > 0) {
-      this.speakSuccess();
+      this.speakSuccess(firstRecordedName);
       this.loadFeed();
       this.setStatus(`✓ บันทึก ${recorded} คน: ${names.join(', ')}`, 'success');
       this.showResult(`✓ บันทึกสำเร็จ ${recorded} คน — ${names.join(', ')}`, 'success');
