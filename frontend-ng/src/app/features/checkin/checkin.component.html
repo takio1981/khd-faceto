@@ -87,6 +87,21 @@
           </div>
 
           <div class="cam-select">
+            <label>🔊 เสียงพูดแจ้งผลการสแกน</label>
+            <div class="cam-select-row">
+              <mat-select [(ngModel)]="selectedVoiceURI" (selectionChange)="onVoiceChange($event.value)">
+                <mat-option *ngIf="!availableVoices.length" value="" disabled>ไม่พบเสียงภาษาไทยในเครื่องนี้ (จะใช้เสียงเริ่มต้นของเบราว์เซอร์)</mat-option>
+                <mat-option *ngFor="let v of availableVoices" [value]="v.voiceURI">{{ v.name }}</mat-option>
+              </mat-select>
+              <button mat-stroked-button type="button" (click)="testVoice()">🔈 ทดสอบเสียง</button>
+            </div>
+            <p class="cam-setting-hint">
+              รายชื่อเสียงที่เลือกได้ขึ้นกับเสียงภาษาไทยที่ติดตั้งอยู่ในเครื่อง/เบราว์เซอร์นี้ (เช่น Windows + Edge มักมีให้เลือกหลายเสียง
+              ส่วน Chrome อาจมีน้อยกว่าหรือต้องต่ออินเทอร์เน็ต) ตั้งค่านี้จำแยกไว้ต่อเครื่อง/เบราว์เซอร์
+            </p>
+          </div>
+
+          <div class="cam-select">
             <label>⚡ ความเร็วในการตรวจจับใบหน้า — {{ detectionIntervalMs }} ms</label>
             <mat-slider [min]="minDetectionIntervalMs" [max]="maxDetectionIntervalMs" [step]="10" discrete>
               <input matSliderThumb [(ngModel)]="detectionIntervalMs" (ngModelChange)="onDetectionIntervalChange($event)" />

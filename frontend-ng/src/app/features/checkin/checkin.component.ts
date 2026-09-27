@@ -107,6 +107,8 @@ const OBJ_DETECTOR_KEY = 'camObjectDetector';
 const OBJ_DETECT_INTERVAL_MS = 1000;
 const OBJ_MIN_SCORE = 0.50;
 
+const TTS_VOICE_KEY = 'camTtsVoiceURI';
+
 // Auto-zoom: when a face is detected the cam-frame div is CSS-scaled toward
 // the face centre so the kiosk display zooms in automatically.
 // Flip is applied on the <video> element via CSS class; here we invert the
@@ -306,6 +308,7 @@ export class CheckinComponent implements AfterViewInit, OnDestroy {
     this.flipV = localStorage.getItem('camFlipV') === '1';
     this.showLandmarks = localStorage.getItem('camShowLandmarks') !== '0';
     this.soundEnabled = localStorage.getItem('camSoundEnabled') !== '0';
+    this.loadThaiVoice(); // populate the voice picker even before "start" is clicked
     this.detectionIntervalMs = this.clampNumber(
       Number(localStorage.getItem(DETECTION_INTERVAL_KEY)) || DEFAULT_DETECTION_INTERVAL_MS,
       MIN_DETECTION_INTERVAL_MS,
@@ -518,28 +521,73 @@ export class CheckinComponent implements AfterViewInit, OnDestroy {
   // round-trip) instead of a synthesized beep — speaks "บันทึกสำเร็จค่ะ" on a
   // successful scan and "ลองใหม่ค่ะ" while a detected face isn't recognized,
   // so the kiosk gives spoken Thai feedback instead of just a tone.
+  availableVoices: SpeechSynthesisVoice[] = [];
+  selectedVoiceURI = '';
   private ttsVoice: SpeechSynthesisVoice | null = null;
   private ttsVoiceLoaded = false;
   private lastRetryPromptAt = 0;
   private readonly RETRY_PROMPT_COOLDOWN_MS = 3000; // avoid repeating "ลองใหม่ค่ะ" every detection tick
 
-  // Voices load asynchronously in most browsers (getVoices() returns [] until
-  // the voiceschanged event fires) — called once from start() on the user's
-  // click. Prefers a Thai voice whose name suggests a female speaker; falls
-  // back to any Thai voice, then to the browser default (still Thai-spoken
-  // via utterance.lang even without a dedicated Thai voice installed).
+  // Voices load asynchronously and differently across browsers: Edge/Chrome on
+  // Windows both expose the OS's installed SAPI voices (typically several
+  // Thai ones, e.g. Microsoft Premwadee/Pattara/Niwat) via the same
+  // getVoices() list, but Chrome sometimes only populates it a beat after
+  // 'voiceschanged' first fires — call pick() eagerly, again on the event,
+  // and once more after a short delay as a safety net for that Chrome quirk.
+  // Called once from start() on the user's click (some browsers gate speech
+  // synthesis behind a user gesture the same way as autoplay).
   private loadThaiVoice(): void {
     if (!('speechSynthesis' in window)) return;
     const pick = () => {
       const voices = window.speechSynthesis.getVoices();
       if (!voices.length) return;
-      const thVoices = voices.filter((v) => v.lang?.toLowerCase().startsWith('th'));
-      this.ttsVoice = thVoices.find((v) => /female|หญิง/i.test(v.name)) || thVoices[0] || null;
+      this.availableVoices = voices.filter((v) => v.lang?.toLowerCase().startsWith('th'));
       this.ttsVoiceLoaded = true;
+      this.applySelectedVoice();
     };
     pick();
-    if (!this.ttsVoiceLoaded) {
-      window.speechSynthesis.onvoiceschanged = pick;
+    window.speechSynthesis.onvoiceschanged = pick;
+    setTimeout(pick, 500);
+  }
+
+  // Restores the admin's saved voice choice (persisted per-device in
+  // localStorage, same pattern as the other kiosk device settings); falls
+  // back to a smart default — a name suggesting a female speaker — the first
+  // time a voice list becomes available on this device.
+  private applySelectedVoice(): void {
+    if (!this.availableVoices.length) {
+      this.ttsVoice = null;
+      return;
+    }
+    const saved = localStorage.getItem(TTS_VOICE_KEY);
+    const found = saved ? this.availableVoices.find((v) => v.voiceURI === saved) : undefined;
+    const chosen = found || this.availableVoices.find((v) => /female|หญิง/i.test(v.name)) || this.availableVoices[0];
+    this.ttsVoice = chosen;
+    this.selectedVoiceURI = chosen.voiceURI;
+  }
+
+  onVoiceChange(voiceURI: string): void {
+    this.selectedVoiceURI = voiceURI;
+    localStorage.setItem(TTS_VOICE_KEY, voiceURI);
+    this.ttsVoice = this.availableVoices.find((v) => v.voiceURI === voiceURI) || null;
+  }
+
+  // "ทดสอบเสียง" button — previews the currently-selected voice immediately,
+  // bypassing the sound-enabled toggle and speaking-guard below so the admin
+  // can compare voices back-to-back while picking one.
+  testVoice(): void {
+    if (!('speechSynthesis' in window)) return;
+    try {
+      window.speechSynthesis.cancel();
+      const utter = new SpeechSynthesisUtterance('ทดสอบเสียงพูด บันทึกสำเร็จค่ะ');
+      utter.lang = 'th-TH';
+      if (this.ttsVoice) utter.voice = this.ttsVoice;
+      utter.rate = 1;
+      utter.pitch = 1.15;
+      utter.volume = 1;
+      window.speechSynthesis.speak(utter);
+    } catch {
+      // non-critical
     }
   }
 

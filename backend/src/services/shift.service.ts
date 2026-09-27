@@ -140,6 +140,7 @@ interface TodayScans {
   hasOtIn: boolean;
   hasOtOut: boolean;
   lastScanTime: Date | null;
+  checkInTime: Date | null;
 }
 
 async function getTodayScans(employeeId: number, day: string): Promise<TodayScans> {
@@ -155,14 +156,15 @@ async function getTodayScans(employeeId: number, day: string): Promise<TodayScan
   let hasOtIn = false;
   let hasOtOut = false;
   let lastScanTime: Date | null = null;
+  let checkInTime: Date | null = null;
   for (const r of rows) {
-    if (r.scan_type === 'check_in') hasCheckIn = true;
+    if (r.scan_type === 'check_in') { hasCheckIn = true; checkInTime = new Date(r.scan_time); }
     if (r.scan_type === 'check_out') hasCheckOut = true;
     if (r.scan_type === 'ot_in') hasOtIn = true;
     if (r.scan_type === 'ot_out') hasOtOut = true;
     lastScanTime = new Date(r.scan_time);
   }
-  return { hasCheckIn, hasCheckOut, hasOtIn, hasOtOut, lastScanTime };
+  return { hasCheckIn, hasCheckOut, hasOtIn, hasOtOut, lastScanTime, checkInTime };
 }
 
 // ---- Classification -------------------------------------------------------
@@ -180,7 +182,7 @@ interface Classification {
 //   ot_start .. ot_end              → OT-เข้า / OT-ออก (requires prior check-in+check-out)
 // Scans that fall outside every applicable window return null → no record written.
 function classify(shift: Shift, now: Date, today: TodayScans): Classification | null {
-  if (shift.flexible_time) return classifyFlexible(today);
+  if (shift.flexible_time) return classifyFlexible(shift, now, today);
 
   const sec = dateToSeconds(now);
 
@@ -232,9 +234,18 @@ function classify(shift: Shift, now: Date, today: TodayScans): Classification | 
 // start to be late against) and no separate OT phase — a single in/out
 // pair is the whole session, already identifiable as holiday/OT work via
 // attendance_records.shift_id.
-function classifyFlexible(today: TodayScans): Classification | null {
+//
+// flexible_min_hours (0 = no restriction) guards against a second scan of
+// the same person shortly after check-in — past the general anti-duplicate
+// cooldown (config.face.cooldownMinutes, typically a few minutes) but still
+// clearly not a real end-of-shift — being misread as a check-out.
+function classifyFlexible(shift: Shift, now: Date, today: TodayScans): Classification | null {
   if (today.hasCheckIn && today.hasCheckOut) return null; // day already complete
   if (today.hasCheckIn) {
+    if (shift.flexible_min_hours > 0 && today.checkInTime) {
+      const hoursSinceCheckIn = (now.getTime() - today.checkInTime.getTime()) / 3_600_000;
+      if (hoursSinceCheckIn < shift.flexible_min_hours) return null; // too soon to check out
+    }
     return { scanType: 'check_out', status: 'on_time', message: 'ลงเวลาออกงานสำเร็จ' };
   }
   return { scanType: 'check_in', status: 'on_time', message: 'ลงเวลาเข้างานสำเร็จ' };
@@ -244,6 +255,13 @@ function classifyFlexible(today: TodayScans): Classification | null {
 function outsideWindowMessage(shift: Shift, now: Date, today: TodayScans): string {
   if (shift.flexible_time && today.hasCheckIn && today.hasCheckOut) {
     return 'บันทึกเข้า-ออกงานของวันนี้ครบแล้ว (Already checked in and out today)';
+  }
+  if (shift.flexible_time && today.hasCheckIn && !today.hasCheckOut && shift.flexible_min_hours > 0 && today.checkInTime) {
+    const hoursSinceCheckIn = (now.getTime() - today.checkInTime.getTime()) / 3_600_000;
+    if (hoursSinceCheckIn < shift.flexible_min_hours) {
+      const remainingMin = Math.max(1, Math.ceil((shift.flexible_min_hours - hoursSinceCheckIn) * 60));
+      return `ยังไม่ถึงเวลาขั้นต่ำก่อนออกงาน (ต้องผ่านไปอย่างน้อย ${shift.flexible_min_hours} ชม. หลังเข้างาน — อีกประมาณ ${remainingMin} นาที)`;
+    }
   }
   return 'ไม่อยู่ในช่วงเวลาลงเวลา (Outside scan window)';
 }
@@ -472,6 +490,10 @@ export function validateShiftOrder(s: Omit<Shift, 'id' | 'name'>): string | null
   if ((s as any).flexible_time) {
     if (!s.checkout_end || !/^\d{1,2}:\d{2}(:\d{2})?$/.test(s.checkout_end)) {
       return 'กรุณากรอกเวลาตัดยอดให้ถูกต้อง';
+    }
+    const minHours = Number((s as any).flexible_min_hours);
+    if (!Number.isFinite(minHours) || minHours < 0 || minHours > 24) {
+      return 'ชั่วโมงขั้นต่ำก่อนออกงานต้องเป็นตัวเลข 0-24';
     }
     return null;
   }

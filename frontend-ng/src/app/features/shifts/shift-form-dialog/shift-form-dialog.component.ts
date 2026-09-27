@@ -73,11 +73,22 @@ function timeToMinutes(t: string): number {
 // dragging several time-pickers down toward 00:00 just trying to make the
 // error go away — which technically satisfies "non-decreasing order" but
 // leaves the shift's check-in/checkout window degenerate (unusable).
-function orderCheck(v: Partial<Record<(typeof TIME_FIELDS)[number], string | null>> & { flexible_time?: boolean | null }): string | null {
+function orderCheck(
+  v: Partial<Record<(typeof TIME_FIELDS)[number], string | null>> & {
+    flexible_time?: boolean | null;
+    flexible_min_hours?: number | string | null;
+  }
+): string | null {
   if (v.flexible_time) {
-    // Flexible-time shift: only the cutoff (checkout_end) matters — the other
-    // fields are unused, so skip the fixed-window ordering checks entirely.
-    return v.checkout_end ? null : 'กรุณากรอกเวลาตัดยอด';
+    // Flexible-time shift: only the cutoff (checkout_end) and the minimum-
+    // hours-before-checkout guard matter — the other fields are unused, so
+    // skip the fixed-window ordering checks entirely.
+    if (!v.checkout_end) return 'กรุณากรอกเวลาตัดยอด';
+    const minHours = Number(v.flexible_min_hours);
+    if (!Number.isFinite(minHours) || minHours < 0 || minHours > 24) {
+      return 'ชั่วโมงขั้นต่ำก่อนออกงานต้องเป็นตัวเลข 0-24';
+    }
+    return null;
   }
   for (let i = 1; i < TIME_FIELDS.length; i++) {
     const prevKey = TIME_FIELDS[i - 1];
@@ -130,6 +141,7 @@ export class ShiftFormDialogComponent implements OnInit {
   readonly form = this.fb.group({
     name: ['', Validators.required],
     flexible_time: [false],
+    flexible_min_hours: [0],
     mon: [true],
     tue: [true],
     wed: [true],
@@ -155,6 +167,7 @@ export class ShiftFormDialogComponent implements OnInit {
       this.form.patchValue({
         name: s.name,
         flexible_time: !!s.flexible_time,
+        flexible_min_hours: s.flexible_min_hours ?? 0,
         ...days,
         checkin_start: hhmm(s.checkin_start),
         checkin_end: hhmm(s.checkin_end),
@@ -195,6 +208,7 @@ export class ShiftFormDialogComponent implements OnInit {
     const body = {
       name: (v.name || '').trim(),
       flexible_time: toBit(v.flexible_time),
+      flexible_min_hours: Number(v.flexible_min_hours) || 0,
       mon: toBit(v.mon),
       tue: toBit(v.tue),
       wed: toBit(v.wed),

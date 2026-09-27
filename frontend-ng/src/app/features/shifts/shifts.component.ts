@@ -83,7 +83,10 @@ export class ShiftsComponent implements OnInit {
   }
 
   checkoutLabel(shift: Shift): string {
-    return shift.flexible_time ? `ยืดหยุ่น (ตัดยอด ${hhmm(shift.checkout_end)})` : this.window(shift.checkout_start, shift.checkout_end);
+    if (!shift.flexible_time) return this.window(shift.checkout_start, shift.checkout_end);
+    const minHours = Number(shift.flexible_min_hours) || 0;
+    const minHoursPart = minHours > 0 ? `ขั้นต่ำ ${minHours} ชม., ` : '';
+    return `ยืดหยุ่น (${minHoursPart}ตัดยอด ${hhmm(shift.checkout_end)})`;
   }
 
   otLabel(shift: Shift): string {

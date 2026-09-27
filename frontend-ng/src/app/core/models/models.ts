@@ -121,6 +121,7 @@ export interface Shift {
   ot_start: string;
   ot_end: string;
   flexible_time: 0 | 1;
+  flexible_min_hours: number;
 }
 
 export type ScanType = 'check_in' | 'check_out' | 'ot_in' | 'ot_out';

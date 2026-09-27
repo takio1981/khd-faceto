@@ -40,11 +40,16 @@ function readShiftBody(body: any, existing?: any) {
     TIME_FIELDS.map((f) => [f, body[f] !== undefined ? body[f] : existing?.[f]])
   ) as Record<(typeof TIME_FIELDS)[number], string>;
   const flexibleTime = body.flexible_time !== undefined ? (body.flexible_time ? 1 : 0) : (existing ? existing.flexible_time : 0);
+  const flexibleMinHours =
+    body.flexible_min_hours !== undefined ? Number(body.flexible_min_hours) : (existing ? Number(existing.flexible_min_hours) : 0);
   return {
     name: body.name !== undefined ? body.name : existing?.name,
     ...days,
     ...times,
     flexible_time: flexibleTime,
+    // Left as-is (possibly NaN) rather than silently defaulted — validateShiftOrder
+    // rejects a non-finite/out-of-range value with a clear error instead.
+    flexible_min_hours: flexibleMinHours,
   };
 }
 
@@ -71,9 +76,9 @@ router.post('/', verifyJWT, requireRole('admin'), asyncHandler(async (req, res) 
   }
   const [result] = await pool.query<ResultSetHeader>(
     `INSERT INTO shifts
-       (name, mon, tue, wed, thu, fri, sat, sun, checkin_start, checkin_end, late_cutoff, checkout_start, checkout_end, ot_start, ot_end, flexible_time)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-    [s.name, s.mon, s.tue, s.wed, s.thu, s.fri, s.sat, s.sun, s.checkin_start, s.checkin_end, s.late_cutoff, s.checkout_start, s.checkout_end, s.ot_start, s.ot_end, s.flexible_time]
+       (name, mon, tue, wed, thu, fri, sat, sun, checkin_start, checkin_end, late_cutoff, checkout_start, checkout_end, ot_start, ot_end, flexible_time, flexible_min_hours)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    [s.name, s.mon, s.tue, s.wed, s.thu, s.fri, s.sat, s.sun, s.checkin_start, s.checkin_end, s.late_cutoff, s.checkout_start, s.checkout_end, s.ot_start, s.ot_end, s.flexible_time, s.flexible_min_hours]
   );
   await logAudit(req, { action: 'shift.create', targetTable: 'shifts', targetId: result.insertId, after: s });
   res.status(201).json({ id: result.insertId });
@@ -104,9 +109,9 @@ router.put('/:id', verifyJWT, requireRole('admin'), asyncHandler(async (req, res
     `UPDATE shifts
         SET name = ?, mon = ?, tue = ?, wed = ?, thu = ?, fri = ?, sat = ?, sun = ?,
             checkin_start = ?, checkin_end = ?, late_cutoff = ?,
-            checkout_start = ?, checkout_end = ?, ot_start = ?, ot_end = ?, flexible_time = ?
+            checkout_start = ?, checkout_end = ?, ot_start = ?, ot_end = ?, flexible_time = ?, flexible_min_hours = ?
       WHERE id = ?`,
-    [s.name, s.mon, s.tue, s.wed, s.thu, s.fri, s.sat, s.sun, s.checkin_start, s.checkin_end, s.late_cutoff, s.checkout_start, s.checkout_end, s.ot_start, s.ot_end, s.flexible_time, req.params.id]
+    [s.name, s.mon, s.tue, s.wed, s.thu, s.fri, s.sat, s.sun, s.checkin_start, s.checkin_end, s.late_cutoff, s.checkout_start, s.checkout_end, s.ot_start, s.ot_end, s.flexible_time, s.flexible_min_hours, req.params.id]
   );
   await logAudit(req, { action: 'shift.update', targetTable: 'shifts', targetId: Number(req.params.id), before: beforeRows[0], after: s });
   res.json({ ok: true });

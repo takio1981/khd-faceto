@@ -42,6 +42,7 @@ export interface Shift {
   ot_start: string;
   ot_end: string;
   flexible_time: number; // 1 | 0 — any time is valid for check-in/check-out; checkout_end is reused as the missing-checkout cutoff
+  flexible_min_hours: number; // flexible_time only: minimum hours after check-in before a check-out scan is accepted (0 = no restriction)
 }
 
 export interface FaceDescriptorRow {

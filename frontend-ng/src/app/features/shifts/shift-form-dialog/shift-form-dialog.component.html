@@ -38,8 +38,14 @@
     </div>
 
     @if (form.controls.flexible_time.value) {
+      <mat-form-field appearance="outline" class="full-width">
+        <mat-label>ชั่วโมงขั้นต่ำก่อนออกงาน (ป้องกันสแกนซ้ำกลายเป็นออกงาน)</mat-label>
+        <input matInput type="number" min="0" max="24" step="0.5" formControlName="flexible_min_hours" />
+        <span matSuffix>ชม.</span>
+      </mat-form-field>
       <p class="hint">
         กะเวลายืดหยุ่น: เข้างานและออกงานได้ทุกเวลา (เข้า-ออก 1 รอบต่อวัน) — หากเข้างานแล้วแต่ไม่สแกนออกภายในเวลาตัดยอด ระบบจะแจ้งเตือนผู้ดูแลระบบ
+        ตั้งค่า "ชั่วโมงขั้นต่ำก่อนออกงาน" ไว้ที่ 0 เพื่อไม่จำกัด (ออกงานได้ทันทีหลังเข้างาน) หรือใส่จำนวนชั่วโมงเพื่อกันการสแกนซ้ำเร็วๆ นี้กลายเป็นออกงานโดยไม่ตั้งใจ
       </p>
     } @else {
       <p class="hint">
