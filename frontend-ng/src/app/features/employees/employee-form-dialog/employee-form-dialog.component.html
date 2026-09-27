@@ -67,20 +67,20 @@
         <mat-select formControlName="shift_id">
           <mat-option [value]="null">— ไม่ระบุ —</mat-option>
           @for (s of data.shifts; track s.id) {
-            <mat-option [value]="s.id">{{ s.name }}</mat-option>
+            <mat-option [value]="s.id">{{ s.name }} ({{ daysSummary(s) }})</mat-option>
           }
         </mat-select>
       </mat-form-field>
 
-      <mat-form-field appearance="outline">
+      <mat-form-field appearance="outline" subscriptSizing="dynamic">
         <mat-label>กะวันหยุด</mat-label>
         <mat-select formControlName="holiday_shift_id">
           <mat-option [value]="null">— ใช้กะปกติ —</mat-option>
           @for (s of data.shifts; track s.id) {
-            <mat-option [value]="s.id">{{ s.name }}</mat-option>
+            <mat-option [value]="s.id">{{ s.name }} ({{ daysSummary(s) }})</mat-option>
           }
         </mat-select>
-        <mat-hint>ถ้ากำหนดไว้ จะใช้กะนี้แทนกะปกติในวันหยุดประกาศ</mat-hint>
+        <mat-hint>ใช้แทนกะปกติในวันหยุด/เสาร์-อาทิตย์</mat-hint>
       </mat-form-field>
 
       <mat-form-field appearance="outline">

@@ -3,8 +3,7 @@ import { RowDataPacket } from 'mysql2';
 import { pool } from '../db';
 import { asyncHandler } from '../middleware/errorHandler';
 import { verifyJWT } from '../middleware/auth';
-import { isWeekendDateKey } from '../utils/ict';
-import { isHoliday } from '../services/holidays.service';
+import { resolveEffectiveShift } from '../services/shift.service';
 
 const router = Router();
 
@@ -42,17 +41,29 @@ router.get('/summary', verifyJWT, asyncHandler(async (req, res) => {
   );
   counts.ot = otRows[0].cnt as number;
 
-  // Total active employees (for absent calculation context)
+  // Active employees (for absent calculation context) — fetched with their
+  // shift assignments so absent counting can tell WHICH of them were
+  // actually expected to work `date`, instead of a single global
+  // weekend/holiday flag that ignored employees with a holiday_shift_id.
   const [empRows] = await pool.query<RowDataPacket[]>(
-    `SELECT COUNT(*) AS total FROM employees WHERE is_active = 1 ${scopedEmployeeId ? 'AND id = ?' : ''}`,
+    `SELECT id, shift_id, holiday_shift_id FROM employees WHERE is_active = 1 ${scopedEmployeeId ? 'AND id = ?' : ''}`,
     scopedEmployeeId ? [scopedEmployeeId] : []
   );
-  const totalEmployees = empRows[0].total as number;
+  const totalEmployees = empRows.length;
+
+  const shiftCache = new Map<string, boolean>();
+  let expectedToWorkCount = 0;
+  for (const e of empRows) {
+    const key = `${e.shift_id}|${e.holiday_shift_id}`;
+    if (!shiftCache.has(key)) {
+      shiftCache.set(key, !!(await resolveEffectiveShift(e.shift_id, e.holiday_shift_id, date)));
+    }
+    if (shiftCache.get(key)) expectedToWorkCount++;
+  }
+
   const present = counts.on_time + counts.late;
-  // Nobody is expected to check in on a non-workday — don't count the whole
-  // staff as "absent" just because it's a weekend or a declared holiday.
-  const isNonWorkday = isWeekendDateKey(date) || (await isHoliday(date));
-  counts.absent = isNonWorkday ? 0 : Math.max(0, totalEmployees - present);
+  const isNonWorkday = expectedToWorkCount === 0;
+  counts.absent = Math.max(0, expectedToWorkCount - present);
 
   // --- Weekly trend: last 7 days, on_time vs late ---
   const weeklyParams: any[] = [];

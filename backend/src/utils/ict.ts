@@ -51,9 +51,13 @@ export function ictIsWeekend(d: Date): boolean {
 // Same check, but for a 'YYYY-MM-DD' calendar-day key (no time component,
 // so no timezone math needed — the date is already the intended calendar day).
 export function isWeekendDateKey(dateKey: string): boolean {
+  return dowFromDateKey(dateKey) === 0 || dowFromDateKey(dateKey) === 6;
+}
+
+// 0=Sun..6=Sat, from a 'YYYY-MM-DD' calendar-day key (no time component).
+export function dowFromDateKey(dateKey: string): number {
   const [y, m, d] = dateKey.split('-').map(Number);
-  const day = new Date(Date.UTC(y, m - 1, d)).getUTCDay();
-  return day === 0 || day === 6;
+  return new Date(Date.UTC(y, m - 1, d)).getUTCDay();
 }
 
 // 'YYYY-MM-DD HH:MM:SS' for MySQL DATETIME, ICT wall-clock time.

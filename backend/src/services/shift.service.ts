@@ -7,7 +7,7 @@ import { config } from '../config';
 import { Shift, ScanType, AttendanceStatus, ScanResult } from '../types';
 import { ensureFaceCache, findBestMatchStrict } from './faceCache';
 import { notifyScan, notifyUnknownFace } from './notification.service';
-import { ictSecondsSinceMidnight, ictMysqlDateTime, ictDateKey, ictTimeStamp, ictIsWeekend } from '../utils/ict';
+import { ictSecondsSinceMidnight, ictMysqlDateTime, ictDateKey, ictTimeStamp, isWeekendDateKey, dowFromDateKey } from '../utils/ict';
 import { isHoliday } from './holidays.service';
 
 // ---- Time helpers ---------------------------------------------------------
@@ -104,16 +104,32 @@ async function getShift(shiftId: number | null): Promise<Shift | null> {
   return rows.length ? (rows[0] as Shift) : null;
 }
 
-// Returns the effective shift for a scan: if today is a weekend (Sat/Sun) OR a
-// declared holiday AND the employee has a holiday_shift_id configured, use that
-// shift; otherwise fall back to their regular shift (or the first-defined shift
-// if none assigned).
-async function getEffectiveShift(shiftId: number | null, holidayShiftId: number | null, now: Date): Promise<Shift | null> {
-  if (holidayShiftId && (ictIsWeekend(now) || (await isHoliday(dateKey(now))))) {
-    const [rows] = await pool.query<RowDataPacket[]>('SELECT * FROM shifts WHERE id = ? LIMIT 1', [holidayShiftId]);
-    if (rows.length) return rows[0] as Shift;
+const DOW_COLUMNS = ['sun', 'mon', 'tue', 'wed', 'thu', 'fri', 'sat'] as const;
+
+function shiftAppliesOnDate(shift: Shift, dateKeyStr: string): boolean {
+  return !!shift[DOW_COLUMNS[dowFromDateKey(dateKeyStr)]];
+}
+
+// Resolves which of an employee's two shifts (if either) is active for a
+// given calendar day: prefer holiday_shift_id on weekends/declared holidays
+// (existing behavior), but only if that shift's own days-of-week actually
+// covers this day — otherwise fall back to the other shift, and only if
+// THAT one covers the day either. Returns null when neither does ("not
+// expected to work today"). Keyed by calendar day (not a Date+time) so this
+// is reusable by day-level checks (dashboard, absence notifications) as
+// well as real-time scan classification.
+export async function resolveEffectiveShift(
+  shiftId: number | null,
+  holidayShiftId: number | null,
+  dateKeyStr: string
+): Promise<Shift | null> {
+  const preferHoliday = !!holidayShiftId && (isWeekendDateKey(dateKeyStr) || (await isHoliday(dateKeyStr)));
+  const order = preferHoliday ? [holidayShiftId, shiftId] : [shiftId, holidayShiftId];
+  for (const id of order) {
+    const shift = await getShift(id);
+    if (shift && shiftAppliesOnDate(shift, dateKeyStr)) return shift;
   }
-  return getShift(shiftId);
+  return null;
 }
 
 // ---- Today's existing scans ----------------------------------------------
@@ -253,7 +269,7 @@ export async function processScan(
     }
   }
 
-  const shift = await getEffectiveShift(entry.shiftId, entry.holidayShiftId, now);
+  const shift = await resolveEffectiveShift(entry.shiftId, entry.holidayShiftId, day);
   if (!shift) {
     return {
       matched: true,
@@ -384,7 +400,7 @@ export async function processScanPreview(
     }
   }
 
-  const shift = await getEffectiveShift(entry.shiftId, entry.holidayShiftId, now);
+  const shift = await resolveEffectiveShift(entry.shiftId, entry.holidayShiftId, day);
   if (!shift) {
     return {
       matched: true,

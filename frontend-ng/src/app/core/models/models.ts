@@ -106,6 +106,13 @@ export interface ConsentStatus {
 export interface Shift {
   id: number;
   name: string;
+  mon: 0 | 1;
+  tue: 0 | 1;
+  wed: 0 | 1;
+  thu: 0 | 1;
+  fri: 0 | 1;
+  sat: 0 | 1;
+  sun: 0 | 1;
   checkin_start: string;
   checkin_end: string;
   late_cutoff: string;

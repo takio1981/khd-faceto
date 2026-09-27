@@ -15,6 +15,18 @@ function hhmm(t?: string | null): string {
   return t ? t.slice(0, 5) : '-';
 }
 
+const DAY_LABELS: [keyof Shift, string][] = [
+  ['mon', 'จ'], ['tue', 'อ'], ['wed', 'พ'], ['thu', 'พฤ'], ['fri', 'ศ'], ['sat', 'ส'], ['sun', 'อา'],
+];
+
+/** Compact day-of-week summary for the shift list, e.g. "จ อ พ พฤ ศ" or "ทุกวัน" when every day is active. */
+function daysSummary(shift: Shift): string {
+  const active = DAY_LABELS.filter(([key]) => !!shift[key]);
+  if (active.length === 7) return 'ทุกวัน';
+  if (!active.length) return '-';
+  return active.map(([, label]) => label).join(' ');
+}
+
 @Component({
   selector: 'app-shifts',
   standalone: true,
@@ -32,6 +44,7 @@ function hhmm(t?: string | null): string {
 export class ShiftsComponent implements OnInit {
   readonly columns: TableColumn[] = [
     { key: 'name', label: 'ชื่อกะ' },
+    { key: 'days', label: 'วันที่ใช้งาน' },
     { key: 'checkin', label: 'เข้างาน (เริ่ม-ตรงเวลา)' },
     { key: 'late_cutoff', label: 'สายได้ถึง' },
     { key: 'checkout', label: 'ออกงาน (เริ่ม-สิ้นสุด)' },
@@ -55,6 +68,7 @@ export class ShiftsComponent implements OnInit {
   trackById = (_: number, s: Shift) => s.id;
 
   hhmm = hhmm;
+  daysSummary = daysSummary;
 
   window(start?: string | null, end?: string | null): string {
     return `${hhmm(start)} - ${hhmm(end)}`;

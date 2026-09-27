@@ -63,6 +63,20 @@ export class EmployeeFormDialogComponent implements OnInit {
     (e) => e.is_active && e.id !== this.data.employee?.id
   );
 
+  // Shown next to each option in the shift/holiday-shift dropdowns so admins
+  // can see which days a shift actually covers before assigning it, instead
+  // of assuming "holiday shift" implicitly means "every declared holiday."
+  private static readonly DAY_LABELS: [keyof Shift, string][] = [
+    ['mon', 'จ'], ['tue', 'อ'], ['wed', 'พ'], ['thu', 'พฤ'], ['fri', 'ศ'], ['sat', 'ส'], ['sun', 'อา'],
+  ];
+
+  daysSummary(shift: Shift): string {
+    const active = EmployeeFormDialogComponent.DAY_LABELS.filter(([key]) => !!shift[key]);
+    if (active.length === 7) return 'ทุกวัน';
+    if (!active.length) return '-';
+    return active.map(([, label]) => label).join(' ');
+  }
+
   readonly employeeTypeOptions: { value: string; label: string }[] = [
     { value: 'civil_servant', label: 'ข้าราชการ' },
     { value: 'government_employee', label: 'พนักงานราชการ' },

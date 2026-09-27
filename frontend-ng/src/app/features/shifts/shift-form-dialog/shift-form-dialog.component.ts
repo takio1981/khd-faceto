@@ -1,10 +1,12 @@
 import { Component, Inject, OnInit, inject, signal } from '@angular/core';
 import { FormBuilder, ReactiveFormsModule, Validators } from '@angular/forms';
 import { MatButtonModule } from '@angular/material/button';
+import { MatCheckboxModule } from '@angular/material/checkbox';
 import { MAT_DIALOG_DATA, MatDialogModule, MatDialogRef } from '@angular/material/dialog';
 import { MatFormFieldModule } from '@angular/material/form-field';
 import { MatInputModule } from '@angular/material/input';
 import { MatProgressSpinnerModule } from '@angular/material/progress-spinner';
+import { MatTooltipModule } from '@angular/material/tooltip';
 import { Shift } from '../../../core/models/models';
 import { NotifyService } from '../../../core/services/notify.service';
 import { ShiftService } from '../../../core/services/shift.service';
@@ -39,6 +41,11 @@ const DEFAULTS: Record<(typeof TIME_FIELDS)[number], string> = {
   ot_end: '22:00',
 };
 
+const DAY_FIELDS = ['mon', 'tue', 'wed', 'thu', 'fri', 'sat', 'sun'] as const;
+const DAY_DEFAULTS: Record<(typeof DAY_FIELDS)[number], boolean> = {
+  mon: true, tue: true, wed: true, thu: true, fri: true, sat: true, sun: true,
+};
+
 /** Truncate a HH:MM:SS string (as stored/returned by the backend) down to HH:MM for the <input type="time"> control. */
 function hhmm(t?: string | null): string {
   return t ? t.slice(0, 5) : '';
@@ -53,7 +60,9 @@ function hhmm(t?: string | null): string {
     MatFormFieldModule,
     MatInputModule,
     MatButtonModule,
+    MatCheckboxModule,
     MatProgressSpinnerModule,
+    MatTooltipModule,
     TimePickerComponent,
   ],
   templateUrl: './shift-form-dialog.component.html',
@@ -72,6 +81,13 @@ export class ShiftFormDialogComponent implements OnInit {
 
   readonly form = this.fb.group({
     name: ['', Validators.required],
+    mon: [true],
+    tue: [true],
+    wed: [true],
+    thu: [true],
+    fri: [true],
+    sat: [true],
+    sun: [true],
     checkin_start: [''],
     checkin_end: [''],
     late_cutoff: [''],
@@ -86,8 +102,10 @@ export class ShiftFormDialogComponent implements OnInit {
   ngOnInit(): void {
     const s = this.data.shift;
     if (s) {
+      const days = Object.fromEntries(DAY_FIELDS.map((f) => [f, !!s[f]])) as Record<(typeof DAY_FIELDS)[number], boolean>;
       this.form.patchValue({
         name: s.name,
+        ...days,
         checkin_start: hhmm(s.checkin_start),
         checkin_end: hhmm(s.checkin_end),
         late_cutoff: hhmm(s.late_cutoff),
@@ -97,7 +115,7 @@ export class ShiftFormDialogComponent implements OnInit {
         ot_end: hhmm(s.ot_end),
       });
     } else {
-      this.form.patchValue(DEFAULTS);
+      this.form.patchValue({ ...DAY_DEFAULTS, ...DEFAULTS });
     }
   }
 
@@ -120,8 +138,16 @@ export class ShiftFormDialogComponent implements OnInit {
       return val.length === 5 ? `${val}:00` : val;
     };
 
+    const toBit = (b: boolean | null | undefined): 0 | 1 => (b ? 1 : 0);
     const body = {
       name: (v.name || '').trim(),
+      mon: toBit(v.mon),
+      tue: toBit(v.tue),
+      wed: toBit(v.wed),
+      thu: toBit(v.thu),
+      fri: toBit(v.fri),
+      sat: toBit(v.sat),
+      sun: toBit(v.sun),
       checkin_start: toHms(v.checkin_start),
       checkin_end: toHms(v.checkin_end),
       late_cutoff: toHms(v.late_cutoff),

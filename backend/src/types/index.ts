@@ -27,6 +27,13 @@ export interface Employee {
 export interface Shift {
   id: number;
   name: string;
+  mon: number; // 1 | 0 — which days of the week this shift is active on
+  tue: number;
+  wed: number;
+  thu: number;
+  fri: number;
+  sat: number;
+  sun: number;
   checkin_start: string;  // 'HH:MM:SS'
   checkin_end: string;
   late_cutoff: string;

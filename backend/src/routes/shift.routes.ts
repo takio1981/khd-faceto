@@ -24,9 +24,13 @@ router.get('/:id', verifyJWT, asyncHandler(async (req, res) => {
   res.json(rows[0]);
 }));
 
+const DAY_FIELDS = ['mon', 'tue', 'wed', 'thu', 'fri', 'sat', 'sun'] as const;
+
 function readShiftBody(body: any) {
+  const days = Object.fromEntries(DAY_FIELDS.map((f) => [f, body[f] ? 1 : 0])) as Record<(typeof DAY_FIELDS)[number], number>;
   return {
     name: body.name,
+    ...days,
     checkin_start: body.checkin_start,
     checkin_end: body.checkin_end,
     late_cutoff: body.late_cutoff,
@@ -37,10 +41,20 @@ function readShiftBody(body: any) {
   };
 }
 
+// A shift active on zero days would silently never apply to anyone.
+function validateAtLeastOneDay(s: Record<(typeof DAY_FIELDS)[number], number>): string | null {
+  return DAY_FIELDS.some((f) => s[f]) ? null : 'กรุณาเลือกอย่างน้อย 1 วันที่กะนี้ใช้งาน';
+}
+
 router.post('/', verifyJWT, requireRole('admin'), asyncHandler(async (req, res) => {
   const s = readShiftBody(req.body ?? {});
   if (!s.name) {
     res.status(400).json({ error: 'กรุณาตั้งชื่อกะการทำงาน' });
+    return;
+  }
+  const dayErr = validateAtLeastOneDay(s);
+  if (dayErr) {
+    res.status(400).json({ error: dayErr });
     return;
   }
   const err = validateShiftOrder(s as any);
@@ -50,9 +64,9 @@ router.post('/', verifyJWT, requireRole('admin'), asyncHandler(async (req, res) 
   }
   const [result] = await pool.query<ResultSetHeader>(
     `INSERT INTO shifts
-       (name, checkin_start, checkin_end, late_cutoff, checkout_start, checkout_end, ot_start, ot_end)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
-    [s.name, s.checkin_start, s.checkin_end, s.late_cutoff, s.checkout_start, s.checkout_end, s.ot_start, s.ot_end]
+       (name, mon, tue, wed, thu, fri, sat, sun, checkin_start, checkin_end, late_cutoff, checkout_start, checkout_end, ot_start, ot_end)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    [s.name, s.mon, s.tue, s.wed, s.thu, s.fri, s.sat, s.sun, s.checkin_start, s.checkin_end, s.late_cutoff, s.checkout_start, s.checkout_end, s.ot_start, s.ot_end]
   );
   await logAudit(req, { action: 'shift.create', targetTable: 'shifts', targetId: result.insertId, after: s });
   res.status(201).json({ id: result.insertId });
@@ -60,6 +74,11 @@ router.post('/', verifyJWT, requireRole('admin'), asyncHandler(async (req, res) 
 
 router.put('/:id', verifyJWT, requireRole('admin'), asyncHandler(async (req, res) => {
   const s = readShiftBody(req.body ?? {});
+  const dayErr = validateAtLeastOneDay(s);
+  if (dayErr) {
+    res.status(400).json({ error: dayErr });
+    return;
+  }
   const err = validateShiftOrder(s as any);
   if (err) {
     res.status(400).json({ error: err });
@@ -68,10 +87,11 @@ router.put('/:id', verifyJWT, requireRole('admin'), asyncHandler(async (req, res
   const [beforeRows] = await pool.query<RowDataPacket[]>('SELECT * FROM shifts WHERE id = ?', [req.params.id]);
   await pool.query<ResultSetHeader>(
     `UPDATE shifts
-        SET name = ?, checkin_start = ?, checkin_end = ?, late_cutoff = ?,
+        SET name = ?, mon = ?, tue = ?, wed = ?, thu = ?, fri = ?, sat = ?, sun = ?,
+            checkin_start = ?, checkin_end = ?, late_cutoff = ?,
             checkout_start = ?, checkout_end = ?, ot_start = ?, ot_end = ?
       WHERE id = ?`,
-    [s.name, s.checkin_start, s.checkin_end, s.late_cutoff, s.checkout_start, s.checkout_end, s.ot_start, s.ot_end, req.params.id]
+    [s.name, s.mon, s.tue, s.wed, s.thu, s.fri, s.sat, s.sun, s.checkin_start, s.checkin_end, s.late_cutoff, s.checkout_start, s.checkout_end, s.ot_start, s.ot_end, req.params.id]
   );
   await logAudit(req, { action: 'shift.update', targetTable: 'shifts', targetId: Number(req.params.id), before: beforeRows[0], after: s });
   res.json({ ok: true });

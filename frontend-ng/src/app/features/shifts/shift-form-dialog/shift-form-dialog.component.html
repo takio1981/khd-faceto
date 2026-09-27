@@ -7,6 +7,17 @@
       <input matInput formControlName="name" />
     </mat-form-field>
 
+    <p class="days-label">วันที่ใช้กะนี้ *</p>
+    <div class="days-row">
+      <mat-checkbox formControlName="mon" matTooltip="วันจันทร์">จ</mat-checkbox>
+      <mat-checkbox formControlName="tue" matTooltip="วันอังคาร">อ</mat-checkbox>
+      <mat-checkbox formControlName="wed" matTooltip="วันพุธ">พ</mat-checkbox>
+      <mat-checkbox formControlName="thu" matTooltip="วันพฤหัสบดี">พฤ</mat-checkbox>
+      <mat-checkbox formControlName="fri" matTooltip="วันศุกร์">ศ</mat-checkbox>
+      <mat-checkbox formControlName="sat" matTooltip="วันเสาร์">ส</mat-checkbox>
+      <mat-checkbox formControlName="sun" matTooltip="วันอาทิตย์">อา</mat-checkbox>
+    </div>
+
     <div class="form-grid">
       <app-time-picker label="เริ่มเข้างาน" formControlName="checkin_start"></app-time-picker>
       <app-time-picker label="ตรงเวลาถึง" formControlName="checkin_end"></app-time-picker>

@@ -13,6 +13,7 @@
     <ng-template #desktopRow let-shift>
       <tr>
         <td>{{ shift.name }}</td>
+        <td>{{ daysSummary(shift) }}</td>
         <td>{{ window(shift.checkin_start, shift.checkin_end) }}</td>
         <td>{{ hhmm(shift.late_cutoff) }}</td>
         <td>{{ window(shift.checkout_start, shift.checkout_end) }}</td>
@@ -30,6 +31,7 @@
 
     <ng-template #cardRow let-shift>
       <div class="card-title">{{ shift.name }}</div>
+      <div class="card-field"><span>วันที่ใช้งาน:</span> {{ daysSummary(shift) }}</div>
       <div class="card-field"><span>เข้างาน:</span> {{ window(shift.checkin_start, shift.checkin_end) }}</div>
       <div class="card-field"><span>สายได้ถึง:</span> {{ hhmm(shift.late_cutoff) }}</div>
       <div class="card-field"><span>ออกงาน:</span> {{ window(shift.checkout_start, shift.checkout_end) }}</div>

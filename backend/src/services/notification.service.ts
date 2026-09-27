@@ -4,8 +4,8 @@ import nodemailer from 'nodemailer';
 import { pool } from '../db';
 import { RowDataPacket, ResultSetHeader } from 'mysql2';
 import { config } from '../config';
-import { ictDateKey, ictSecondsSinceMidnight, isWeekendDateKey } from '../utils/ict';
-import { isHoliday } from './holidays.service';
+import { ictDateKey, ictSecondsSinceMidnight } from '../utils/ict';
+import { resolveEffectiveShift } from './shift.service';
 import { signImageToken } from '../utils/imageToken';
 
 export type NotifyEventType = 'late' | 'absent' | 'success' | 'unknown_face';
@@ -374,52 +374,53 @@ export function notifyUnknownFace(imagePath: string | null, scanLocationName: st
 }
 
 // ---- Absent check (scheduled) ----------------------------------------------
-// Runs every minute; for each shift, once "now" has passed that shift's
-// checkout_end (i.e. the day's attendance window is fully closed), flags any
-// active employee on that shift who never checked in today. Each employee is
-// only notified once per calendar day (enforced by the PRIMARY KEY on
-// notification_absent_log).
+// Runs every minute; for each active employee, once "now" has passed their
+// EFFECTIVE shift's checkout_end for today (i.e. that employee's attendance
+// window is fully closed), flags them if they never checked in today.
+// Resolved per employee (not per shift, and not skipped on weekends/
+// holidays outright) so an employee with a holiday_shift_id who's expected
+// to work a weekend/holiday still gets checked — previously this whole
+// function bailed out for everyone on any weekend/declared holiday. Each
+// employee is only notified once per calendar day (enforced by the PRIMARY
+// KEY on notification_absent_log).
 async function runAbsentCheck(): Promise<void> {
   const now = new Date();
   const today = ictDateKey(now);
-
-  // Nobody is expected to check in on a weekend or declared holiday — skip
-  // the whole check rather than flagging the entire active staff as absent.
-  if (isWeekendDateKey(today) || (await isHoliday(today))) return;
-
   const nowSec = ictSecondsSinceMidnight(now);
-  const [shifts] = await pool.query<RowDataPacket[]>('SELECT id, checkout_end FROM shifts');
-  for (const shift of shifts) {
+
+  const [employees] = await pool.query<RowDataPacket[]>(
+    `SELECT id, employee_code, full_name, notify_email, notify_line_user_id,
+            notify_telegram_chat_id, notify_enabled, supervisor_id, shift_id, holiday_shift_id
+       FROM employees WHERE is_active = 1`
+  );
+
+  for (const emp of employees) {
+    const shift = await resolveEffectiveShift(emp.shift_id, emp.holiday_shift_id, today);
+    if (!shift) continue; // not expected to work today at all
+
     const [h, m, s] = String(shift.checkout_end).split(':').map(Number);
     const cutoffSec = h * 3600 + m * 60 + (s || 0);
-    if (nowSec < cutoffSec) continue; // checkout window for this shift hasn't ended yet
+    if (nowSec < cutoffSec) continue; // this employee's checkout window hasn't ended yet
 
-    const [absentees] = await pool.query<RowDataPacket[]>(
-      `SELECT e.id, e.employee_code, e.full_name, e.notify_email, e.notify_line_user_id,
-              e.notify_telegram_chat_id, e.notify_enabled, e.supervisor_id
-         FROM employees e
-        WHERE e.shift_id = ? AND e.is_active = 1
-          AND NOT EXISTS (
-            SELECT 1 FROM attendance_records ar
-             WHERE ar.employee_id = e.id AND ar.scan_type = 'check_in' AND DATE(ar.scan_time) = ?
-          )`,
-      [shift.id, today]
+    const [existing] = await pool.query<RowDataPacket[]>(
+      `SELECT 1 FROM attendance_records
+        WHERE employee_id = ? AND scan_type = 'check_in' AND DATE(scan_time) = ? LIMIT 1`,
+      [emp.id, today]
     );
+    if (existing.length) continue; // checked in today
 
-    for (const emp of absentees) {
-      try {
-        await pool.query<ResultSetHeader>(
-          'INSERT INTO notification_absent_log (employee_id, notify_date) VALUES (?, ?)',
-          [emp.id, today]
-        );
-      } catch (err: any) {
-        if (err && err.code === 'ER_DUP_ENTRY') continue; // already notified today
-        throw err;
-      }
-      await dispatch('absent', emp as NotifyEmployee, 'ไม่พบการลงเวลาเข้างานวันนี้').catch((err) =>
-        console.error('[notification] absent dispatch failed:', err)
+    try {
+      await pool.query<ResultSetHeader>(
+        'INSERT INTO notification_absent_log (employee_id, notify_date) VALUES (?, ?)',
+        [emp.id, today]
       );
+    } catch (err: any) {
+      if (err && err.code === 'ER_DUP_ENTRY') continue; // already notified today
+      throw err;
     }
+    await dispatch('absent', emp as NotifyEmployee, 'ไม่พบการลงเวลาเข้างานวันนี้').catch((err) =>
+      console.error('[notification] absent dispatch failed:', err)
+    );
   }
 }
 
