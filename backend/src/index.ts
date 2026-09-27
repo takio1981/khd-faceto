@@ -11,6 +11,7 @@ import { loadFaceCache } from './services/faceCache';
 import { startAbsentCheckScheduler } from './services/notification.service';
 import { ensureSelfSignedCert } from './services/certs';
 import { errorHandler, asyncHandler } from './middleware/errorHandler';
+import { rejectMojibake } from './middleware/rejectMojibake';
 import { isPinLoginEnabled } from './services/settings.service';
 
 import authRoutes from './routes/auth.routes';
@@ -47,6 +48,7 @@ async function main() {
   }));
   app.use(cors({ origin: false }));
   app.use(express.json({ limit: '5mb' })); // descriptor + base64 JPEG snapshot
+  app.use(rejectMojibake);
 
   // Everything (API + the Angular build + the SPA fallback) is served under
   // /khd-faceto instead of the domain/port root — lets this app share a host
