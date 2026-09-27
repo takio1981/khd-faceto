@@ -137,6 +137,8 @@ export interface AttendanceRecord {
   confidence?: number | null;
   scan_location_id?: number | null;
   scan_location_name?: string | null;
+  shift_id?: number | null;
+  shift_name?: string | null;
   face_image_path?: string | null;
   full_frame_path?: string | null;
 }
@@ -171,6 +173,7 @@ export interface RecentScanItem {
   status: AttendanceStatus | null;
   time: string; // ISO datetime
   imageBase64: string | null;
+  shiftName?: string | null;
 }
 
 export interface DashboardSummary {

@@ -305,11 +305,12 @@ export async function processScan(
   try {
     const [result] = await pool.query<ResultSetHeader>(
       `INSERT INTO attendance_records
-         (employee_id, scan_location_id, scan_time, scan_type, status, matched_confidence, face_image_path, full_frame_path)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+         (employee_id, scan_location_id, shift_id, scan_time, scan_type, status, matched_confidence, face_image_path, full_frame_path)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [
         entry.employeeId,
         scanLocationId,
+        shift.id,
         toMysqlDateTime(now),
         classification.scanType,
         classification.status,

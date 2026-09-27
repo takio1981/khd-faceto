@@ -238,6 +238,7 @@
                   <span class="badge" [class]="item.status">{{ statusTh[item.status || ''] || item.status }}</span>
                   <span class="lso-type">{{ scanTypeTh[item.scanType || ''] || item.scanType }}</span>
                 </div>
+                <div class="lso-shift" *ngIf="item.shiftName">{{ item.shiftName }}</div>
                 <div class="lso-time">{{ feedTime(item.time) }}</div>
               </div>
             </div>
@@ -258,6 +259,7 @@
               <span class="badge" [class]="item.status">{{ statusTh[item.status || ''] || item.status }}</span>
               <span class="feed-type">{{ scanTypeTh[item.scanType || ''] || item.scanType }}</span>
             </div>
+            <div class="feed-shift" *ngIf="item.shiftName">{{ item.shiftName }}</div>
             <div class="feed-time">{{ feedTime(item.time) }}</div>
           </div>
         </div>

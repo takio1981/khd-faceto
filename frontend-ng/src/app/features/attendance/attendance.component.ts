@@ -293,6 +293,7 @@ export class AttendanceComponent implements OnInit, OnDestroy {
     { key: 'confidence', label: 'ความมั่นใจ' },
     { key: 'image', label: 'ภาพ' },
     { key: 'scan_location_name', label: 'จุดสแกน' },
+    { key: 'shift_name', label: 'กะการทำงาน' },
   ];
 
   private objectUrls = new Set<string>();
