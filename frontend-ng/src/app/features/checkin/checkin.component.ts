@@ -513,51 +513,64 @@ export class CheckinComponent implements AfterViewInit, OnDestroy {
     localStorage.setItem('camSoundEnabled', this.soundEnabled ? '1' : '0');
   }
 
-  // ===== Scan-success sound =====
-  // Synthesized via Web Audio (no asset file, works offline on a LAN
-  // kiosk) instead of an <audio> tag. Created lazily on the first call
-  // from start() — that's a real user click/tap, which satisfies
-  // browsers' autoplay-gesture requirement for AudioContext.
-  private audioCtx: AudioContext | null = null;
+  // ===== Scan-result voice announcements (Thai TTS) =====
+  // Uses the browser's built-in Web Speech API (no asset file, no server
+  // round-trip) instead of a synthesized beep — speaks "บันทึกสำเร็จค่ะ" on a
+  // successful scan and "ลองใหม่ค่ะ" while a detected face isn't recognized,
+  // so the kiosk gives spoken Thai feedback instead of just a tone.
+  private ttsVoice: SpeechSynthesisVoice | null = null;
+  private ttsVoiceLoaded = false;
+  private lastRetryPromptAt = 0;
+  private readonly RETRY_PROMPT_COOLDOWN_MS = 3000; // avoid repeating "ลองใหม่ค่ะ" every detection tick
 
-  private ensureAudioContext(): void {
-    if (this.audioCtx) return;
-    const Ctor = window.AudioContext || (window as any).webkitAudioContext;
-    if (!Ctor) return;
-    try {
-      this.audioCtx = new Ctor();
-    } catch {
-      // Web Audio unavailable — sound is a nice-to-have, scanning still works
+  // Voices load asynchronously in most browsers (getVoices() returns [] until
+  // the voiceschanged event fires) — called once from start() on the user's
+  // click. Prefers a Thai voice whose name suggests a female speaker; falls
+  // back to any Thai voice, then to the browser default (still Thai-spoken
+  // via utterance.lang even without a dedicated Thai voice installed).
+  private loadThaiVoice(): void {
+    if (!('speechSynthesis' in window)) return;
+    const pick = () => {
+      const voices = window.speechSynthesis.getVoices();
+      if (!voices.length) return;
+      const thVoices = voices.filter((v) => v.lang?.toLowerCase().startsWith('th'));
+      this.ttsVoice = thVoices.find((v) => /female|หญิง/i.test(v.name)) || thVoices[0] || null;
+      this.ttsVoiceLoaded = true;
+    };
+    pick();
+    if (!this.ttsVoiceLoaded) {
+      window.speechSynthesis.onvoiceschanged = pick;
     }
   }
 
-  private playSuccessBeep(): void {
+  private speak(text: string): void {
     if (!this.soundEnabled) return;
-    const ctx = this.audioCtx;
-    if (!ctx) return;
-    if (ctx.state === 'suspended') ctx.resume().catch(() => {});
-
+    if (!('speechSynthesis' in window)) return;
     try {
-      const startAt = ctx.currentTime;
-      const playTone = (freq: number, offset: number, duration: number) => {
-        const osc = ctx.createOscillator();
-        const gain = ctx.createGain();
-        osc.type = 'sine';
-        osc.frequency.value = freq;
-        gain.gain.setValueAtTime(0, startAt + offset);
-        gain.gain.linearRampToValueAtTime(0.35, startAt + offset + 0.02);
-        gain.gain.linearRampToValueAtTime(0, startAt + offset + duration);
-        osc.connect(gain);
-        gain.connect(ctx.destination);
-        osc.start(startAt + offset);
-        osc.stop(startAt + offset + duration + 0.02);
-      };
-      // Short two-note ascending chime ("ding-ding") for "saved successfully".
-      playTone(880, 0, 0.12);
-      playTone(1320, 0.12, 0.14);
+      // Don't queue on top of an utterance still playing — with the retry
+      // cooldown below this is mostly a safety net against overlapping speech.
+      if (window.speechSynthesis.speaking) return;
+      const utter = new SpeechSynthesisUtterance(text);
+      utter.lang = 'th-TH';
+      if (this.ttsVoice) utter.voice = this.ttsVoice;
+      utter.rate = 1;
+      utter.pitch = 1.15; // slightly higher pitch for a youthful female tone
+      utter.volume = 1;
+      window.speechSynthesis.speak(utter);
     } catch {
-      // non-critical
+      // non-critical — scanning still works without voice feedback
     }
+  }
+
+  private speakSuccess(): void {
+    this.speak('บันทึกสำเร็จค่ะ');
+  }
+
+  private speakRetry(): void {
+    const now = Date.now();
+    if (now - this.lastRetryPromptAt < this.RETRY_PROMPT_COOLDOWN_MS) return;
+    this.lastRetryPromptAt = now;
+    this.speak('ลองใหม่ค่ะ');
   }
 
   private clampNumber(value: number, min: number, max: number): number {
@@ -1149,13 +1162,14 @@ export class CheckinComponent implements AfterViewInit, OnDestroy {
     }
 
     if (recorded > 0) {
-      this.playSuccessBeep();
+      this.speakSuccess();
       this.loadFeed();
       this.setStatus(`✓ บันทึก ${recorded} คน: ${names.join(', ')}`, 'success');
       this.showResult(`✓ บันทึกสำเร็จ ${recorded} คน — ${names.join(', ')}`, 'success');
     } else if (confirming > 0) {
       this.setStatus(`กำลังยืนยันใบหน้า ${confirming} คน...`, 'scanning');
     } else if (unknown > 0 && known === 0) {
+      this.speakRetry();
       this.setStatus(`❌ พบ ${unknown} ใบหน้า — ไม่พบข้อมูลในระบบ`, 'error');
     } else if (known > 0) {
       this.setStatus(
@@ -1199,7 +1213,7 @@ export class CheckinComponent implements AfterViewInit, OnDestroy {
   async start(): Promise<void> {
     if (this.starting || this.running) return;
     this.starting = true;
-    this.ensureAudioContext(); // must happen on a real user gesture (this click)
+    this.loadThaiVoice(); // must happen on a real user gesture (this click)
     this.setStatus('กำลังโหลดโมเดล AI...', 'scanning');
     try {
       await this.ensureFaceApiLoaded();
