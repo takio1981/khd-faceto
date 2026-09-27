@@ -51,6 +51,48 @@ function hhmm(t?: string | null): string {
   return t ? t.slice(0, 5) : '';
 }
 
+const FIELD_LABELS: Record<(typeof TIME_FIELDS)[number], string> = {
+  checkin_start: 'เริ่มเข้างาน',
+  checkin_end: 'ตรงเวลาถึง',
+  late_cutoff: 'สายได้ถึง',
+  checkout_start: 'เริ่มออกงาน',
+  checkout_end: 'สิ้นสุดออกงาน',
+  ot_start: 'เริ่ม OT',
+  ot_end: 'สิ้นสุด OT',
+};
+
+function timeToMinutes(t: string): number {
+  const [h, m] = t.split(':').map(Number);
+  return (h || 0) * 60 + (m || 0);
+}
+
+// Live mirror of the backend's validateShiftOrder (shift.service.ts) —
+// surfaces an ordering problem immediately as the admin adjusts a time,
+// instead of only after a failed save. Without this, an admin who hits the
+// backend's rejection has no clue WHICH field to fix, and can end up
+// dragging several time-pickers down toward 00:00 just trying to make the
+// error go away — which technically satisfies "non-decreasing order" but
+// leaves the shift's check-in/checkout window degenerate (unusable).
+function orderCheck(v: Partial<Record<(typeof TIME_FIELDS)[number], string | null>>): string | null {
+  for (let i = 1; i < TIME_FIELDS.length; i++) {
+    const prevKey = TIME_FIELDS[i - 1];
+    const curKey = TIME_FIELDS[i];
+    const prev = v[prevKey];
+    const cur = v[curKey];
+    if (!prev || !cur) continue;
+    if (timeToMinutes(cur) < timeToMinutes(prev)) {
+      return `ลำดับเวลาไม่ถูกต้อง: "${FIELD_LABELS[curKey]}" (${cur}) ต้องไม่น้อยกว่า "${FIELD_LABELS[prevKey]}" (${prev})`;
+    }
+  }
+  if (v.checkin_start && v.late_cutoff && timeToMinutes(v.late_cutoff) <= timeToMinutes(v.checkin_start)) {
+    return `ช่วงเข้างานว่างเปล่า: "สายได้ถึง" (${v.late_cutoff}) ต้องมากกว่า "เริ่มเข้างาน" (${v.checkin_start}) — ไม่อย่างนั้นจะสแกนเข้างานไม่ได้เลย`;
+  }
+  if (v.checkout_start && v.checkout_end && timeToMinutes(v.checkout_end) <= timeToMinutes(v.checkout_start)) {
+    return `ช่วงออกงานว่างเปล่า: "สิ้นสุดออกงาน" (${v.checkout_end}) ต้องมากกว่า "เริ่มออกงาน" (${v.checkout_start}) — ไม่อย่างนั้นจะสแกนออกงานไม่ได้เลย`;
+  }
+  return null;
+}
+
 @Component({
   selector: 'app-shift-form-dialog',
   standalone: true,
@@ -78,6 +120,7 @@ export class ShiftFormDialogComponent implements OnInit {
   readonly isEdit = !!this.data.shift;
   readonly saving = signal(false);
   readonly errorMessage = signal('');
+  readonly orderError = signal<string | null>(null);
 
   readonly form = this.fb.group({
     name: ['', Validators.required],
@@ -117,6 +160,9 @@ export class ShiftFormDialogComponent implements OnInit {
     } else {
       this.form.patchValue({ ...DAY_DEFAULTS, ...DEFAULTS });
     }
+
+    this.orderError.set(orderCheck(this.form.getRawValue()));
+    this.form.valueChanges.subscribe(() => this.orderError.set(orderCheck(this.form.getRawValue())));
   }
 
   cancel(): void {
@@ -125,7 +171,7 @@ export class ShiftFormDialogComponent implements OnInit {
 
   save(): void {
     this.errorMessage.set('');
-    if (this.form.invalid) {
+    if (this.form.invalid || this.orderError()) {
       this.form.markAllAsTouched();
       return;
     }

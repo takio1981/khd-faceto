@@ -34,6 +34,13 @@
   font-weight: 500;
 }
 
+.sticky-error {
+  margin: 0 24px;
+  padding: 8px 12px;
+  border-radius: 8px;
+  background: rgba(198, 40, 40, 0.08);
+}
+
 @media (max-width: 600px) {
   .form-grid {
     grid-template-columns: 1fr;

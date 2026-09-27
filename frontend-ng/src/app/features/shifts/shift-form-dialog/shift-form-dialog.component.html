@@ -32,14 +32,19 @@
       ลำดับเวลาต้องเรียงจากน้อยไปมาก (เริ่มเข้างาน ≤ ตรงเวลา ≤ สายได้ถึง ≤ เริ่มออกงาน ≤ สิ้นสุดออกงาน ≤ เริ่ม OT ≤ สิ้นสุด OT)
     </p>
 
-    @if (errorMessage()) {
-      <p class="error-message">{{ errorMessage() }}</p>
-    }
   </mat-dialog-content>
+
+  <!-- Outside the scrolling content so it's always visible next to the
+       (disabled) Save button, not hidden below the fold. -->
+  @if (orderError()) {
+    <p class="error-message sticky-error">⚠ {{ orderError() }}</p>
+  } @else if (errorMessage()) {
+    <p class="error-message sticky-error">{{ errorMessage() }}</p>
+  }
 
   <mat-dialog-actions align="end">
     <button mat-button type="button" (click)="cancel()" [disabled]="saving()">ยกเลิก</button>
-    <button mat-flat-button color="primary" type="submit" [disabled]="saving()">
+    <button mat-flat-button color="primary" type="submit" [disabled]="saving() || !!orderError()">
       @if (saving()) {
         <mat-spinner diameter="18"></mat-spinner>
       } @else {

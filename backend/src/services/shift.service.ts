@@ -475,5 +475,16 @@ export function validateShiftOrder(s: Omit<Shift, 'id' | 'name'>): string | null
       return `ลำดับเวลาไม่ถูกต้อง: "${seq[i][0]}" (${cur}) ต้องไม่น้อยกว่า "${seq[i - 1][0]}" (${prev})`;
     }
   }
+
+  // Non-decreasing alone still allows a zero-width window (e.g. every
+  // check-in/checkout time set to 00:00), which passes the check above but
+  // makes check-in/checkout impossible — classify() would reject every scan
+  // as "outside window".
+  if (secs[2] <= secs[0]) {
+    return 'ช่วงเข้างานว่างเปล่า: "สายได้ถึง" ต้องมากกว่า "เริ่มเข้างาน" — ไม่อย่างนั้นจะสแกนเข้างานไม่ได้เลย';
+  }
+  if (secs[4] <= secs[3]) {
+    return 'ช่วงออกงานว่างเปล่า: "สิ้นสุดออกงาน" ต้องมากกว่า "เริ่มออกงาน" — ไม่อย่างนั้นจะสแกนออกงานไม่ได้เลย';
+  }
   return null;
 }
