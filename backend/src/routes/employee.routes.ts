@@ -116,11 +116,38 @@ router.post('/', asyncHandler(async (req, res) => {
   res.status(201).json({ id: employeeId });
 }));
 
-// PUT /api/employees/:id
+// PUT /api/employees/:id — partial: any field omitted from the body keeps
+// its current value, so a caller can change e.g. just shift_id without
+// resending employee_code/full_name (Thai) every time.
 router.put('/:id', asyncHandler(async (req, res) => {
-  const { employee_code, full_name, department_id, position_id, level_id, employee_type, shift_id, holiday_shift_id, supervisor_id, is_active,
-          notify_email, notify_line_user_id, notify_telegram_chat_id, notify_enabled } = req.body ?? {};
+  const body = req.body ?? {};
+  const [beforeRows] = await pool.query<RowDataPacket[]>('SELECT * FROM employees WHERE id = ?', [req.params.id]);
+  if (!beforeRows.length) {
+    res.status(404).json({ error: 'ไม่พบพนักงาน' });
+    return;
+  }
+  const existing = beforeRows[0];
+  const pick = (key: string) => (body[key] !== undefined ? body[key] : existing[key]);
 
+  const employee_code = pick('employee_code');
+  const full_name = pick('full_name');
+  const department_id = pick('department_id');
+  const position_id = pick('position_id');
+  const level_id = pick('level_id');
+  const employee_type = pick('employee_type');
+  const shift_id = pick('shift_id');
+  const holiday_shift_id = pick('holiday_shift_id');
+  const supervisor_id = pick('supervisor_id');
+  const is_active = pick('is_active');
+  const notify_email = pick('notify_email');
+  const notify_line_user_id = pick('notify_line_user_id');
+  const notify_telegram_chat_id = pick('notify_telegram_chat_id');
+  const notify_enabled = pick('notify_enabled');
+
+  if (!employee_code || !full_name) {
+    res.status(400).json({ error: 'กรุณากรอกรหัสพนักงานและชื่อ-นามสกุล' });
+    return;
+  }
   if (supervisor_id && Number(supervisor_id) === Number(req.params.id)) {
     res.status(400).json({ error: 'พนักงานไม่สามารถเป็นผู้บังคับบัญชาของตัวเองได้' });
     return;
@@ -134,21 +161,17 @@ router.put('/:id', asyncHandler(async (req, res) => {
     return;
   }
 
-  const [beforeRows] = await pool.query<RowDataPacket[]>('SELECT * FROM employees WHERE id = ?', [req.params.id]);
   const departmentText = await resolveDepartmentText(department_id);
   const positionText = await resolvePositionText(position_id);
-  const body = req.body ?? {};
-  const holidayShiftClause = 'holiday_shift_id' in body ? ', holiday_shift_id = ?' : '';
-  const holidayShiftParam = 'holiday_shift_id' in body ? [holiday_shift_id || null] : [];
   await pool.query<ResultSetHeader>(
     `UPDATE employees
         SET employee_code = ?, full_name = ?, department = ?, department_id = ?, position = ?, position_id = ?, level_id = ?, employee_type = ?,
-            shift_id = ?${holidayShiftClause}, supervisor_id = ?, is_active = ?,
+            shift_id = ?, holiday_shift_id = ?, supervisor_id = ?, is_active = ?,
             notify_email = ?, notify_line_user_id = ?, notify_telegram_chat_id = ?, notify_enabled = ?
       WHERE id = ?`,
     [
       employee_code, full_name, departmentText, department_id || null, positionText, position_id || null, level_id || null, employee_type || 'temp_employee',
-      shift_id || null, ...holidayShiftParam,
+      shift_id || null, holiday_shift_id || null,
       supervisor_id || null, is_active === undefined ? 1 : is_active ? 1 : 0,
       notify_email || null, notify_line_user_id || null, notify_telegram_chat_id || null,
       notify_enabled === undefined ? 1 : notify_enabled ? 1 : 0,
@@ -160,8 +183,11 @@ router.put('/:id', asyncHandler(async (req, res) => {
     action: 'employee.update',
     targetTable: 'employees',
     targetId: Number(req.params.id),
-    before: beforeRows[0],
-    after: req.body,
+    before: existing,
+    after: {
+      employee_code, full_name, department_id, position_id, level_id, employee_type,
+      shift_id, holiday_shift_id, supervisor_id, is_active,
+    },
   });
   res.json({ ok: true });
 }));

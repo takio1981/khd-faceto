@@ -1,13 +1,15 @@
 import { Router } from 'express';
 import { asyncHandler } from '../middleware/errorHandler';
 import { verifyJWT, requireRole } from '../middleware/auth';
-import { listHolidays, createHoliday, updateHoliday, deleteHoliday } from '../services/holidays.service';
+import { listHolidays, createHoliday, updateHoliday, deleteHoliday, getHoliday } from '../services/holidays.service';
 
 const router = Router();
 
-function parseHolidayBody(body: any): { holidayDate: string; name: string } | null {
-  const holidayDate = typeof body?.holiday_date === 'string' ? body.holiday_date.trim() : '';
-  const name = typeof body?.name === 'string' ? body.name.trim() : '';
+// `existing` supplies whichever of holiday_date/name the caller omits, so a
+// PUT can change just one of them without resending the Thai name.
+function parseHolidayBody(body: any, existing?: { holiday_date: string; name: string }): { holidayDate: string; name: string } | null {
+  const holidayDate = typeof body?.holiday_date === 'string' ? body.holiday_date.trim() : (body?.holiday_date === undefined ? existing?.holiday_date ?? '' : '');
+  const name = typeof body?.name === 'string' ? body.name.trim() : (body?.name === undefined ? existing?.name ?? '' : '');
   if (!/^\d{4}-\d{2}-\d{2}$/.test(holidayDate) || !name) return null;
   return { holidayDate, name };
 }
@@ -38,7 +40,12 @@ router.post('/', verifyJWT, requireRole('admin'), asyncHandler(async (req, res) 
 }));
 
 router.put('/:id', verifyJWT, requireRole('admin'), asyncHandler(async (req, res) => {
-  const parsed = parseHolidayBody(req.body);
+  const existing = await getHoliday(Number(req.params.id));
+  if (!existing) {
+    res.status(404).json({ error: 'ไม่พบวันหยุด' });
+    return;
+  }
+  const parsed = parseHolidayBody(req.body, existing);
   if (!parsed) {
     res.status(400).json({ error: 'กรุณากรอกวันที่ (YYYY-MM-DD) และชื่อวันหยุดให้ถูกต้อง' });
     return;

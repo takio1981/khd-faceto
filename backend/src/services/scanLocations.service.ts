@@ -23,6 +23,14 @@ export async function createScanLocation(name: string, latitude: number, longitu
   return result.insertId;
 }
 
+export async function getScanLocation(id: number): Promise<ScanLocation | null> {
+  const [rows] = await pool.query<RowDataPacket[]>(
+    'SELECT id, name, latitude, longitude FROM scan_locations WHERE id = ?',
+    [id]
+  );
+  return (rows[0] as ScanLocation) ?? null;
+}
+
 export async function updateScanLocation(id: number, name: string, latitude: number, longitude: number): Promise<void> {
   await pool.query(
     'UPDATE scan_locations SET name = ?, latitude = ?, longitude = ? WHERE id = ?',

@@ -1,4 +1,6 @@
 import { Router } from 'express';
+import { RowDataPacket } from 'mysql2';
+import { pool } from '../db';
 import { asyncHandler } from '../middleware/errorHandler';
 import { verifyJWT, requireRole } from '../middleware/auth';
 import { logAudit } from '../services/audit.service';
@@ -10,6 +12,14 @@ import {
 } from '../services/orgStructure.service';
 
 const router = Router();
+
+// Fetches the raw row so a PUT can fall back to it for any field the caller
+// omits — lets a caller change e.g. just head_employee_id without resending
+// the Thai `name` every time.
+async function getRawRow(table: string, id: number): Promise<RowDataPacket | null> {
+  const [rows] = await pool.query<RowDataPacket[]>(`SELECT * FROM ${table} WHERE id = ?`, [id]);
+  return rows[0] ?? null;
+}
 
 // Listing is allowed for any logged-in user (employee form/approval routing
 // need it); mutations require admin.
@@ -29,13 +39,20 @@ router.post('/divisions', verifyJWT, requireRole('admin'), asyncHandler(async (r
 }));
 
 router.put('/divisions/:id', verifyJWT, requireRole('admin'), asyncHandler(async (req, res) => {
-  const name = String(req.body?.name || '').trim();
+  const id = Number(req.params.id);
+  const existing = await getRawRow('divisions', id);
+  if (!existing) {
+    res.status(404).json({ error: 'ไม่พบกลุ่มงาน' });
+    return;
+  }
+  const name = String(req.body?.name !== undefined ? req.body.name : existing.name).trim();
   if (!name) {
     res.status(400).json({ error: 'กรุณากรอกชื่อกลุ่มงาน' });
     return;
   }
-  await updateDivision(Number(req.params.id), name, req.body?.head_employee_id || null);
-  await logAudit(req, { action: 'division.update', targetTable: 'divisions', targetId: Number(req.params.id), after: req.body });
+  const headEmployeeId = req.body?.head_employee_id !== undefined ? (req.body.head_employee_id || null) : existing.head_employee_id;
+  await updateDivision(id, name, headEmployeeId);
+  await logAudit(req, { action: 'division.update', targetTable: 'divisions', targetId: id, after: { name, head_employee_id: headEmployeeId } });
   res.json({ ok: true });
 }));
 
@@ -61,13 +78,21 @@ router.post('/departments', verifyJWT, requireRole('admin'), asyncHandler(async 
 }));
 
 router.put('/departments/:id', verifyJWT, requireRole('admin'), asyncHandler(async (req, res) => {
-  const name = String(req.body?.name || '').trim();
+  const id = Number(req.params.id);
+  const existing = await getRawRow('departments', id);
+  if (!existing) {
+    res.status(404).json({ error: 'ไม่พบแผนก' });
+    return;
+  }
+  const name = String(req.body?.name !== undefined ? req.body.name : existing.name).trim();
   if (!name) {
     res.status(400).json({ error: 'กรุณากรอกชื่อแผนก' });
     return;
   }
-  await updateDepartment(Number(req.params.id), name, req.body?.division_id || null, req.body?.head_employee_id || null);
-  await logAudit(req, { action: 'department.update', targetTable: 'departments', targetId: Number(req.params.id), after: req.body });
+  const divisionId = req.body?.division_id !== undefined ? (req.body.division_id || null) : existing.division_id;
+  const headEmployeeId = req.body?.head_employee_id !== undefined ? (req.body.head_employee_id || null) : existing.head_employee_id;
+  await updateDepartment(id, name, divisionId, headEmployeeId);
+  await logAudit(req, { action: 'department.update', targetTable: 'departments', targetId: id, after: { name, division_id: divisionId, head_employee_id: headEmployeeId } });
   res.json({ ok: true });
 }));
 
@@ -93,13 +118,20 @@ router.post('/positions', verifyJWT, requireRole('admin'), asyncHandler(async (r
 }));
 
 router.put('/positions/:id', verifyJWT, requireRole('admin'), asyncHandler(async (req, res) => {
-  const name = String(req.body?.name || '').trim();
+  const id = Number(req.params.id);
+  const existing = await getRawRow('positions', id);
+  if (!existing) {
+    res.status(404).json({ error: 'ไม่พบตำแหน่ง' });
+    return;
+  }
+  const name = String(req.body?.name !== undefined ? req.body.name : existing.name).trim();
   if (!name) {
     res.status(400).json({ error: 'กรุณากรอกชื่อตำแหน่ง' });
     return;
   }
-  await updatePosition(Number(req.params.id), name, req.body?.category || null);
-  await logAudit(req, { action: 'position.update', targetTable: 'positions', targetId: Number(req.params.id), after: req.body });
+  const category = req.body?.category !== undefined ? (req.body.category || null) : existing.category;
+  await updatePosition(id, name, category);
+  await logAudit(req, { action: 'position.update', targetTable: 'positions', targetId: id, after: { name, category } });
   res.json({ ok: true });
 }));
 
@@ -125,13 +157,20 @@ router.post('/levels', verifyJWT, requireRole('admin'), asyncHandler(async (req,
 }));
 
 router.put('/levels/:id', verifyJWT, requireRole('admin'), asyncHandler(async (req, res) => {
-  const name = String(req.body?.name || '').trim();
+  const id = Number(req.params.id);
+  const existing = await getRawRow('civil_service_levels', id);
+  if (!existing) {
+    res.status(404).json({ error: 'ไม่พบระดับ' });
+    return;
+  }
+  const name = String(req.body?.name !== undefined ? req.body.name : existing.name).trim();
   if (!name) {
     res.status(400).json({ error: 'กรุณากรอกชื่อระดับ' });
     return;
   }
-  await updateLevel(Number(req.params.id), name, req.body?.category || null);
-  await logAudit(req, { action: 'level.update', targetTable: 'civil_service_levels', targetId: Number(req.params.id), after: req.body });
+  const category = req.body?.category !== undefined ? (req.body.category || null) : existing.category;
+  await updateLevel(id, name, category);
+  await logAudit(req, { action: 'level.update', targetTable: 'civil_service_levels', targetId: id, after: { name, category } });
   res.json({ ok: true });
 }));
 

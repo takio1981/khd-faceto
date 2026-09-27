@@ -33,6 +33,11 @@ export async function createHoliday(holidayDate: string, name: string): Promise<
   return result.insertId;
 }
 
+export async function getHoliday(id: number): Promise<Holiday | null> {
+  const [rows] = await pool.query<RowDataPacket[]>(`${SELECT_HOLIDAY} WHERE id = ?`, [id]);
+  return (rows[0] as Holiday) ?? null;
+}
+
 export async function updateHoliday(id: number, holidayDate: string, name: string): Promise<void> {
   await pool.query('UPDATE holidays SET holiday_date = ?, name = ? WHERE id = ?', [holidayDate, name, id]);
 }

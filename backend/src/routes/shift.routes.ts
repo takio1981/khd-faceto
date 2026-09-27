@@ -26,18 +26,23 @@ router.get('/:id', verifyJWT, asyncHandler(async (req, res) => {
 
 const DAY_FIELDS = ['mon', 'tue', 'wed', 'thu', 'fri', 'sat', 'sun'] as const;
 
-function readShiftBody(body: any) {
-  const days = Object.fromEntries(DAY_FIELDS.map((f) => [f, body[f] ? 1 : 0])) as Record<(typeof DAY_FIELDS)[number], number>;
+const TIME_FIELDS = ['checkin_start', 'checkin_end', 'late_cutoff', 'checkout_start', 'checkout_end', 'ot_start', 'ot_end'] as const;
+
+// `existing` (the current DB row, on PUT) supplies any field the caller
+// omits — so a PUT only needs to send the field(s) actually changing,
+// instead of resending everything including the Thai `name` every time
+// (which is how a shell-encoding slip once corrupted a shift's name).
+function readShiftBody(body: any, existing?: any) {
+  const days = Object.fromEntries(
+    DAY_FIELDS.map((f) => [f, body[f] !== undefined ? (body[f] ? 1 : 0) : (existing ? existing[f] : 0)])
+  ) as Record<(typeof DAY_FIELDS)[number], number>;
+  const times = Object.fromEntries(
+    TIME_FIELDS.map((f) => [f, body[f] !== undefined ? body[f] : existing?.[f]])
+  ) as Record<(typeof TIME_FIELDS)[number], string>;
   return {
-    name: body.name,
+    name: body.name !== undefined ? body.name : existing?.name,
     ...days,
-    checkin_start: body.checkin_start,
-    checkin_end: body.checkin_end,
-    late_cutoff: body.late_cutoff,
-    checkout_start: body.checkout_start,
-    checkout_end: body.checkout_end,
-    ot_start: body.ot_start,
-    ot_end: body.ot_end,
+    ...times,
   };
 }
 
@@ -73,7 +78,16 @@ router.post('/', verifyJWT, requireRole('admin'), asyncHandler(async (req, res) 
 }));
 
 router.put('/:id', verifyJWT, requireRole('admin'), asyncHandler(async (req, res) => {
-  const s = readShiftBody(req.body ?? {});
+  const [beforeRows] = await pool.query<RowDataPacket[]>('SELECT * FROM shifts WHERE id = ?', [req.params.id]);
+  if (!beforeRows.length) {
+    res.status(404).json({ error: 'ไม่พบกะการทำงาน' });
+    return;
+  }
+  const s = readShiftBody(req.body ?? {}, beforeRows[0]);
+  if (!s.name) {
+    res.status(400).json({ error: 'กรุณาตั้งชื่อกะการทำงาน' });
+    return;
+  }
   const dayErr = validateAtLeastOneDay(s);
   if (dayErr) {
     res.status(400).json({ error: dayErr });
@@ -84,7 +98,6 @@ router.put('/:id', verifyJWT, requireRole('admin'), asyncHandler(async (req, res
     res.status(400).json({ error: err });
     return;
   }
-  const [beforeRows] = await pool.query<RowDataPacket[]>('SELECT * FROM shifts WHERE id = ?', [req.params.id]);
   await pool.query<ResultSetHeader>(
     `UPDATE shifts
         SET name = ?, mon = ?, tue = ?, wed = ?, thu = ?, fri = ?, sat = ?, sun = ?,
