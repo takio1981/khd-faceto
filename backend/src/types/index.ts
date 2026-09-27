@@ -41,6 +41,7 @@ export interface Shift {
   checkout_end: string;
   ot_start: string;
   ot_end: string;
+  flexible_time: number; // 1 | 0 — any time is valid for check-in/check-out; checkout_end is reused as the missing-checkout cutoff
 }
 
 export interface FaceDescriptorRow {

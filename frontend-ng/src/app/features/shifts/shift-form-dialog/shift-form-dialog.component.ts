@@ -73,7 +73,12 @@ function timeToMinutes(t: string): number {
 // dragging several time-pickers down toward 00:00 just trying to make the
 // error go away — which technically satisfies "non-decreasing order" but
 // leaves the shift's check-in/checkout window degenerate (unusable).
-function orderCheck(v: Partial<Record<(typeof TIME_FIELDS)[number], string | null>>): string | null {
+function orderCheck(v: Partial<Record<(typeof TIME_FIELDS)[number], string | null>> & { flexible_time?: boolean | null }): string | null {
+  if (v.flexible_time) {
+    // Flexible-time shift: only the cutoff (checkout_end) matters — the other
+    // fields are unused, so skip the fixed-window ordering checks entirely.
+    return v.checkout_end ? null : 'กรุณากรอกเวลาตัดยอด';
+  }
   for (let i = 1; i < TIME_FIELDS.length; i++) {
     const prevKey = TIME_FIELDS[i - 1];
     const curKey = TIME_FIELDS[i];
@@ -124,6 +129,7 @@ export class ShiftFormDialogComponent implements OnInit {
 
   readonly form = this.fb.group({
     name: ['', Validators.required],
+    flexible_time: [false],
     mon: [true],
     tue: [true],
     wed: [true],
@@ -148,6 +154,7 @@ export class ShiftFormDialogComponent implements OnInit {
       const days = Object.fromEntries(DAY_FIELDS.map((f) => [f, !!s[f]])) as Record<(typeof DAY_FIELDS)[number], boolean>;
       this.form.patchValue({
         name: s.name,
+        flexible_time: !!s.flexible_time,
         ...days,
         checkin_start: hhmm(s.checkin_start),
         checkin_end: hhmm(s.checkin_end),
@@ -187,6 +194,7 @@ export class ShiftFormDialogComponent implements OnInit {
     const toBit = (b: boolean | null | undefined): 0 | 1 => (b ? 1 : 0);
     const body = {
       name: (v.name || '').trim(),
+      flexible_time: toBit(v.flexible_time),
       mon: toBit(v.mon),
       tue: toBit(v.tue),
       wed: toBit(v.wed),

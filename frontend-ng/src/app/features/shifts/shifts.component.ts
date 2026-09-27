@@ -74,6 +74,22 @@ export class ShiftsComponent implements OnInit {
     return `${hhmm(start)} - ${hhmm(end)}`;
   }
 
+  checkinLabel(shift: Shift): string {
+    return shift.flexible_time ? 'ยืดหยุ่น' : this.window(shift.checkin_start, shift.checkin_end);
+  }
+
+  lateCutoffLabel(shift: Shift): string {
+    return shift.flexible_time ? '-' : hhmm(shift.late_cutoff);
+  }
+
+  checkoutLabel(shift: Shift): string {
+    return shift.flexible_time ? `ยืดหยุ่น (ตัดยอด ${hhmm(shift.checkout_end)})` : this.window(shift.checkout_start, shift.checkout_end);
+  }
+
+  otLabel(shift: Shift): string {
+    return shift.flexible_time ? '-' : this.window(shift.ot_start, shift.ot_end);
+  }
+
   loadShifts(): void {
     this.loading.set(true);
     this.shiftService.list().subscribe({

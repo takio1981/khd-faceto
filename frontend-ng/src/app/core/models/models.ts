@@ -120,6 +120,7 @@ export interface Shift {
   checkout_end: string;
   ot_start: string;
   ot_end: string;
+  flexible_time: 0 | 1;
 }
 
 export type ScanType = 'check_in' | 'check_out' | 'ot_in' | 'ot_out';
@@ -250,6 +251,9 @@ export interface NotificationSettings {
     // Admin-only by nature — no matched employee to notify or to resolve a
     // supervisor from when a scan doesn't match anyone.
     unknownFace: { admin: boolean };
+    // Admin-only — fires when a flexible-time shift's cutoff passes with a
+    // check-in but no check-out.
+    missingCheckout: { admin: boolean };
   };
 }
 
@@ -262,7 +266,7 @@ export interface RecentNotification {
   image_base64?: string | null;
 }
 
-export type NotifyEventType = 'late' | 'absent' | 'success' | 'unknown_face';
+export type NotifyEventType = 'late' | 'absent' | 'success' | 'unknown_face' | 'missing_checkout';
 
 export interface NotificationHistoryItem {
   id: number;

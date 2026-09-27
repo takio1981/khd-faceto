@@ -180,6 +180,8 @@ interface Classification {
 //   ot_start .. ot_end              → OT-เข้า / OT-ออก (requires prior check-in+check-out)
 // Scans that fall outside every applicable window return null → no record written.
 function classify(shift: Shift, now: Date, today: TodayScans): Classification | null {
+  if (shift.flexible_time) return classifyFlexible(today);
+
   const sec = dateToSeconds(now);
 
   const checkinStart  = timeToSeconds(shift.checkin_start);
@@ -225,8 +227,24 @@ function classify(shift: Shift, now: Date, today: TodayScans): Classification | 
   return { scanType: 'check_in', status: 'late', message: 'ลงเวลาเข้างานสำเร็จ (สาย)' };
 }
 
+// Flexible-time shift (e.g. a holiday/on-call shift): any time is a valid
+// check-in or check-out. No late/on-time distinction (there's no fixed
+// start to be late against) and no separate OT phase — a single in/out
+// pair is the whole session, already identifiable as holiday/OT work via
+// attendance_records.shift_id.
+function classifyFlexible(today: TodayScans): Classification | null {
+  if (today.hasCheckIn && today.hasCheckOut) return null; // day already complete
+  if (today.hasCheckIn) {
+    return { scanType: 'check_out', status: 'on_time', message: 'ลงเวลาออกงานสำเร็จ' };
+  }
+  return { scanType: 'check_in', status: 'on_time', message: 'ลงเวลาเข้างานสำเร็จ' };
+}
+
 // Returns a contextual "outside window" message for display only.
 function outsideWindowMessage(shift: Shift, now: Date, today: TodayScans): string {
+  if (shift.flexible_time && today.hasCheckIn && today.hasCheckOut) {
+    return 'บันทึกเข้า-ออกงานของวันนี้ครบแล้ว (Already checked in and out today)';
+  }
   return 'ไม่อยู่ในช่วงเวลาลงเวลา (Outside scan window)';
 }
 
@@ -451,6 +469,13 @@ export async function saveUnknownFaceAndNotify(
 // (e.g. ot_start == checkout_end). The error names the offending fields so the
 // user knows exactly what to fix.
 export function validateShiftOrder(s: Omit<Shift, 'id' | 'name'>): string | null {
+  if ((s as any).flexible_time) {
+    if (!s.checkout_end || !/^\d{1,2}:\d{2}(:\d{2})?$/.test(s.checkout_end)) {
+      return 'กรุณากรอกเวลาตัดยอดให้ถูกต้อง';
+    }
+    return null;
+  }
+
   const seq: Array<[string, string]> = [
     ['เริ่มเข้างาน', s.checkin_start],
     ['ตรงเวลาถึง', s.checkin_end],

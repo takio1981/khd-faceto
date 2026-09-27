@@ -739,6 +739,19 @@
           (ระบบจะหน่วงการแจ้งเตือนซ้ำในจุดสแกนเดียวกันไว้ประมาณ 5 นาทีเพื่อไม่ให้แจ้งเตือนถี่เกินไป)
         </p>
       </div>
+
+      <div formGroupName="missingCheckout" class="events-admin-only">
+        <div class="events-row">
+          <div class="events-label">ไม่พบการลงเวลาออกงาน (missing_checkout)</div>
+          <div class="events-cell">
+            <mat-checkbox formControlName="admin">แจ้งผู้ดูแลระบบ</mat-checkbox>
+          </div>
+        </div>
+        <p class="muted small">
+          กะ "เวลายืดหยุ่น" ที่มีการลงเวลาเข้างานแล้ว แต่ถึงเวลาตัดยอด (checkout_end) ยังไม่พบการลงเวลาออกงาน —
+          ระบบจะแจ้งเฉพาะผู้ดูแลระบบเท่านั้น และจะไม่สร้างข้อมูลออกงานให้อัตโนมัติ
+        </p>
+      </div>
     </div>
 
     <div class="actions-row">

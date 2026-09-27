@@ -14,10 +14,10 @@
       <tr>
         <td>{{ shift.name }}</td>
         <td>{{ daysSummary(shift) }}</td>
-        <td>{{ window(shift.checkin_start, shift.checkin_end) }}</td>
-        <td>{{ hhmm(shift.late_cutoff) }}</td>
-        <td>{{ window(shift.checkout_start, shift.checkout_end) }}</td>
-        <td>{{ window(shift.ot_start, shift.ot_end) }}</td>
+        <td>{{ checkinLabel(shift) }}</td>
+        <td>{{ lateCutoffLabel(shift) }}</td>
+        <td>{{ checkoutLabel(shift) }}</td>
+        <td>{{ otLabel(shift) }}</td>
         <td class="actions-cell">
           <button mat-icon-button matTooltip="แก้ไข" (click)="openEditDialog(shift)">
             <mat-icon>edit</mat-icon>
@@ -32,10 +32,10 @@
     <ng-template #cardRow let-shift>
       <div class="card-title">{{ shift.name }}</div>
       <div class="card-field"><span>วันที่ใช้งาน:</span> {{ daysSummary(shift) }}</div>
-      <div class="card-field"><span>เข้างาน:</span> {{ window(shift.checkin_start, shift.checkin_end) }}</div>
-      <div class="card-field"><span>สายได้ถึง:</span> {{ hhmm(shift.late_cutoff) }}</div>
-      <div class="card-field"><span>ออกงาน:</span> {{ window(shift.checkout_start, shift.checkout_end) }}</div>
-      <div class="card-field"><span>OT:</span> {{ window(shift.ot_start, shift.ot_end) }}</div>
+      <div class="card-field"><span>เข้างาน:</span> {{ checkinLabel(shift) }}</div>
+      <div class="card-field"><span>สายได้ถึง:</span> {{ lateCutoffLabel(shift) }}</div>
+      <div class="card-field"><span>ออกงาน:</span> {{ checkoutLabel(shift) }}</div>
+      <div class="card-field"><span>OT:</span> {{ otLabel(shift) }}</div>
     </ng-template>
 
     <ng-template #cardActions let-shift>

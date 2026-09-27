@@ -20,6 +20,7 @@ const EVENT_TYPE_TH: Record<NotifyEventType, string> = {
   absent: 'ขาดงาน',
   success: 'ลงเวลาสำเร็จ',
   unknown_face: 'พบใบหน้าที่ไม่รู้จัก',
+  missing_checkout: 'ไม่พบการลงเวลาออกงาน',
 };
 
 @Component({

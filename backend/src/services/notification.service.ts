@@ -8,7 +8,7 @@ import { ictDateKey, ictSecondsSinceMidnight } from '../utils/ict';
 import { resolveEffectiveShift } from './shift.service';
 import { signImageToken } from '../utils/imageToken';
 
-export type NotifyEventType = 'late' | 'absent' | 'success' | 'unknown_face';
+export type NotifyEventType = 'late' | 'absent' | 'success' | 'unknown_face' | 'missing_checkout';
 
 export interface NotificationSettings {
   email: {
@@ -43,6 +43,10 @@ export interface NotificationSettings {
     // Admin-only by nature — there's no matched employee to notify or to
     // resolve a supervisor from when a scanned face doesn't match anyone.
     unknownFace: { admin: boolean };
+    // Admin-only — fires when a flexible-time shift's cutoff passes with a
+    // check-in but no check-out; there's no "employee" side of this to
+    // notify since they're the one who didn't scan.
+    missingCheckout: { admin: boolean };
   };
 }
 
@@ -57,6 +61,7 @@ const DEFAULT_SETTINGS: NotificationSettings = {
     absent: { employee: false, admin: true, supervisor: false },
     success: { employee: true, admin: false, supervisor: false },
     unknownFace: { admin: true },
+    missingCheckout: { admin: true },
   },
 };
 
@@ -82,6 +87,7 @@ export async function getNotificationSettings(): Promise<NotificationSettings> {
         absent: { ...DEFAULT_SETTINGS.events.absent, ...parsed.events?.absent },
         success: { ...DEFAULT_SETTINGS.events.success, ...parsed.events?.success },
         unknownFace: { ...DEFAULT_SETTINGS.events.unknownFace, ...parsed.events?.unknownFace },
+        missingCheckout: { ...DEFAULT_SETTINGS.events.missingCheckout, ...parsed.events?.missingCheckout },
       },
     };
   } catch {
@@ -251,6 +257,7 @@ const EVENT_LABEL: Record<NotifyEventType, string> = {
   absent: 'ขาดงาน',
   success: 'ลงเวลาสำเร็จ',
   unknown_face: 'ใบหน้าที่ไม่รู้จัก',
+  missing_checkout: 'ไม่พบการลงเวลาออกงาน',
 };
 
 export interface DispatchDetail {
@@ -317,12 +324,17 @@ async function dispatch(
   }
 }
 
-// Admin-only events (currently just unknown_face) have no employee/
-// supervisor target to resolve — separate, simpler dispatch path.
+// Admin-only events have no employee/supervisor target to resolve —
+// separate, simpler dispatch path than dispatch() above.
+const ADMIN_ONLY_EVENT_KEY: Partial<Record<NotifyEventType, 'unknownFace' | 'missingCheckout'>> = {
+  unknown_face: 'unknownFace',
+  missing_checkout: 'missingCheckout',
+};
+
 async function dispatchAdminOnly(eventType: NotifyEventType, title: string, body: string, imagePath: string | null): Promise<void> {
   const settings = await getNotificationSettings();
-  const evt = settings.events.unknownFace; // only admin-only event type today
-  if (!evt.admin) return;
+  const key = ADMIN_ONLY_EVENT_KEY[eventType];
+  if (!key || !settings.events[key].admin) return;
 
   const jobs: Promise<void>[] = [];
   for (const email of settings.admin.emails.split(',').map((s) => s.trim()).filter(Boolean)) {
@@ -373,6 +385,16 @@ export function notifyUnknownFace(imagePath: string | null, scanLocationName: st
   );
 }
 
+// Called from runAbsentCheck() below when a flexible-time shift's cutoff
+// (checkout_end) has passed with a check-in recorded but no check-out.
+export function notifyMissingCheckout(employeeCode: string, fullName: string): void {
+  const title = 'ไม่พบการลงเวลาออกงาน';
+  const body = `${employeeCode} - ${fullName}: เข้างานแล้วแต่ยังไม่พบการลงเวลาออกงาน (กะยืดหยุ่นเวลา)`;
+  dispatchAdminOnly('missing_checkout', title, body, null).catch((err) =>
+    console.error('[notification] notifyMissingCheckout failed:', err)
+  );
+}
+
 // ---- Absent check (scheduled) ----------------------------------------------
 // Runs every minute; for each active employee, once "now" has passed their
 // EFFECTIVE shift's checkout_end for today (i.e. that employee's attendance
@@ -383,7 +405,7 @@ export function notifyUnknownFace(imagePath: string | null, scanLocationName: st
 // function bailed out for everyone on any weekend/declared holiday. Each
 // employee is only notified once per calendar day (enforced by the PRIMARY
 // KEY on notification_absent_log).
-async function runAbsentCheck(): Promise<void> {
+export async function runAbsentCheck(): Promise<void> {
   const now = new Date();
   const today = ictDateKey(now);
   const nowSec = ictSecondsSinceMidnight(now);
@@ -402,25 +424,44 @@ async function runAbsentCheck(): Promise<void> {
     const cutoffSec = h * 3600 + m * 60 + (s || 0);
     if (nowSec < cutoffSec) continue; // this employee's checkout window hasn't ended yet
 
-    const [existing] = await pool.query<RowDataPacket[]>(
-      `SELECT 1 FROM attendance_records
-        WHERE employee_id = ? AND scan_type = 'check_in' AND DATE(scan_time) = ? LIMIT 1`,
+    const [scans] = await pool.query<RowDataPacket[]>(
+      `SELECT scan_type FROM attendance_records WHERE employee_id = ? AND DATE(scan_time) = ?`,
       [emp.id, today]
     );
-    if (existing.length) continue; // checked in today
+    const hasCheckIn = scans.some((r) => r.scan_type === 'check_in');
+    const hasCheckOut = scans.some((r) => r.scan_type === 'check_out');
 
-    try {
-      await pool.query<ResultSetHeader>(
-        'INSERT INTO notification_absent_log (employee_id, notify_date) VALUES (?, ?)',
-        [emp.id, today]
+    if (!hasCheckIn) {
+      try {
+        await pool.query<ResultSetHeader>(
+          'INSERT INTO notification_absent_log (employee_id, notify_date) VALUES (?, ?)',
+          [emp.id, today]
+        );
+      } catch (err: any) {
+        if (err && err.code === 'ER_DUP_ENTRY') continue; // already notified today
+        throw err;
+      }
+      await dispatch('absent', emp as NotifyEmployee, 'ไม่พบการลงเวลาเข้างานวันนี้').catch((err) =>
+        console.error('[notification] absent dispatch failed:', err)
       );
-    } catch (err: any) {
-      if (err && err.code === 'ER_DUP_ENTRY') continue; // already notified today
-      throw err;
+      continue;
     }
-    await dispatch('absent', emp as NotifyEmployee, 'ไม่พบการลงเวลาเข้างานวันนี้').catch((err) =>
-      console.error('[notification] absent dispatch failed:', err)
-    );
+
+    // Flexible-time shift (holiday/on-call): checked in but the cutoff
+    // (checkout_end) passed with no check-out — admin-only alert, no
+    // auto-generated checkout record (an admin fixes it manually if needed).
+    if (shift.flexible_time && !hasCheckOut) {
+      try {
+        await pool.query<ResultSetHeader>(
+          'INSERT INTO notification_missing_checkout_log (employee_id, notify_date) VALUES (?, ?)',
+          [emp.id, today]
+        );
+      } catch (err: any) {
+        if (err && err.code === 'ER_DUP_ENTRY') continue; // already notified today
+        throw err;
+      }
+      notifyMissingCheckout(emp.employee_code, emp.full_name);
+    }
   }
 }
 

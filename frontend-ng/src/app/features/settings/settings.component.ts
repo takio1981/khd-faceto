@@ -292,6 +292,7 @@ export class SettingsComponent implements OnInit, AfterViewInit {
       absent: this.fb.group({ employee: [false], admin: [true], supervisor: [false] }),
       success: this.fb.group({ employee: [true], admin: [false], supervisor: [false] }),
       unknownFace: this.fb.group({ admin: [true] }),
+      missingCheckout: this.fb.group({ admin: [true] }),
     }),
   });
   notifSaving = false;
@@ -934,6 +935,7 @@ export class SettingsComponent implements OnInit, AfterViewInit {
         absent: { employee: !!v.events.absent.employee, admin: !!v.events.absent.admin, supervisor: !!v.events.absent.supervisor },
         success: { employee: !!v.events.success.employee, admin: !!v.events.success.admin, supervisor: !!v.events.success.supervisor },
         unknownFace: { admin: !!v.events.unknownFace.admin },
+        missingCheckout: { admin: !!v.events.missingCheckout.admin },
       },
     };
   }

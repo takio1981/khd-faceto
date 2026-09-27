@@ -39,10 +39,12 @@ function readShiftBody(body: any, existing?: any) {
   const times = Object.fromEntries(
     TIME_FIELDS.map((f) => [f, body[f] !== undefined ? body[f] : existing?.[f]])
   ) as Record<(typeof TIME_FIELDS)[number], string>;
+  const flexibleTime = body.flexible_time !== undefined ? (body.flexible_time ? 1 : 0) : (existing ? existing.flexible_time : 0);
   return {
     name: body.name !== undefined ? body.name : existing?.name,
     ...days,
     ...times,
+    flexible_time: flexibleTime,
   };
 }
 
@@ -69,9 +71,9 @@ router.post('/', verifyJWT, requireRole('admin'), asyncHandler(async (req, res) 
   }
   const [result] = await pool.query<ResultSetHeader>(
     `INSERT INTO shifts
-       (name, mon, tue, wed, thu, fri, sat, sun, checkin_start, checkin_end, late_cutoff, checkout_start, checkout_end, ot_start, ot_end)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-    [s.name, s.mon, s.tue, s.wed, s.thu, s.fri, s.sat, s.sun, s.checkin_start, s.checkin_end, s.late_cutoff, s.checkout_start, s.checkout_end, s.ot_start, s.ot_end]
+       (name, mon, tue, wed, thu, fri, sat, sun, checkin_start, checkin_end, late_cutoff, checkout_start, checkout_end, ot_start, ot_end, flexible_time)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    [s.name, s.mon, s.tue, s.wed, s.thu, s.fri, s.sat, s.sun, s.checkin_start, s.checkin_end, s.late_cutoff, s.checkout_start, s.checkout_end, s.ot_start, s.ot_end, s.flexible_time]
   );
   await logAudit(req, { action: 'shift.create', targetTable: 'shifts', targetId: result.insertId, after: s });
   res.status(201).json({ id: result.insertId });
@@ -102,9 +104,9 @@ router.put('/:id', verifyJWT, requireRole('admin'), asyncHandler(async (req, res
     `UPDATE shifts
         SET name = ?, mon = ?, tue = ?, wed = ?, thu = ?, fri = ?, sat = ?, sun = ?,
             checkin_start = ?, checkin_end = ?, late_cutoff = ?,
-            checkout_start = ?, checkout_end = ?, ot_start = ?, ot_end = ?
+            checkout_start = ?, checkout_end = ?, ot_start = ?, ot_end = ?, flexible_time = ?
       WHERE id = ?`,
-    [s.name, s.mon, s.tue, s.wed, s.thu, s.fri, s.sat, s.sun, s.checkin_start, s.checkin_end, s.late_cutoff, s.checkout_start, s.checkout_end, s.ot_start, s.ot_end, req.params.id]
+    [s.name, s.mon, s.tue, s.wed, s.thu, s.fri, s.sat, s.sun, s.checkin_start, s.checkin_end, s.late_cutoff, s.checkout_start, s.checkout_end, s.ot_start, s.ot_end, s.flexible_time, req.params.id]
   );
   await logAudit(req, { action: 'shift.update', targetTable: 'shifts', targetId: Number(req.params.id), before: beforeRows[0], after: s });
   res.json({ ok: true });
