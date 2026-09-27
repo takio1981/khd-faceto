@@ -174,7 +174,7 @@ router.get('/', verifyJWT, asyncHandler(async (req, res) => {
   const total = countRows[0].total as number;
 
   const [rows] = await pool.query<RowDataPacket[]>(
-    `SELECT ar.*, e.employee_code, e.full_name, e.department, sl.name AS scan_location_name, sh.name AS shift_name
+    `SELECT ar.*, ar.matched_confidence AS confidence, e.employee_code, e.full_name, e.department, sl.name AS scan_location_name, sh.name AS shift_name
        FROM attendance_records ar
        JOIN employees e ON e.id = ar.employee_id
        LEFT JOIN scan_locations sl ON sl.id = ar.scan_location_id
