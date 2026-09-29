@@ -11,7 +11,9 @@ import { FormsModule } from '@angular/forms';
 import { RouterLink } from '@angular/router';
 import { MatButtonModule } from '@angular/material/button';
 import { MatCardModule } from '@angular/material/card';
+import { MatFormFieldModule } from '@angular/material/form-field';
 import { MatIconModule } from '@angular/material/icon';
+import { MatInputModule } from '@angular/material/input';
 import { MatProgressSpinnerModule } from '@angular/material/progress-spinner';
 import { MatSelectModule } from '@angular/material/select';
 import { MatCheckboxModule } from '@angular/material/checkbox';
@@ -113,6 +115,13 @@ const TTS_VOICE_KEY = 'camTtsVoiceURI';
 const TTS_VOICE_GENDER_KEY = 'camTtsVoiceGenders'; // JSON map of voiceURI -> 'male' | 'female'
 const READ_NAME_KEY = 'camReadName';
 const USE_PRERECORDED_AUDIO_KEY = 'camUsePreRecordedTts';
+const VOICE_ANNOUNCEMENT_KEY = 'camVoiceAnnouncementEnabled';
+const SPEECH_RATE_KEY = 'camTtsRate';
+const ENDING_WORD_KEY = 'camTtsEndingWord';
+const DEFAULT_SPEECH_RATE = 1;
+const MIN_SPEECH_RATE = 0.5;
+const MAX_SPEECH_RATE = 1.5;
+const DEFAULT_ENDING_WORD = 'ค่ะ';
 
 // Auto-zoom: when a face is detected the cam-frame div is CSS-scaled toward
 // the face centre so the kiosk display zooms in automatically.
@@ -139,7 +148,9 @@ const MAX_AUTO_ZOOM_SPEED = 0.25;
     MatButtonModule,
     MatCardModule,
     MatCheckboxModule,
+    MatFormFieldModule,
     MatIconModule,
+    MatInputModule,
     MatProgressSpinnerModule,
     MatSelectModule,
     MatSliderModule,
@@ -182,6 +193,11 @@ export class CheckinComponent implements AfterViewInit, OnDestroy {
   soundEnabled = true;
   readNameEnabled = false;
   voiceIsMale = false;
+  voiceAnnouncementEnabled = true;
+  speechRate = DEFAULT_SPEECH_RATE;
+  endingWord = DEFAULT_ENDING_WORD;
+  readonly minSpeechRate = MIN_SPEECH_RATE;
+  readonly maxSpeechRate = MAX_SPEECH_RATE;
 
   detectionIntervalMs = DEFAULT_DETECTION_INTERVAL_MS;
   boxSmoothing = DEFAULT_BOX_SMOOTHING;
@@ -319,6 +335,13 @@ export class CheckinComponent implements AfterViewInit, OnDestroy {
     this.soundEnabled = localStorage.getItem('camSoundEnabled') !== '0';
     this.readNameEnabled = localStorage.getItem(READ_NAME_KEY) === '1';
     this.usePreRecordedAudio = localStorage.getItem(USE_PRERECORDED_AUDIO_KEY) !== '0';
+    this.voiceAnnouncementEnabled = localStorage.getItem(VOICE_ANNOUNCEMENT_KEY) !== '0';
+    this.speechRate = this.clampNumber(
+      Number(localStorage.getItem(SPEECH_RATE_KEY)) || DEFAULT_SPEECH_RATE,
+      MIN_SPEECH_RATE,
+      MAX_SPEECH_RATE
+    );
+    this.endingWord = localStorage.getItem(ENDING_WORD_KEY) ?? DEFAULT_ENDING_WORD;
     this.loadThaiVoice(); // populate the voice picker even before "start" is clicked
     this.detectionIntervalMs = this.clampNumber(
       Number(localStorage.getItem(DETECTION_INTERVAL_KEY)) || DEFAULT_DETECTION_INTERVAL_MS,
@@ -630,10 +653,36 @@ export class CheckinComponent implements AfterViewInit, OnDestroy {
     localStorage.setItem(READ_NAME_KEY, enabled ? '1' : '0');
   }
 
-  // Swaps the polite ending for a male voice ("ค่ะ" -> "ครับ") so the spoken
-  // phrase matches the selected/guessed voice gender.
-  private applyGenderEnding(text: string): string {
-    return this.voiceIsMale ? text.replace(/ค่ะ/g, 'ครับ') : text;
+  onVoiceAnnouncementChange(enabled: boolean): void {
+    this.voiceAnnouncementEnabled = enabled;
+    localStorage.setItem(VOICE_ANNOUNCEMENT_KEY, enabled ? '1' : '0');
+  }
+
+  onSpeechRateChange(value: number): void {
+    this.speechRate = this.clampNumber(value, MIN_SPEECH_RATE, MAX_SPEECH_RATE);
+    localStorage.setItem(SPEECH_RATE_KEY, String(this.speechRate));
+  }
+
+  onEndingWordChange(value: string): void {
+    this.endingWord = value;
+    localStorage.setItem(ENDING_WORD_KEY, value);
+  }
+
+  // Appends the admin's configured sentence ending (default "ค่ะ", free text
+  // — e.g. "ครับ", "นะคะ", "จ้า", or blank for none) to a base phrase. The
+  // two bundled fixed-phrase MP3s were pre-recorded with a hardcoded "ค่ะ"/
+  // "ครับ" baked into the audio, so they can only be used while the ending
+  // exactly matches the one that pairs with the selected voice gender — see
+  // canUseBundledAudio() below; anything else falls through to server/live
+  // synthesis, which can say whatever text is actually configured.
+  private appendEnding(base: string): string {
+    return `${base}${this.endingWord}`;
+  }
+
+  private canUseBundledAudio(): boolean {
+    if (!this.usePreRecordedAudio) return false;
+    const expectedEnding = this.voiceIsMale ? 'ครับ' : 'ค่ะ';
+    return this.endingWord === expectedEnding;
   }
 
   // ---- Pre-recorded audio (bundled in the project) ----
@@ -655,10 +704,25 @@ export class CheckinComponent implements AfterViewInit, OnDestroy {
     localStorage.setItem(USE_PRERECORDED_AUDIO_KEY, enabled ? '1' : '0');
   }
 
+  // Speed and pitch are independent — .playbackRate alone would also raise
+  // pitch as it speeds up ("chipmunk" effect), which hurts clarity at
+  // anything other than 1x, so preservesPitch is set wherever it's supported.
+  private applyPlaybackRate(audio: HTMLAudioElement): void {
+    audio.playbackRate = this.speechRate;
+    try {
+      (audio as any).preservesPitch = true;
+      (audio as any).mozPreservesPitch = true;
+      (audio as any).webkitPreservesPitch = true;
+    } catch {
+      // non-critical
+    }
+  }
+
   private playBundledAudio(kind: 'success' | 'retry'): void {
     try {
       const gender = this.voiceIsMale ? 'male' : 'female';
       const audio = new Audio(`audio/tts/${kind}_${gender}.mp3`);
+      this.applyPlaybackRate(audio);
       audio.volume = 1;
       audio.play().catch(() => {
         // Autoplay can be blocked before any page interaction — non-critical,
@@ -685,7 +749,7 @@ export class CheckinComponent implements AfterViewInit, OnDestroy {
 
   private async announceDynamic(rawText: string): Promise<void> {
     const gender: 'male' | 'female' = this.voiceIsMale ? 'male' : 'female';
-    const text = this.applyGenderEnding(rawText);
+    const text = this.appendEnding(rawText);
     const key = `${gender}::${text}`;
 
     const cachedUrl = this.serverAudioCache.get(key);
@@ -718,6 +782,7 @@ export class CheckinComponent implements AfterViewInit, OnDestroy {
   private playAudioUrl(url: string): void {
     try {
       const audio = new Audio(url);
+      this.applyPlaybackRate(audio);
       audio.volume = 1;
       audio.play().catch(() => {
         // Autoplay can be blocked before any page interaction — non-critical.
@@ -727,19 +792,76 @@ export class CheckinComponent implements AfterViewInit, OnDestroy {
     }
   }
 
-  // "ทดสอบเสียง" button — previews whichever the kiosk would actually say
-  // right now (bundled audio, server TTS, or live speechSynthesis, matching
-  // the toggles above) so the admin hears the real result while configuring it.
+  // ---- Beep mode (used instead of any voice announcement — bundled,
+  // server, or live — when "พูดแจ้งผลด้วยเสียง" is turned off) ----
+  // Synthesized via Web Audio (no asset file) — a single short "ปิ๊บ" for a
+  // successful scan, two quick lower-pitched "ตื๊ด-ตื๊ด" beeps for a face
+  // that doesn't match anyone, so there's still a clear pass/fail signal
+  // without reading anything aloud. Created lazily on the first call from
+  // start() — that's a real user click/tap, which satisfies browsers'
+  // autoplay-gesture requirement for AudioContext.
+  private audioCtx: AudioContext | null = null;
+
+  private ensureAudioContext(): void {
+    if (this.audioCtx) return;
+    const Ctor = window.AudioContext || (window as any).webkitAudioContext;
+    if (!Ctor) return;
+    try {
+      this.audioCtx = new Ctor();
+    } catch {
+      // Web Audio unavailable — beep mode just won't produce sound
+    }
+  }
+
+  private playBeepTone(kind: 'success' | 'retry'): void {
+    const ctx = this.audioCtx;
+    if (!ctx) return;
+    if (ctx.state === 'suspended') ctx.resume().catch(() => {});
+    try {
+      const startAt = ctx.currentTime;
+      const playTone = (freq: number, offset: number, duration: number) => {
+        const osc = ctx.createOscillator();
+        const gain = ctx.createGain();
+        osc.type = 'sine';
+        osc.frequency.value = freq;
+        gain.gain.setValueAtTime(0, startAt + offset);
+        gain.gain.linearRampToValueAtTime(0.35, startAt + offset + 0.02);
+        gain.gain.linearRampToValueAtTime(0, startAt + offset + duration);
+        osc.connect(gain);
+        gain.connect(ctx.destination);
+        osc.start(startAt + offset);
+        osc.stop(startAt + offset + duration + 0.02);
+      };
+      if (kind === 'success') {
+        playTone(880, 0, 0.18); // single "ปิ๊บ"
+      } else {
+        playTone(440, 0, 0.12);
+        playTone(440, 0.2, 0.12); // "ตื๊ด-ตื๊ด"
+      }
+    } catch {
+      // non-critical
+    }
+  }
+
+  // "ทดสอบเสียง" button — previews whichever the kiosk would actually say/play
+  // right now (beep, bundled audio, server TTS, or live speechSynthesis,
+  // matching the toggles above) so the admin hears the real result while
+  // configuring it.
   testVoice(): void {
-    if (this.usePreRecordedAudio) {
+    this.ensureAudioContext(); // in case this is clicked before "start" (also a real user gesture)
+    if (!this.voiceAnnouncementEnabled) {
+      this.playBeepTone('success');
+      return;
+    }
+    if (this.canUseBundledAudio()) {
       this.playBundledAudio('success');
       return;
     }
-    this.announceDynamic('ทดสอบเสียงพูด บันทึกสำเร็จค่ะ');
+    this.announceDynamic('ทดสอบเสียงพูด บันทึกสำเร็จ');
   }
 
   // Raw local speechSynthesis — only reached as a last-resort fallback when
-  // the server TTS call itself fails. `text` is already gender-adjusted.
+  // the server TTS call itself fails. `text` is already ending-adjusted.
   private speakLiveRaw(text: string): void {
     if (!('speechSynthesis' in window)) return;
     try {
@@ -747,7 +869,7 @@ export class CheckinComponent implements AfterViewInit, OnDestroy {
       const utter = new SpeechSynthesisUtterance(text);
       utter.lang = 'th-TH';
       if (this.ttsVoice) utter.voice = this.ttsVoice;
-      utter.rate = 1;
+      utter.rate = this.speechRate;
       utter.pitch = 1.15; // slightly higher pitch for a youthful female tone
       utter.volume = 1;
       window.speechSynthesis.speak(utter);
@@ -761,13 +883,17 @@ export class CheckinComponent implements AfterViewInit, OnDestroy {
   // synthesis instead of the bundled audio even when usePreRecordedAudio is on.
   private speakSuccess(employeeName?: string): void {
     if (!this.soundEnabled) return;
+    if (!this.voiceAnnouncementEnabled) {
+      this.playBeepTone('success');
+      return;
+    }
     const needsName = this.readNameEnabled && !!employeeName;
-    if (this.usePreRecordedAudio && !needsName) {
+    if (this.canUseBundledAudio() && !needsName) {
       this.playBundledAudio('success');
       return;
     }
     const namePart = needsName ? `คุณ${employeeName} ` : '';
-    this.announceDynamic(`${namePart}บันทึกสำเร็จค่ะ`);
+    this.announceDynamic(`${namePart}บันทึกสำเร็จ`);
   }
 
   private speakRetry(): void {
@@ -775,11 +901,15 @@ export class CheckinComponent implements AfterViewInit, OnDestroy {
     const now = Date.now();
     if (now - this.lastRetryPromptAt < this.RETRY_PROMPT_COOLDOWN_MS) return;
     this.lastRetryPromptAt = now;
-    if (this.usePreRecordedAudio) {
+    if (!this.voiceAnnouncementEnabled) {
+      this.playBeepTone('retry');
+      return;
+    }
+    if (this.canUseBundledAudio()) {
       this.playBundledAudio('retry');
       return;
     }
-    this.announceDynamic('ลองใหม่ค่ะ');
+    this.announceDynamic('ลองใหม่');
   }
 
   private clampNumber(value: number, min: number, max: number): number {
@@ -1425,6 +1555,7 @@ export class CheckinComponent implements AfterViewInit, OnDestroy {
     if (this.starting || this.running) return;
     this.starting = true;
     this.loadThaiVoice(); // must happen on a real user gesture (this click)
+    this.ensureAudioContext(); // same user-gesture requirement, needed for beep mode
     this.setStatus('กำลังโหลดโมเดล AI...', 'scanning');
     try {
       await this.ensureFaceApiLoaded();

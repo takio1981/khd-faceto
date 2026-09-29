@@ -87,31 +87,55 @@
           </div>
 
           <div class="cam-select">
-            <label>🔊 เสียงพูดแจ้งผลการสแกน</label>
+            <label>🔊 เสียงแจ้งผลการสแกน</label>
 
-            <mat-checkbox [(ngModel)]="usePreRecordedAudio" (ngModelChange)="onUsePreRecordedAudioChange($event)">
-              ใช้เสียงพากย์ที่ดาวน์โหลดไว้ในระบบ (ลื่นไหล ไม่มีสะดุด แนะนำ)
-            </mat-checkbox>
-            <mat-checkbox [(ngModel)]="readNameEnabled" (ngModelChange)="onReadNameChange($event)">
-              อ่านชื่อผู้สแกนผ่านด้วย (เช่น "คุณสมชาย บันทึกสำเร็จค่ะ")
-            </mat-checkbox>
-            <mat-checkbox [(ngModel)]="voiceIsMale" (ngModelChange)="onVoiceGenderChange($event)">
-              เสียงนี้เป็นเสียงผู้ชาย (เปลี่ยนคำลงท้าย "ค่ะ" เป็น "ครับ")
+            <mat-checkbox [(ngModel)]="voiceAnnouncementEnabled" (ngModelChange)="onVoiceAnnouncementChange($event)">
+              พูดแจ้งผลด้วยเสียง (ถ้าปิด จะใช้เสียงปิ๊บ/ตื๊ดตื๊ดแทน)
             </mat-checkbox>
 
-            <div class="cam-select-row">
-              <mat-select [(ngModel)]="selectedVoiceURI" (selectionChange)="onVoiceChange($event.value)">
-                <mat-option *ngIf="!availableVoices.length" value="" disabled>ไม่พบเสียงภาษาไทยในเครื่องนี้ (จะใช้เสียงเริ่มต้นของเบราว์เซอร์)</mat-option>
-                <mat-option *ngFor="let v of availableVoices" [value]="v.voiceURI">{{ v.name }}</mat-option>
-              </mat-select>
-              <button mat-stroked-button type="button" (click)="testVoice()">🔈 ทดสอบเสียง</button>
-            </div>
-            <p class="cam-setting-hint">
-              วลีคงที่ "บันทึกสำเร็จ/ลองใหม่" เล่นจากไฟล์เสียงที่ดาวน์โหลดไว้ (ถ้าเปิดตัวเลือกด้านบน) ส่วน "อ่านชื่อผู้สแกน" เป็นข้อความที่เปลี่ยนไปตามคน
-              จึงอัดเสียงไว้ล่วงหน้าไม่ได้ — ระบบจะขอให้เซิร์ฟเวอร์สร้างเสียงพูดให้แทน (เสียงคุณภาพเดียวกับไฟล์ที่ดาวน์โหลดไว้ ใช้ได้ทุกเบราว์เซอร์รวมถึง Chrome
-              โดยไม่ต้องพึ่งเสียงพูดที่ติดตั้งในเครื่อง) รายชื่อเสียงในเครื่อง/เบราว์เซอร์ด้านล่างนี้จะถูกใช้เฉพาะเป็นเสียงสำรอง ถ้าเซิร์ฟเวอร์สร้างเสียงไม่สำเร็จ
-              (เช่น เซิร์ฟเวอร์ไม่มีอินเทอร์เน็ตชั่วคราว) ตั้งค่านี้จำแยกไว้ต่อเครื่อง/เบราว์เซอร์
-            </p>
+            @if (voiceAnnouncementEnabled) {
+              <mat-checkbox [(ngModel)]="usePreRecordedAudio" (ngModelChange)="onUsePreRecordedAudioChange($event)">
+                ใช้เสียงพากย์ที่ดาวน์โหลดไว้ในระบบ (ลื่นไหล ไม่มีสะดุด แนะนำ)
+              </mat-checkbox>
+              <mat-checkbox [(ngModel)]="readNameEnabled" (ngModelChange)="onReadNameChange($event)">
+                อ่านชื่อผู้สแกนผ่านด้วย (เช่น "คุณสมชาย บันทึกสำเร็จค่ะ")
+              </mat-checkbox>
+              <mat-checkbox [(ngModel)]="voiceIsMale" (ngModelChange)="onVoiceGenderChange($event)">
+                เสียงนี้เป็นเสียงผู้ชาย (เลือกเสียงพากย์เพศชาย)
+              </mat-checkbox>
+
+              <mat-form-field appearance="outline" class="full-width">
+                <mat-label>คำลงท้ายประโยค</mat-label>
+                <input matInput [(ngModel)]="endingWord" (ngModelChange)="onEndingWordChange($event)" placeholder="ค่ะ" />
+              </mat-form-field>
+              <p class="cam-setting-hint">
+                ใส่คำลงท้ายเองได้ตามต้องการ เช่น "ค่ะ", "ครับ", "นะคะ", "จ้า" หรือปล่อยว่างไว้เพื่อไม่ให้มีคำลงท้าย — ถ้าตั้งเป็นอย่างอื่นนอกจาก
+                "ค่ะ"/"ครับ" ที่ตรงกับเสียงที่เลือก ระบบจะสร้างเสียงพูดใหม่ให้แทนการเล่นไฟล์เสียงที่ดาวน์โหลดไว้
+              </p>
+
+              <label>⚡ ความเร็วในการอ่านออกเสียง — {{ speechRate.toFixed(2) }}x</label>
+              <mat-slider [min]="minSpeechRate" [max]="maxSpeechRate" [step]="0.05" discrete>
+                <input matSliderThumb [(ngModel)]="speechRate" (ngModelChange)="onSpeechRateChange($event)" />
+              </mat-slider>
+              <p class="cam-setting-hint">
+                ลากไปทาง "ช้า" (ค่าน้อยกว่า 1) เพื่อให้อ่านออกเสียงช้าลง ฟังชัดเจนขึ้น — ค่าเริ่มต้น 1.00x คือความเร็วปกติของเสียงพากย์
+              </p>
+
+              <div class="cam-select-row">
+                <mat-select [(ngModel)]="selectedVoiceURI" (selectionChange)="onVoiceChange($event.value)">
+                  <mat-option *ngIf="!availableVoices.length" value="" disabled>ไม่พบเสียงภาษาไทยในเครื่องนี้ (จะใช้เสียงเริ่มต้นของเบราว์เซอร์)</mat-option>
+                  <mat-option *ngFor="let v of availableVoices" [value]="v.voiceURI">{{ v.name }}</mat-option>
+                </mat-select>
+              </div>
+              <p class="cam-setting-hint">
+                วลีคงที่ "บันทึกสำเร็จ/ลองใหม่" เล่นจากไฟล์เสียงที่ดาวน์โหลดไว้ (ถ้าเปิดตัวเลือกด้านบนและคำลงท้ายตรงกับค่าเริ่มต้น) ส่วน "อ่านชื่อผู้สแกน"
+                หรือคำลงท้ายที่กำหนดเอง เป็นข้อความที่เปลี่ยนไปได้จึงอัดเสียงไว้ล่วงหน้าไม่ได้ — ระบบจะขอให้เซิร์ฟเวอร์สร้างเสียงพูดให้แทน (เสียงคุณภาพเดียวกับ
+                ไฟล์ที่ดาวน์โหลดไว้ ใช้ได้ทุกเบราว์เซอร์รวมถึง Chrome โดยไม่ต้องพึ่งเสียงพูดที่ติดตั้งในเครื่อง) รายชื่อเสียงในเครื่อง/เบราว์เซอร์ด้านบนนี้จะถูกใช้
+                เฉพาะเป็นเสียงสำรอง ถ้าเซิร์ฟเวอร์สร้างเสียงไม่สำเร็จ (เช่น เซิร์ฟเวอร์ไม่มีอินเทอร์เน็ตชั่วคราว) ตั้งค่าทั้งหมดนี้จำแยกไว้ต่อเครื่อง/เบราว์เซอร์
+              </p>
+            }
+
+            <button mat-stroked-button type="button" (click)="testVoice()">🔈 ทดสอบเสียง</button>
           </div>
 
           <div class="cam-select">
