@@ -100,17 +100,34 @@
               <mat-checkbox [(ngModel)]="readNameEnabled" (ngModelChange)="onReadNameChange($event)">
                 อ่านชื่อผู้สแกนผ่านด้วย (เช่น "คุณสมชาย บันทึกสำเร็จค่ะ")
               </mat-checkbox>
+              @if (readNameEnabled) {
+                <div class="cam-select-row">
+                  <mat-select [(ngModel)]="readNameFormat" (selectionChange)="onReadNameFormatChange($event.value)">
+                    <mat-option value="full">ชื่อ-นามสกุล (เช่น "สมชาย ใจดี")</mat-option>
+                    <mat-option value="first">ชื่อ (เช่น "สมชาย")</mat-option>
+                  </mat-select>
+                </div>
+              }
               <mat-checkbox [(ngModel)]="voiceIsMale" (ngModelChange)="onVoiceGenderChange($event)">
                 เสียงนี้เป็นเสียงผู้ชาย (เลือกเสียงพากย์เพศชาย)
               </mat-checkbox>
 
               <mat-form-field appearance="outline" class="full-width">
+                <mat-label>ข้อความเมื่อสแกนผ่าน</mat-label>
+                <input matInput [(ngModel)]="successText" (ngModelChange)="onSuccessTextChange($event)" placeholder="บันทึกสำเร็จ" />
+              </mat-form-field>
+              <mat-form-field appearance="outline" class="full-width">
+                <mat-label>ข้อความเมื่อสแกนไม่ผ่าน</mat-label>
+                <input matInput [(ngModel)]="retryText" (ngModelChange)="onRetryTextChange($event)" placeholder="ลองใหม่" />
+              </mat-form-field>
+              <mat-form-field appearance="outline" class="full-width">
                 <mat-label>คำลงท้ายประโยค</mat-label>
                 <input matInput [(ngModel)]="endingWord" (ngModelChange)="onEndingWordChange($event)" placeholder="ค่ะ" />
               </mat-form-field>
               <p class="cam-setting-hint">
-                ใส่คำลงท้ายเองได้ตามต้องการ เช่น "ค่ะ", "ครับ", "นะคะ", "จ้า" หรือปล่อยว่างไว้เพื่อไม่ให้มีคำลงท้าย — ถ้าตั้งเป็นอย่างอื่นนอกจาก
-                "ค่ะ"/"ครับ" ที่ตรงกับเสียงที่เลือก ระบบจะสร้างเสียงพูดใหม่ให้แทนการเล่นไฟล์เสียงที่ดาวน์โหลดไว้
+                ใส่ข้อความเองได้ตามต้องการทั้ง 3 ช่อง (เช่น เปลี่ยน "ลองใหม่" เป็น "กรุณาสแกนใหม่อีกครั้ง") หรือใส่คำลงท้ายอื่นเช่น "ครับ", "นะคะ", "จ้า"
+                หรือปล่อยว่างไว้เพื่อไม่ให้มีคำลงท้าย — ถ้าตั้งค่าใดค่าหนึ่งต่างจากค่าเริ่มต้น ("บันทึกสำเร็จ"/"ลองใหม่"/"ค่ะ" หรือ "ครับ" ที่ตรงกับเสียงที่เลือก)
+                ระบบจะสร้างเสียงพูดใหม่ให้แทนการเล่นไฟล์เสียงที่ดาวน์โหลดไว้
               </p>
 
               <label>⚡ ความเร็วในการอ่านออกเสียง — {{ speechRate.toFixed(2) }}x</label>
@@ -128,10 +145,10 @@
                 </mat-select>
               </div>
               <p class="cam-setting-hint">
-                วลีคงที่ "บันทึกสำเร็จ/ลองใหม่" เล่นจากไฟล์เสียงที่ดาวน์โหลดไว้ (ถ้าเปิดตัวเลือกด้านบนและคำลงท้ายตรงกับค่าเริ่มต้น) ส่วน "อ่านชื่อผู้สแกน"
-                หรือคำลงท้ายที่กำหนดเอง เป็นข้อความที่เปลี่ยนไปได้จึงอัดเสียงไว้ล่วงหน้าไม่ได้ — ระบบจะขอให้เซิร์ฟเวอร์สร้างเสียงพูดให้แทน (เสียงคุณภาพเดียวกับ
-                ไฟล์ที่ดาวน์โหลดไว้ ใช้ได้ทุกเบราว์เซอร์รวมถึง Chrome โดยไม่ต้องพึ่งเสียงพูดที่ติดตั้งในเครื่อง) รายชื่อเสียงในเครื่อง/เบราว์เซอร์ด้านบนนี้จะถูกใช้
-                เฉพาะเป็นเสียงสำรอง ถ้าเซิร์ฟเวอร์สร้างเสียงไม่สำเร็จ (เช่น เซิร์ฟเวอร์ไม่มีอินเทอร์เน็ตชั่วคราว) ตั้งค่าทั้งหมดนี้จำแยกไว้ต่อเครื่อง/เบราว์เซอร์
+                วลี "บันทึกสำเร็จ/ลองใหม่" เล่นจากไฟล์เสียงที่ดาวน์โหลดไว้ได้เฉพาะตอนใช้ข้อความ/คำลงท้ายเริ่มต้นเท่านั้น — ถ้าแก้ข้อความด้านบน,
+                เปิดอ่านชื่อผู้สแกน, หรือเปลี่ยนคำลงท้าย ระบบจะขอให้เซิร์ฟเวอร์สร้างเสียงพูดให้แทน (เสียงคุณภาพเดียวกับไฟล์ที่ดาวน์โหลดไว้ ใช้ได้ทุกเบราว์เซอร์
+                รวมถึง Chrome โดยไม่ต้องพึ่งเสียงพูดที่ติดตั้งในเครื่อง) รายชื่อเสียงในเครื่อง/เบราว์เซอร์ด้านบนนี้จะถูกใช้เฉพาะเป็นเสียงสำรอง ถ้าเซิร์ฟเวอร์สร้าง
+                เสียงไม่สำเร็จ (เช่น เซิร์ฟเวอร์ไม่มีอินเทอร์เน็ตชั่วคราว) ตั้งค่าทั้งหมดนี้จำแยกไว้ต่อเครื่อง/เบราว์เซอร์
               </p>
             }
 
@@ -146,6 +163,17 @@
             <p class="cam-setting-hint">
               ลากไปทาง "เร็ว" (ค่าน้อย) เพื่อให้ตรวจจับใบหน้าถี่ขึ้น/ตอบสนองไวขึ้น แต่ใช้ CPU มากขึ้น —
               ถ้าเครื่องช้าหรือภาพกระตุก ให้ลากไปทาง "ช้า" (ค่ามาก) แนะนำเริ่มที่ 150 ms
+            </p>
+          </div>
+
+          <div class="cam-select">
+            <label>👥 จำนวนใบหน้าสูงสุดที่สแกนพร้อมกัน — {{ maxConcurrentFaces }} คน</label>
+            <mat-slider [min]="minConcurrentFaces" [max]="maxConcurrentFacesLimit" [step]="1" discrete>
+              <input matSliderThumb [(ngModel)]="maxConcurrentFaces" (ngModelChange)="onMaxConcurrentFacesChange($event)" />
+            </mat-slider>
+            <p class="cam-setting-hint">
+              ถ้ามีคนเข้าเฟรมพร้อมกันเกินจำนวนนี้ ระบบจะสแกนเฉพาะใบหน้าที่ใหญ่ที่สุด (อยู่ใกล้กล้องที่สุด) ก่อนตามจำนวนที่ตั้งไว้
+              ส่วนคนที่เหลือจะถูกสแกนในรอบถัดไปแทน
             </p>
           </div>
 

@@ -122,6 +122,15 @@ const DEFAULT_SPEECH_RATE = 1;
 const MIN_SPEECH_RATE = 0.5;
 const MAX_SPEECH_RATE = 1.5;
 const DEFAULT_ENDING_WORD = 'ค่ะ';
+const SUCCESS_TEXT_KEY = 'camTtsSuccessText';
+const RETRY_TEXT_KEY = 'camTtsRetryText';
+const READ_NAME_FORMAT_KEY = 'camReadNameFormat';
+const MAX_CONCURRENT_FACES_KEY = 'camMaxConcurrentFaces';
+const DEFAULT_SUCCESS_TEXT = 'บันทึกสำเร็จ';
+const DEFAULT_RETRY_TEXT = 'ลองใหม่';
+const DEFAULT_MAX_CONCURRENT_FACES = 5;
+const MIN_CONCURRENT_FACES = 1;
+const MAX_CONCURRENT_FACES = 10;
 
 // Auto-zoom: when a face is detected the cam-frame div is CSS-scaled toward
 // the face centre so the kiosk display zooms in automatically.
@@ -196,8 +205,14 @@ export class CheckinComponent implements AfterViewInit, OnDestroy {
   voiceAnnouncementEnabled = true;
   speechRate = DEFAULT_SPEECH_RATE;
   endingWord = DEFAULT_ENDING_WORD;
+  successText = DEFAULT_SUCCESS_TEXT;
+  retryText = DEFAULT_RETRY_TEXT;
+  readNameFormat: 'first' | 'full' = 'full';
+  maxConcurrentFaces = DEFAULT_MAX_CONCURRENT_FACES;
   readonly minSpeechRate = MIN_SPEECH_RATE;
   readonly maxSpeechRate = MAX_SPEECH_RATE;
+  readonly minConcurrentFaces = MIN_CONCURRENT_FACES;
+  readonly maxConcurrentFacesLimit = MAX_CONCURRENT_FACES;
 
   detectionIntervalMs = DEFAULT_DETECTION_INTERVAL_MS;
   boxSmoothing = DEFAULT_BOX_SMOOTHING;
@@ -342,6 +357,14 @@ export class CheckinComponent implements AfterViewInit, OnDestroy {
       MAX_SPEECH_RATE
     );
     this.endingWord = localStorage.getItem(ENDING_WORD_KEY) ?? DEFAULT_ENDING_WORD;
+    this.successText = localStorage.getItem(SUCCESS_TEXT_KEY) ?? DEFAULT_SUCCESS_TEXT;
+    this.retryText = localStorage.getItem(RETRY_TEXT_KEY) ?? DEFAULT_RETRY_TEXT;
+    this.readNameFormat = localStorage.getItem(READ_NAME_FORMAT_KEY) === 'first' ? 'first' : 'full';
+    this.maxConcurrentFaces = this.clampNumber(
+      Number(localStorage.getItem(MAX_CONCURRENT_FACES_KEY)) || DEFAULT_MAX_CONCURRENT_FACES,
+      MIN_CONCURRENT_FACES,
+      MAX_CONCURRENT_FACES
+    );
     this.loadThaiVoice(); // populate the voice picker even before "start" is clicked
     this.detectionIntervalMs = this.clampNumber(
       Number(localStorage.getItem(DETECTION_INTERVAL_KEY)) || DEFAULT_DETECTION_INTERVAL_MS,
@@ -668,21 +691,51 @@ export class CheckinComponent implements AfterViewInit, OnDestroy {
     localStorage.setItem(ENDING_WORD_KEY, value);
   }
 
+  onSuccessTextChange(value: string): void {
+    this.successText = value;
+    localStorage.setItem(SUCCESS_TEXT_KEY, value);
+  }
+
+  onRetryTextChange(value: string): void {
+    this.retryText = value;
+    localStorage.setItem(RETRY_TEXT_KEY, value);
+  }
+
+  onReadNameFormatChange(value: 'first' | 'full'): void {
+    this.readNameFormat = value;
+    localStorage.setItem(READ_NAME_FORMAT_KEY, value);
+  }
+
+  onMaxConcurrentFacesChange(value: number): void {
+    this.maxConcurrentFaces = this.clampNumber(Math.round(value), MIN_CONCURRENT_FACES, MAX_CONCURRENT_FACES);
+    localStorage.setItem(MAX_CONCURRENT_FACES_KEY, String(this.maxConcurrentFaces));
+  }
+
+  // "ชื่อ" (first name only) vs "ชื่อ-นามสกุล" (full name) — employees don't
+  // have separate first/last-name columns, just one full_name string, so
+  // "first name only" is derived by splitting on the first space (matches
+  // how Thai names are actually stored here, e.g. "สมชาย ใจดี").
+  private formatEmployeeName(fullName: string): string {
+    return this.readNameFormat === 'first' ? fullName.split(' ')[0] : fullName;
+  }
+
   // Appends the admin's configured sentence ending (default "ค่ะ", free text
   // — e.g. "ครับ", "นะคะ", "จ้า", or blank for none) to a base phrase. The
-  // two bundled fixed-phrase MP3s were pre-recorded with a hardcoded "ค่ะ"/
-  // "ครับ" baked into the audio, so they can only be used while the ending
-  // exactly matches the one that pairs with the selected voice gender — see
-  // canUseBundledAudio() below; anything else falls through to server/live
-  // synthesis, which can say whatever text is actually configured.
+  // two bundled fixed-phrase MP3s were pre-recorded with a hardcoded
+  // "บันทึกสำเร็จค่ะ"/"บันทึกสำเร็จครับ"/"ลองใหม่ค่ะ"/"ลองใหม่ครับ" baked into
+  // the audio, so they can only be used while both the base text and the
+  // ending exactly match what was recorded — see canUseBundledAudio() below;
+  // anything else falls through to server/live synthesis, which can say
+  // whatever text is actually configured.
   private appendEnding(base: string): string {
     return `${base}${this.endingWord}`;
   }
 
-  private canUseBundledAudio(): boolean {
+  private canUseBundledAudio(kind: 'success' | 'retry'): boolean {
     if (!this.usePreRecordedAudio) return false;
     const expectedEnding = this.voiceIsMale ? 'ครับ' : 'ค่ะ';
-    return this.endingWord === expectedEnding;
+    if (this.endingWord !== expectedEnding) return false;
+    return kind === 'success' ? this.successText === DEFAULT_SUCCESS_TEXT : this.retryText === DEFAULT_RETRY_TEXT;
   }
 
   // ---- Pre-recorded audio (bundled in the project) ----
@@ -718,19 +771,25 @@ export class CheckinComponent implements AfterViewInit, OnDestroy {
     }
   }
 
-  private playBundledAudio(kind: 'success' | 'retry'): void {
-    try {
-      const gender = this.voiceIsMale ? 'male' : 'female';
-      const audio = new Audio(`audio/tts/${kind}_${gender}.mp3`);
-      this.applyPlaybackRate(audio);
-      audio.volume = 1;
-      audio.play().catch(() => {
+  // Resolves once playback actually finishes (or immediately on any error) —
+  // the announcement queue below awaits this so two announcements never
+  // overlap; a stuck/never-resolving promise would just stall the queue.
+  private playBundledAudio(kind: 'success' | 'retry'): Promise<void> {
+    return new Promise((resolve) => {
+      try {
+        const gender = this.voiceIsMale ? 'male' : 'female';
+        const audio = new Audio(`audio/tts/${kind}_${gender}.mp3`);
+        this.applyPlaybackRate(audio);
+        audio.volume = 1;
+        audio.onended = () => resolve();
+        audio.onerror = () => resolve();
+        audio.play().catch(() => resolve());
         // Autoplay can be blocked before any page interaction — non-critical,
         // the scan itself is already recorded regardless of the announcement.
-      });
-    } catch {
-      // non-critical
-    }
+      } catch {
+        resolve();
+      }
+    });
   }
 
   // ---- Server-generated speech (for dynamic text — e.g. a scanned
@@ -754,7 +813,7 @@ export class CheckinComponent implements AfterViewInit, OnDestroy {
 
     const cachedUrl = this.serverAudioCache.get(key);
     if (cachedUrl) {
-      this.playAudioUrl(cachedUrl);
+      await this.playAudioUrl(cachedUrl);
       return;
     }
 
@@ -769,27 +828,30 @@ export class CheckinComponent implements AfterViewInit, OnDestroy {
         }
       }
       this.serverAudioCache.set(key, url);
-      this.playAudioUrl(url);
+      await this.playAudioUrl(url);
     } catch {
       // Server TTS unreachable — fall back to whatever local voice the
       // browser has, best-effort (may be silent on a browser/OS with no
       // installed Thai voice, but the scan itself is already recorded
       // regardless of whether the announcement plays).
-      this.speakLiveRaw(text);
+      await this.speakLiveRaw(text);
     }
   }
 
-  private playAudioUrl(url: string): void {
-    try {
-      const audio = new Audio(url);
-      this.applyPlaybackRate(audio);
-      audio.volume = 1;
-      audio.play().catch(() => {
+  private playAudioUrl(url: string): Promise<void> {
+    return new Promise((resolve) => {
+      try {
+        const audio = new Audio(url);
+        this.applyPlaybackRate(audio);
+        audio.volume = 1;
+        audio.onended = () => resolve();
+        audio.onerror = () => resolve();
+        audio.play().catch(() => resolve());
         // Autoplay can be blocked before any page interaction — non-critical.
-      });
-    } catch {
-      // non-critical
-    }
+      } catch {
+        resolve();
+      }
+    });
   }
 
   // ---- Beep mode (used instead of any voice announcement — bundled,
@@ -813,34 +875,78 @@ export class CheckinComponent implements AfterViewInit, OnDestroy {
     }
   }
 
-  private playBeepTone(kind: 'success' | 'retry'): void {
-    const ctx = this.audioCtx;
-    if (!ctx) return;
-    if (ctx.state === 'suspended') ctx.resume().catch(() => {});
-    try {
-      const startAt = ctx.currentTime;
-      const playTone = (freq: number, offset: number, duration: number) => {
-        const osc = ctx.createOscillator();
-        const gain = ctx.createGain();
-        osc.type = 'sine';
-        osc.frequency.value = freq;
-        gain.gain.setValueAtTime(0, startAt + offset);
-        gain.gain.linearRampToValueAtTime(0.35, startAt + offset + 0.02);
-        gain.gain.linearRampToValueAtTime(0, startAt + offset + duration);
-        osc.connect(gain);
-        gain.connect(ctx.destination);
-        osc.start(startAt + offset);
-        osc.stop(startAt + offset + duration + 0.02);
-      };
-      if (kind === 'success') {
-        playTone(880, 0, 0.18); // single "ปิ๊บ"
-      } else {
-        playTone(440, 0, 0.12);
-        playTone(440, 0.2, 0.12); // "ตื๊ด-ตื๊ด"
+  // Resolves after the tones finish (rather than the fire-and-forget
+  // original) so the announcement queue can wait for it like every other
+  // announcement kind.
+  private playBeepTone(kind: 'success' | 'retry'): Promise<void> {
+    return new Promise((resolve) => {
+      const ctx = this.audioCtx;
+      if (!ctx) {
+        resolve();
+        return;
       }
-    } catch {
-      // non-critical
+      if (ctx.state === 'suspended') ctx.resume().catch(() => {});
+      try {
+        const startAt = ctx.currentTime;
+        let totalDuration = 0;
+        const playTone = (freq: number, offset: number, duration: number) => {
+          const osc = ctx.createOscillator();
+          const gain = ctx.createGain();
+          osc.type = 'sine';
+          osc.frequency.value = freq;
+          gain.gain.setValueAtTime(0, startAt + offset);
+          gain.gain.linearRampToValueAtTime(0.35, startAt + offset + 0.02);
+          gain.gain.linearRampToValueAtTime(0, startAt + offset + duration);
+          osc.connect(gain);
+          gain.connect(ctx.destination);
+          osc.start(startAt + offset);
+          osc.stop(startAt + offset + duration + 0.02);
+          totalDuration = Math.max(totalDuration, offset + duration);
+        };
+        if (kind === 'success') {
+          playTone(880, 0, 0.18); // single "ปิ๊บ"
+        } else {
+          playTone(440, 0, 0.12);
+          playTone(440, 0.2, 0.12); // "ตื๊ด-ตื๊ด"
+        }
+        setTimeout(() => resolve(), totalDuration * 1000 + 30);
+      } catch {
+        resolve();
+      }
+    });
+  }
+
+  // ---- Sequential announcement queue ----
+  // Multiple people can scan within the same detection tick (see
+  // maxConcurrentFaces), and success/retry announcements can also fire close
+  // together across ticks. Every announcement (bundled audio, server TTS,
+  // live speechSynthesis fallback, or a beep) now resolves a promise when it
+  // actually finishes playing, so queuing them here guarantees one person's
+  // announcement always completes before the next one starts, in the order
+  // they were scanned — instead of several overlapping audio sources at once.
+  private readonly announcementQueue: Array<() => Promise<void>> = [];
+  private isAnnouncing = false;
+
+  private enqueueAnnouncement(job: () => Promise<void>): void {
+    this.announcementQueue.push(job);
+    this.drainAnnouncementQueue();
+  }
+
+  private async drainAnnouncementQueue(): Promise<void> {
+    if (this.isAnnouncing) return;
+    const job = this.announcementQueue.shift();
+    if (!job) return;
+    this.isAnnouncing = true;
+    try {
+      await job();
+    } finally {
+      this.isAnnouncing = false;
+      this.drainAnnouncementQueue();
     }
+  }
+
+  private clearAnnouncementQueue(): void {
+    this.announcementQueue.length = 0;
   }
 
   // "ทดสอบเสียง" button — previews whichever the kiosk would actually say/play
@@ -849,33 +955,41 @@ export class CheckinComponent implements AfterViewInit, OnDestroy {
   // configuring it.
   testVoice(): void {
     this.ensureAudioContext(); // in case this is clicked before "start" (also a real user gesture)
-    if (!this.voiceAnnouncementEnabled) {
-      this.playBeepTone('success');
-      return;
-    }
-    if (this.canUseBundledAudio()) {
-      this.playBundledAudio('success');
-      return;
-    }
-    this.announceDynamic('ทดสอบเสียงพูด บันทึกสำเร็จ');
+    this.enqueueAnnouncement(async () => {
+      if (!this.voiceAnnouncementEnabled) {
+        await this.playBeepTone('success');
+        return;
+      }
+      if (this.canUseBundledAudio('success')) {
+        await this.playBundledAudio('success');
+        return;
+      }
+      await this.announceDynamic(`ทดสอบเสียงพูด ${this.successText}`);
+    });
   }
 
   // Raw local speechSynthesis — only reached as a last-resort fallback when
   // the server TTS call itself fails. `text` is already ending-adjusted.
-  private speakLiveRaw(text: string): void {
-    if (!('speechSynthesis' in window)) return;
-    try {
-      if (window.speechSynthesis.speaking) return;
-      const utter = new SpeechSynthesisUtterance(text);
-      utter.lang = 'th-TH';
-      if (this.ttsVoice) utter.voice = this.ttsVoice;
-      utter.rate = this.speechRate;
-      utter.pitch = 1.15; // slightly higher pitch for a youthful female tone
-      utter.volume = 1;
-      window.speechSynthesis.speak(utter);
-    } catch {
-      // non-critical — scanning still works without voice feedback
-    }
+  private speakLiveRaw(text: string): Promise<void> {
+    return new Promise((resolve) => {
+      if (!('speechSynthesis' in window)) {
+        resolve();
+        return;
+      }
+      try {
+        const utter = new SpeechSynthesisUtterance(text);
+        utter.lang = 'th-TH';
+        if (this.ttsVoice) utter.voice = this.ttsVoice;
+        utter.rate = this.speechRate;
+        utter.pitch = 1.15; // slightly higher pitch for a youthful female tone
+        utter.volume = 1;
+        utter.onend = () => resolve();
+        utter.onerror = () => resolve();
+        window.speechSynthesis.speak(utter);
+      } catch {
+        resolve();
+      }
+    });
   }
 
   // employeeName is only ever read out when "อ่านชื่อผู้สแกนด้วย" is on — that
@@ -883,17 +997,19 @@ export class CheckinComponent implements AfterViewInit, OnDestroy {
   // synthesis instead of the bundled audio even when usePreRecordedAudio is on.
   private speakSuccess(employeeName?: string): void {
     if (!this.soundEnabled) return;
-    if (!this.voiceAnnouncementEnabled) {
-      this.playBeepTone('success');
-      return;
-    }
-    const needsName = this.readNameEnabled && !!employeeName;
-    if (this.canUseBundledAudio() && !needsName) {
-      this.playBundledAudio('success');
-      return;
-    }
-    const namePart = needsName ? `คุณ${employeeName} ` : '';
-    this.announceDynamic(`${namePart}บันทึกสำเร็จ`);
+    this.enqueueAnnouncement(async () => {
+      if (!this.voiceAnnouncementEnabled) {
+        await this.playBeepTone('success');
+        return;
+      }
+      const needsName = this.readNameEnabled && !!employeeName;
+      if (this.canUseBundledAudio('success') && !needsName) {
+        await this.playBundledAudio('success');
+        return;
+      }
+      const namePart = needsName ? `คุณ${this.formatEmployeeName(employeeName!)} ` : '';
+      await this.announceDynamic(`${namePart}${this.successText}`);
+    });
   }
 
   private speakRetry(): void {
@@ -901,15 +1017,17 @@ export class CheckinComponent implements AfterViewInit, OnDestroy {
     const now = Date.now();
     if (now - this.lastRetryPromptAt < this.RETRY_PROMPT_COOLDOWN_MS) return;
     this.lastRetryPromptAt = now;
-    if (!this.voiceAnnouncementEnabled) {
-      this.playBeepTone('retry');
-      return;
-    }
-    if (this.canUseBundledAudio()) {
-      this.playBundledAudio('retry');
-      return;
-    }
-    this.announceDynamic('ลองใหม่');
+    this.enqueueAnnouncement(async () => {
+      if (!this.voiceAnnouncementEnabled) {
+        await this.playBeepTone('retry');
+        return;
+      }
+      if (this.canUseBundledAudio('retry')) {
+        await this.playBundledAudio('retry');
+        return;
+      }
+      await this.announceDynamic(this.retryText);
+    });
   }
 
   private clampNumber(value: number, min: number, max: number): number {
@@ -1401,11 +1519,20 @@ export class CheckinComponent implements AfterViewInit, OnDestroy {
       return;
     }
 
+    // Cap how many faces get processed (previewed/scanned) this tick when
+    // more than maxConcurrentFaces are in frame at once — prioritize the
+    // largest (closest) faces, since those are the most likely to be
+    // intentional scans rather than someone passing through the background.
+    // Anyone left out this tick is simply picked up again on a later one.
+    const scanDets = dets.length > this.maxConcurrentFaces
+      ? [...dets].sort((a, b) => b.box.width * b.box.height - a.box.width * a.box.height).slice(0, this.maxConcurrentFaces)
+      : dets;
+
     const now = Date.now();
 
     // Step 1: cheap preview (descriptor only) for every detected face.
     const previews: { det: FaceDetectionResult; r: ScanResult | null }[] = await Promise.all(
-      dets.map(async (det) => {
+      scanDets.map(async (det) => {
         try {
           const r = await firstValueFrom(this.attendanceService.preview(det.descriptor, this.getScanLocationId()));
           if (!r?.matched && r?.unknownFaceAlert) {
@@ -1471,7 +1598,6 @@ export class CheckinComponent implements AfterViewInit, OnDestroy {
     let confirming = 0;
     const names: string[] = [];
     const backendMessages: string[] = [];
-    let firstRecordedName: string | undefined;
 
     for (const { r } of results) {
       if (!r) continue;
@@ -1486,8 +1612,11 @@ export class CheckinComponent implements AfterViewInit, OnDestroy {
       }
       if (r.scan_type) {
         recorded++;
-        firstRecordedName ??= r.employee.full_name;
         names.push(`${r.employee.full_name} (${SCANTYPE_TH[r.scan_type] || r.scan_type})`);
+        // Enqueued per person (in scan order) rather than only the first —
+        // the announcement queue plays them one at a time so they never
+        // overlap even when several people are recorded in the same tick.
+        this.speakSuccess(r.employee.full_name);
         if (!this.toasted[r.employee.id] || now - this.toasted[r.employee.id] > TOAST_GAP_MS) {
           this.toasted[r.employee.id] = now;
           this.notify.toast(
@@ -1503,7 +1632,6 @@ export class CheckinComponent implements AfterViewInit, OnDestroy {
     }
 
     if (recorded > 0) {
-      this.speakSuccess(firstRecordedName);
       this.loadFeed();
       this.setStatus(`✓ บันทึก ${recorded} คน: ${names.join(', ')}`, 'success');
       this.showResult(`✓ บันทึกสำเร็จ ${recorded} คน — ${names.join(', ')}`, 'success');
@@ -1603,6 +1731,7 @@ export class CheckinComponent implements AfterViewInit, OnDestroy {
     this.stopWatchdog();
     this.facePipeline.stopCamera(this.stream);
     this.drawAll([]); // clear overlay immediately
+    this.clearAnnouncementQueue(); // don't keep announcing people after stopping
     this.setStatus('หยุดสแกนแล้ว — กดเริ่มสแกนเพื่อเริ่มใหม่', '');
   }
 
