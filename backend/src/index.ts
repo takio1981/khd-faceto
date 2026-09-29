@@ -29,6 +29,7 @@ import auditRoutes from './routes/audit.routes';
 import orgStructureRoutes from './routes/orgStructure.routes';
 import correctionRequestRoutes from './routes/correctionRequests.routes';
 import userRoutes from './routes/user.routes';
+import ttsRoutes from './routes/tts.routes';
 
 async function main() {
   await waitForDb();
@@ -96,6 +97,7 @@ async function main() {
   base.use('/api/org', orgStructureRoutes);
   base.use('/api/correction-requests', correctionRequestRoutes);
   base.use('/api/users', userRoutes);
+  base.use('/api/tts', ttsRoutes);
 
   base.get('/api/health', (_req, res) => res.json({ ok: true, time: new Date().toISOString() }));
 

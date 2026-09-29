@@ -28,6 +28,7 @@ import { AttendanceService } from '../../core/services/attendance.service';
 import { AuthService } from '../../core/services/auth.service';
 import { ScanLocationService } from '../../core/services/scan-location.service';
 import { NotifyService } from '../../core/services/notify.service';
+import { TtsService } from '../../core/services/tts.service';
 import { RecentScanItem, ScanLocation, ScanResult } from '../../core/models/models';
 
 declare const faceapi: any;
@@ -300,6 +301,7 @@ export class CheckinComponent implements AfterViewInit, OnDestroy {
     private scanLocationService: ScanLocationService,
     private notify: NotifyService,
     private auth: AuthService,
+    private ttsService: TtsService,
   ) {
     // Checkin is reachable both as a logged-out kiosk page and via the
     // navbar (admin checking it from the dashboard) - send each back to
@@ -667,24 +669,82 @@ export class CheckinComponent implements AfterViewInit, OnDestroy {
     }
   }
 
+  // ---- Server-generated speech (for dynamic text — e.g. a scanned
+  // employee's name — that can't be one of the two bundled fixed phrases) ----
+  // The browser's own speechSynthesis voice list is unreliable for Thai —
+  // Chrome in particular often ships with no usable local Thai voice at all,
+  // so a client-side announcement can end up completely silent. Ask the
+  // backend to synthesize the phrase instead (same Microsoft neural voices
+  // used for the bundled MP3s — see backend/src/services/tts.service.ts) and
+  // just play the returned audio; this works identically in every browser
+  // since it no longer depends on that browser's own TTS engine. Falls back
+  // to local speechSynthesis only if the server call itself fails (e.g. no
+  // internet route to the TTS service).
+  private readonly serverAudioCache = new Map<string, string>(); // "gender::text" -> object URL
+  private readonly MAX_SERVER_AUDIO_CACHE = 200;
+
+  private async announceDynamic(rawText: string): Promise<void> {
+    const gender: 'male' | 'female' = this.voiceIsMale ? 'male' : 'female';
+    const text = this.applyGenderEnding(rawText);
+    const key = `${gender}::${text}`;
+
+    const cachedUrl = this.serverAudioCache.get(key);
+    if (cachedUrl) {
+      this.playAudioUrl(cachedUrl);
+      return;
+    }
+
+    try {
+      const blob = await firstValueFrom(this.ttsService.speak(text, gender));
+      const url = URL.createObjectURL(blob);
+      if (this.serverAudioCache.size >= this.MAX_SERVER_AUDIO_CACHE) {
+        const oldestKey = this.serverAudioCache.keys().next().value;
+        if (oldestKey !== undefined) {
+          URL.revokeObjectURL(this.serverAudioCache.get(oldestKey)!);
+          this.serverAudioCache.delete(oldestKey);
+        }
+      }
+      this.serverAudioCache.set(key, url);
+      this.playAudioUrl(url);
+    } catch {
+      // Server TTS unreachable — fall back to whatever local voice the
+      // browser has, best-effort (may be silent on a browser/OS with no
+      // installed Thai voice, but the scan itself is already recorded
+      // regardless of whether the announcement plays).
+      this.speakLiveRaw(text);
+    }
+  }
+
+  private playAudioUrl(url: string): void {
+    try {
+      const audio = new Audio(url);
+      audio.volume = 1;
+      audio.play().catch(() => {
+        // Autoplay can be blocked before any page interaction — non-critical.
+      });
+    } catch {
+      // non-critical
+    }
+  }
+
   // "ทดสอบเสียง" button — previews whichever the kiosk would actually say
-  // right now (bundled audio or live speechSynthesis, matching the toggle
-  // above) so the admin hears the real result while configuring it.
+  // right now (bundled audio, server TTS, or live speechSynthesis, matching
+  // the toggles above) so the admin hears the real result while configuring it.
   testVoice(): void {
     if (this.usePreRecordedAudio) {
       this.playBundledAudio('success');
       return;
     }
-    this.speakLive('ทดสอบเสียงพูด บันทึกสำเร็จค่ะ');
+    this.announceDynamic('ทดสอบเสียงพูด บันทึกสำเร็จค่ะ');
   }
 
-  private speakLive(text: string): void {
+  // Raw local speechSynthesis — only reached as a last-resort fallback when
+  // the server TTS call itself fails. `text` is already gender-adjusted.
+  private speakLiveRaw(text: string): void {
     if (!('speechSynthesis' in window)) return;
     try {
-      // Don't queue on top of an utterance still playing — with the retry
-      // cooldown below this is mostly a safety net against overlapping speech.
       if (window.speechSynthesis.speaking) return;
-      const utter = new SpeechSynthesisUtterance(this.applyGenderEnding(text));
+      const utter = new SpeechSynthesisUtterance(text);
       utter.lang = 'th-TH';
       if (this.ttsVoice) utter.voice = this.ttsVoice;
       utter.rate = 1;
@@ -697,16 +757,17 @@ export class CheckinComponent implements AfterViewInit, OnDestroy {
   }
 
   // employeeName is only ever read out when "อ่านชื่อผู้สแกนด้วย" is on — that
-  // makes the phrase dynamic per person, so it always goes through live
+  // makes the phrase dynamic per person, so it always goes through server/live
   // synthesis instead of the bundled audio even when usePreRecordedAudio is on.
   private speakSuccess(employeeName?: string): void {
     if (!this.soundEnabled) return;
-    if (this.usePreRecordedAudio && !(this.readNameEnabled && employeeName)) {
+    const needsName = this.readNameEnabled && !!employeeName;
+    if (this.usePreRecordedAudio && !needsName) {
       this.playBundledAudio('success');
       return;
     }
-    const namePart = this.readNameEnabled && employeeName ? `คุณ${employeeName} ` : '';
-    this.speakLive(`${namePart}บันทึกสำเร็จค่ะ`);
+    const namePart = needsName ? `คุณ${employeeName} ` : '';
+    this.announceDynamic(`${namePart}บันทึกสำเร็จค่ะ`);
   }
 
   private speakRetry(): void {
@@ -718,7 +779,7 @@ export class CheckinComponent implements AfterViewInit, OnDestroy {
       this.playBundledAudio('retry');
       return;
     }
-    this.speakLive('ลองใหม่ค่ะ');
+    this.announceDynamic('ลองใหม่ค่ะ');
   }
 
   private clampNumber(value: number, min: number, max: number): number {
