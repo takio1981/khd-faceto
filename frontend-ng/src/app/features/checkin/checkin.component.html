@@ -277,7 +277,7 @@
           <div class="cam-frame" #camFrame>
             <video #video autoplay muted playsinline></video>
             <canvas #overlay class="overlay"></canvas>
-            <div class="cam-guide"><span class="tl"></span><span class="tr"></span><span class="bl"></span><span class="br"></span></div>
+            <div class="cam-guide" [class.no-face]="noFaceDetected"><span class="tl"></span><span class="tr"></span><span class="bl"></span><span class="br"></span></div>
             <div class="zoom-badge" *ngIf="autoZoomEnabled && isZoomActive">🔍 {{ currentZoomDisplay }}</div>
             <div class="obj-detect-chips" *ngIf="objectDetectorEnabled && objectDetectorReady && lastObjectDetections.length">
               @for (d of lastObjectDetections.slice(0, 6); track d.class + d.score) {
@@ -302,6 +302,10 @@
           <div class="cam-status" [class]="statusType">
             <span class="dot"></span>
             <span>{{ statusText }}</span>
+          </div>
+
+          <div class="cam-tips" *ngIf="noFaceDetected">
+            💡 คำแนะนำ: หันหน้าเข้ากล้องตรงๆ • อยู่ในที่มีแสงสว่างเพียงพอ • ถอดแมส/แว่นกันแดดที่บังใบหน้า • อยู่ห่างจากกล้องพอเหมาะ ไม่ใกล้หรือไกลเกินไป
           </div>
 
           <div class="cam-clock-overlay">

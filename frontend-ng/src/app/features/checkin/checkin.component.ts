@@ -274,6 +274,11 @@ export class CheckinComponent implements AfterViewInit, OnDestroy {
 
   statusText = 'กดปุ่ม "เริ่มสแกน" เพื่อเริ่มต้น';
   statusType: '' | 'scanning' | 'success' | 'warn' | 'error' = '';
+  // True only while the detector is actively running and sees zero faces at
+  // all in frame — distinct from "face detected but too far/close" or "found
+  // a non-human object", which already have their own specific messages.
+  // Drives the red viewfinder-guide border and the scanning-tips hint below.
+  noFaceDetected = false;
 
   resultText = '';
   resultType: 'success' | 'error' | 'warn' = 'success';
@@ -1453,9 +1458,16 @@ export class CheckinComponent implements AfterViewInit, OnDestroy {
     if (!this.running) return;
     if (!rawDets.length) {
       this.drawAll([]);
+      this.noFaceDetected = true;
       this.setStatus('กำลังค้นหาใบหน้า... กรุณาหันหน้าเข้ากล้อง', 'scanning');
       return;
     }
+
+    // A face-like object was picked up by the detector, even if it gets
+    // filtered out below for being too far/non-human — that's a different,
+    // more specific problem than "no face at all", so the red guide/tips
+    // only apply to the branch above.
+    this.noFaceDetected = false;
 
     const { kept: sizeDets, hadOutOfRange } = this.filterByFaceSize(rawDets);
     if (!sizeDets.length) {
@@ -1700,6 +1712,7 @@ export class CheckinComponent implements AfterViewInit, OnDestroy {
     this.stopWatchdog();
     this.facePipeline.stopCamera(this.stream);
     this.drawAll([]); // clear overlay immediately
+    this.noFaceDetected = false;
     this.clearAnnouncementQueue(); // don't keep announcing people after stopping
     this.setStatus('หยุดสแกนแล้ว — กดเริ่มสแกนเพื่อเริ่มใหม่', '');
   }
