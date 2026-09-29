@@ -89,13 +89,13 @@
           <div class="cam-select">
             <label>🔊 เสียงพูดแจ้งผลการสแกน</label>
 
-            <mat-checkbox [(ngModel)]="usePreRecordedAudio" (change)="toggleUsePreRecordedAudio()">
+            <mat-checkbox [(ngModel)]="usePreRecordedAudio" (ngModelChange)="onUsePreRecordedAudioChange($event)">
               ใช้เสียงพากย์ที่ดาวน์โหลดไว้ในระบบ (ลื่นไหล ไม่มีสะดุด แนะนำ)
             </mat-checkbox>
-            <mat-checkbox [(ngModel)]="readNameEnabled" (change)="toggleReadName()">
+            <mat-checkbox [(ngModel)]="readNameEnabled" (ngModelChange)="onReadNameChange($event)">
               อ่านชื่อผู้สแกนผ่านด้วย (เช่น "คุณสมชาย บันทึกสำเร็จค่ะ")
             </mat-checkbox>
-            <mat-checkbox [(ngModel)]="voiceIsMale" (change)="toggleVoiceGender()">
+            <mat-checkbox [(ngModel)]="voiceIsMale" (ngModelChange)="onVoiceGenderChange($event)">
               เสียงนี้เป็นเสียงผู้ชาย (เปลี่ยนคำลงท้าย "ค่ะ" เป็น "ครับ")
             </mat-checkbox>
 

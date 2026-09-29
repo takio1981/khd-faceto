@@ -611,17 +611,21 @@ export class CheckinComponent implements AfterViewInit, OnDestroy {
     this.voiceIsMale = saved ? saved === 'male' : this.guessIsMaleVoice(this.ttsVoice.name);
   }
 
-  toggleVoiceGender(): void {
-    this.voiceIsMale = !this.voiceIsMale;
+  // Bound via (ngModelChange) rather than (change) — [(ngModel)] already
+  // updates voiceIsMale to the new value by the time this runs, so this only
+  // needs to persist it, not toggle it again (a (change) handler that also
+  // flipped the field would cancel the click out, leaving it unchanged).
+  onVoiceGenderChange(isMale: boolean): void {
+    this.voiceIsMale = isMale;
     if (!this.ttsVoice) return;
     const map = this.readVoiceGenderMap();
-    map[this.ttsVoice.voiceURI] = this.voiceIsMale ? 'male' : 'female';
+    map[this.ttsVoice.voiceURI] = isMale ? 'male' : 'female';
     localStorage.setItem(TTS_VOICE_GENDER_KEY, JSON.stringify(map));
   }
 
-  toggleReadName(): void {
-    this.readNameEnabled = !this.readNameEnabled;
-    localStorage.setItem(READ_NAME_KEY, this.readNameEnabled ? '1' : '0');
+  onReadNameChange(enabled: boolean): void {
+    this.readNameEnabled = enabled;
+    localStorage.setItem(READ_NAME_KEY, enabled ? '1' : '0');
   }
 
   // Swaps the polite ending for a male voice ("ค่ะ" -> "ครับ") so the spoken
@@ -642,9 +646,11 @@ export class CheckinComponent implements AfterViewInit, OnDestroy {
   // needs live synthesis, since a name can't be pre-recorded for everyone.
   usePreRecordedAudio = true;
 
-  toggleUsePreRecordedAudio(): void {
-    this.usePreRecordedAudio = !this.usePreRecordedAudio;
-    localStorage.setItem(USE_PRERECORDED_AUDIO_KEY, this.usePreRecordedAudio ? '1' : '0');
+  // Bound via (ngModelChange) — see the note on onVoiceGenderChange above for
+  // why this persists the value instead of toggling it again.
+  onUsePreRecordedAudioChange(enabled: boolean): void {
+    this.usePreRecordedAudio = enabled;
+    localStorage.setItem(USE_PRERECORDED_AUDIO_KEY, enabled ? '1' : '0');
   }
 
   private playBundledAudio(kind: 'success' | 'retry'): void {
