@@ -112,7 +112,7 @@ const OBJ_DETECT_INTERVAL_MS = 1000;
 const OBJ_MIN_SCORE = 0.50;
 
 const TTS_VOICE_KEY = 'camTtsVoiceURI';
-const TTS_VOICE_GENDER_KEY = 'camTtsVoiceGenders'; // JSON map of voiceURI -> 'male' | 'female'
+const DOWNLOADED_VOICE_GENDER_KEY = 'camDownloadedVoiceGender'; // 'male' | 'female'
 const READ_NAME_KEY = 'camReadName';
 const USE_PRERECORDED_AUDIO_KEY = 'camUsePreRecordedTts';
 const VOICE_ANNOUNCEMENT_KEY = 'camVoiceAnnouncementEnabled';
@@ -349,6 +349,7 @@ export class CheckinComponent implements AfterViewInit, OnDestroy {
     this.showLandmarks = localStorage.getItem('camShowLandmarks') !== '0';
     this.soundEnabled = localStorage.getItem('camSoundEnabled') !== '0';
     this.readNameEnabled = localStorage.getItem(READ_NAME_KEY) === '1';
+    this.voiceIsMale = localStorage.getItem(DOWNLOADED_VOICE_GENDER_KEY) === 'male';
     this.usePreRecordedAudio = localStorage.getItem(USE_PRERECORDED_AUDIO_KEY) !== '0';
     this.voiceAnnouncementEnabled = localStorage.getItem(VOICE_ANNOUNCEMENT_KEY) !== '0';
     this.speechRate = this.clampNumber(
@@ -621,54 +622,22 @@ export class CheckinComponent implements AfterViewInit, OnDestroy {
     const chosen = found || this.availableVoices.find((v) => /female|หญิง/i.test(v.name)) || this.availableVoices[0];
     this.ttsVoice = chosen;
     this.selectedVoiceURI = chosen.voiceURI;
-    this.loadVoiceGenderOverride();
   }
 
   onVoiceChange(voiceURI: string): void {
     this.selectedVoiceURI = voiceURI;
     localStorage.setItem(TTS_VOICE_KEY, voiceURI);
     this.ttsVoice = this.availableVoices.find((v) => v.voiceURI === voiceURI) || null;
-    this.loadVoiceGenderOverride();
   }
 
-  // The Web Speech API exposes no formal "gender" field on a voice — this is
-  // a best-effort guess from the voice's name (e.g. "Microsoft Premwadee" vs
-  // "Microsoft Niwat"), which the admin can correct via the "เสียงนี้เป็น
-  // เสียงผู้ชาย" checkbox; the correction is remembered per voice (by
-  // voiceURI) so it doesn't need re-checking every time that voice is picked.
-  private guessIsMaleVoice(name: string): boolean {
-    if (/female|หญิง/i.test(name)) return false;
-    if (/male|ชาย/i.test(name)) return true;
-    return false; // unknown — default to the female-phrased ending (existing default)
-  }
-
-  private readVoiceGenderMap(): Record<string, 'male' | 'female'> {
-    try {
-      return JSON.parse(localStorage.getItem(TTS_VOICE_GENDER_KEY) || '{}');
-    } catch {
-      return {};
-    }
-  }
-
-  private loadVoiceGenderOverride(): void {
-    if (!this.ttsVoice) {
-      this.voiceIsMale = false;
-      return;
-    }
-    const saved = this.readVoiceGenderMap()[this.ttsVoice.voiceURI];
-    this.voiceIsMale = saved ? saved === 'male' : this.guessIsMaleVoice(this.ttsVoice.name);
-  }
-
-  // Bound via (ngModelChange) rather than (change) — [(ngModel)] already
-  // updates voiceIsMale to the new value by the time this runs, so this only
-  // needs to persist it, not toggle it again (a (change) handler that also
-  // flipped the field would cancel the click out, leaving it unchanged).
+  // Which of the two actually-downloaded voices (public/audio/tts/*.mp3 —
+  // Microsoft Premwadee/female, Niwat/male) to use for the bundled MP3s and
+  // as the `gender` sent to the server TTS endpoint. An explicit selection
+  // (not a guess) since there are only ever these two options, and
+  // independent of the local browser fallback voice picked above.
   onVoiceGenderChange(isMale: boolean): void {
     this.voiceIsMale = isMale;
-    if (!this.ttsVoice) return;
-    const map = this.readVoiceGenderMap();
-    map[this.ttsVoice.voiceURI] = isMale ? 'male' : 'female';
-    localStorage.setItem(TTS_VOICE_GENDER_KEY, JSON.stringify(map));
+    localStorage.setItem(DOWNLOADED_VOICE_GENDER_KEY, isMale ? 'male' : 'female');
   }
 
   onReadNameChange(enabled: boolean): void {

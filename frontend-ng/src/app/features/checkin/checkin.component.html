@@ -108,9 +108,13 @@
                   </mat-select>
                 </div>
               }
-              <mat-checkbox [(ngModel)]="voiceIsMale" (ngModelChange)="onVoiceGenderChange($event)">
-                เสียงนี้เป็นเสียงผู้ชาย (เลือกเสียงพากย์เพศชาย)
-              </mat-checkbox>
+              <label>เสียงพากย์ (จากเสียงที่ดาวน์โหลดไว้)</label>
+              <div class="cam-select-row">
+                <mat-select [(ngModel)]="voiceIsMale" (selectionChange)="onVoiceGenderChange($event.value)">
+                  <mat-option [value]="false">Premwadee (เสียงผู้หญิง)</mat-option>
+                  <mat-option [value]="true">Niwat (เสียงผู้ชาย)</mat-option>
+                </mat-select>
+              </div>
 
               <mat-form-field appearance="outline" class="full-width">
                 <mat-label>ข้อความเมื่อสแกนผ่าน</mat-label>
